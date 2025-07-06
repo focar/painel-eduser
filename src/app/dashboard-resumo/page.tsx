@@ -1,12 +1,6 @@
 'use client';
 
-// NOTA DE DEPENDÊNCIA: Este componente usa a biblioteca 'recharts'.
-// Se encontrar um erro "Module not found", execute este comando no seu terminal:
-// npm install recharts
-// ou, se usar o Yarn:
-// yarn add recharts
-
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, ReactElement } from 'react';
 import { db } from '@/lib/supabaseClient';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -20,7 +14,8 @@ type DailyData = {
 };
 
 // --- Componente Reutilizável para os Gráficos ---
-const ChartCard = ({ title, children }: { title: string, children: React.ReactNode }) => (
+// ✅ AQUI ESTÁ A CORREÇÃO: Trocamos React.ReactNode por React.ReactElement
+const ChartCard = ({ title, children }: { title: string, children: ReactElement }) => (
     <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
         <div style={{ width: '100%', height: 300 }}><ResponsiveContainer>{children}</ResponsiveContainer></div>
@@ -33,7 +28,6 @@ export default function ResumoDiarioPage() {
     const [dailyData, setDailyData] = useState<DailyData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Função centralizada e estável para buscar os dados do dashboard
     const loadDashboardData = useCallback(async (launchId: string) => {
         if (!launchId) {
             setDailyData([]);
@@ -51,9 +45,8 @@ export default function ResumoDiarioPage() {
         } finally {
             setIsLoading(false);
         }
-    }, []); // Array de dependências vazio torna esta função estável
+    }, []);
 
-    // Efeito para buscar a lista de lançamentos apenas uma vez
     useEffect(() => {
         const fetchInitialData = async () => {
             setIsLoading(true);
@@ -73,9 +66,8 @@ export default function ResumoDiarioPage() {
             }
         };
         fetchInitialData();
-    }, []); // Dependência vazia para rodar apenas uma vez
+    }, []);
 
-    // Efeito para carregar os dados do dashboard quando o lançamento selecionado muda
     useEffect(() => {
         if (selectedLaunch) {
             loadDashboardData(selectedLaunch);
@@ -139,8 +131,28 @@ export default function ResumoDiarioPage() {
                         </div>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <ChartCard title="Inscrições vs Check-ins (Barras)"><BarChart data={dailyData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="short_date" interval="preserveStartEnd" /><YAxis /><Tooltip /><Legend /><Bar dataKey="inscricoes" fill="#8884d8" name="Inscrições" /><Bar dataKey="checkins" fill="#82ca9d" name="Check-ins" /></BarChart></ChartCard>
-                        <ChartCard title="Inscrições vs Check-ins (Linhas)"><LineChart data={dailyData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="short_date" interval="preserveStartEnd" /><YAxis /><Tooltip /><Legend /><Line type="monotone" dataKey="inscricoes" stroke="#8884d8" name="Inscrições" /><Line type="monotone" dataKey="checkins" stroke="#82ca9d" name="Check-ins" /></LineChart></ChartCard>
+                        <ChartCard title="Inscrições vs Check-ins (Barras)">
+                            <BarChart data={dailyData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="short_date" interval="preserveStartEnd" />
+                                <YAxis />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="inscricoes" fill="#8884d8" name="Inscrições" />
+                                <Bar dataKey="checkins" fill="#82ca9d" name="Check-ins" />
+                            </BarChart>
+                        </ChartCard>
+                        <ChartCard title="Inscrições vs Check-ins (Linhas)">
+                            <LineChart data={dailyData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="short_date" interval="preserveStartEnd" />
+                                <YAxis />
+                                <Tooltip />
+                                <Legend />
+                                <Line type="monotone" dataKey="inscricoes" stroke="#8884d8" name="Inscrições" />
+                                <Line type="monotone" dataKey="checkins" stroke="#82ca9d" name="Check-ins" />
+                            </LineChart>
+                        </ChartCard>
                     </div>
                 </div>
             )}

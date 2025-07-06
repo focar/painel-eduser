@@ -24,6 +24,13 @@ type DashboardData = {
     details: ChannelDetails[];
 };
 
+// ✅ NOVOS TIPOS PARA AS LINHAS DA TABELA
+type SourceRow = { type: 'source'; content: string; key: string };
+type MediumRow = { type: 'medium'; content: string; key: string };
+type ContentRow = { type: 'content'; key: string } & ChannelDetails;
+type TableRowType = SourceRow | MediumRow | ContentRow;
+
+
 // --- Componentes ---
 const StatCard = ({ title, value }: { title: string, value: string | number }) => (
     <div className="bg-white p-6 rounded-lg shadow-md text-center">
@@ -43,11 +50,10 @@ export default function DetalhamentoCanaisPage() {
         if (!launchId) return;
         setIsLoading(true);
         try {
-            // Usando a função otimizada 'get_channel_details'
             const { data, error } = await db.rpc('get_channel_details', { p_launch_id: launchId });
             if (error) throw error;
             setData(data);
-        } catch (error: unknown) { // ✅ Tipagem Corrigida
+        } catch (error: unknown) {
             const err = error as Error;
             console.error("Erro ao carregar dados de detalhamento:", err.message);
             setData(null);
@@ -67,7 +73,7 @@ export default function DetalhamentoCanaisPage() {
                 } else {
                     setIsLoading(false);
                 }
-            } catch (error: unknown) { // ✅ Tipagem Corrigida
+            } catch (error: unknown) {
                 const err = error as Error;
                 console.error("Erro ao buscar lançamentos:", err.message);
             }
@@ -98,13 +104,13 @@ export default function DetalhamentoCanaisPage() {
         return groups;
     }, [data]);
     
-    // ✅ LÓGICA DE RENDERIZAÇÃO DA TABELA SIMPLIFICADA para evitar o erro de parsing
-    const tableRows = useMemo(() => {
+    // ✅ Tipagem explícita no retorno do useMemo
+    const tableRows = useMemo((): TableRowType[] => {
         return Object.entries(groupedDetails).flatMap(([source, mediums]) => {
-            const sourceRow = { type: 'source', content: source, key: source };
+            const sourceRow: SourceRow = { type: 'source', content: source, key: source };
             const mediumRows = Object.entries(mediums).flatMap(([medium, contents]) => {
-                const mediumRow = { type: 'medium', content: medium, key: `${source}-${medium}` };
-                const contentRows = contents.map((item, index) => ({
+                const mediumRow: MediumRow = { type: 'medium', content: medium, key: `${source}-${medium}` };
+                const contentRows: ContentRow[] = contents.map((item, index) => ({
                     type: 'content',
                     ...item,
                     key: `${source}-${medium}-${index}`
@@ -170,14 +176,15 @@ export default function DetalhamentoCanaisPage() {
                                                     </tr>
                                                 );
                                             }
+                                            // ✅ CORREÇÃO: O 'if' garante que 'row' aqui tem o tipo correto.
+                                            // Removemos o 'as ChannelDetails' e usamos 'row' diretamente.
                                             if (row.type === 'content') {
-                                                const item = row as ChannelDetails;
-                                                const conversionRate = (item.inscritos || 0) > 0 ? ((item.checkins || 0) / item.inscritos * 100) : 0;
+                                                const conversionRate = (row.inscritos || 0) > 0 ? ((row.checkins || 0) / row.inscritos * 100) : 0;
                                                 return (
                                                     <tr key={row.key} className="border-b border-slate-200">
-                                                        <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={item.content}>{item.content}</td>
-                                                        <td className="px-6 py-4 text-sm text-slate-500">{item.inscritos}</td>
-                                                        <td className="px-6 py-4 text-sm text-slate-500">{item.checkins}</td>
+                                                        <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={row.content}>{row.content}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{row.inscritos}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{row.checkins}</td>
                                                         <td className="px-6 py-4 text-sm text-slate-500">{conversionRate.toFixed(1)}%</td>
                                                     </tr>
                                                 );

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, ReactElement } from 'react'; // Adicionado ReactElement para clareza
 import { db } from '@/lib/supabaseClient';
 import { FaSyncAlt, FaSpinner } from 'react-icons/fa';
 import { toZonedTime } from 'date-fns-tz';
@@ -33,14 +33,17 @@ const KpiCard = ({ title, value, highlight = false }: { title: string, value: st
     );
 };
 
-const ChartCard = ({ title, children }: { title: string, children: React.ReactNode }) => (
+// ✅ AQUI ESTÁ A CORREÇÃO: Trocamos React.ReactNode por React.ReactElement
+const ChartCard = ({ title, children }: { title: string, children: ReactElement }) => (
     <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
         <div style={{ width: '100%', height: 350 }}>
+            {/* O ResponsiveContainer agora recebe um filho com o tipo correto */}
             <ResponsiveContainer>{children}</ResponsiveContainer>
         </div>
     </div>
 );
+
 
 // --- Página Principal ---
 export default function PerformanceControlePage() {
@@ -149,13 +152,13 @@ export default function PerformanceControlePage() {
                 </div>
                 {period === 'custom' && (
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-4 border-t border-slate-200">
-                       <label className="text-sm font-medium text-slate-700">De:</label>
-                       <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
-                       <input type="time" value={customStartTime} onChange={e => setCustomStartTime(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
-                       <label className="text-sm font-medium text-slate-700">Até:</label>
-                       <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
-                       <input type="time" value={customEndTime} onChange={e => setCustomEndTime(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
-                       <button onClick={loadDashboardData} className="px-4 py-2 bg-slate-800 text-white rounded-md text-sm font-semibold flex items-center gap-2 hover:bg-slate-700"><FaSyncAlt /> Atualizar</button>
+                        <label className="text-sm font-medium text-slate-700">De:</label>
+                        <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
+                        <input type="time" value={customStartTime} onChange={e => setCustomStartTime(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
+                        <label className="text-sm font-medium text-slate-700">Até:</label>
+                        <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
+                        <input type="time" value={customEndTime} onChange={e => setCustomEndTime(e.target.value)} className="border-slate-300 rounded-md px-2 py-1 text-sm" />
+                        <button onClick={loadDashboardData} className="px-4 py-2 bg-slate-800 text-white rounded-md text-sm font-semibold flex items-center gap-2 hover:bg-slate-700"><FaSyncAlt /> Atualizar</button>
                     </div>
                 )}
                  <div className="pt-4 border-t border-slate-200">
@@ -190,50 +193,55 @@ export default function PerformanceControlePage() {
                         <h2 className="text-lg font-semibold text-slate-700 mb-4">Detalhes por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-slate-200">
-                               <thead className="bg-slate-50">
-                                   <tr>
-                                       <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
-                                       <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
-                                       <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                                       <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Conv.</th>
-                                   </tr>
-                               </thead>
-                               <tbody className="bg-white divide-y divide-slate-200">
-                                   {data.tableData.map((row, index) => {
-                                       const conversionRate = (row.inscricoes || 0) > 0 ? ((row.check_ins || 0) / row.inscricoes * 100) : 0;
-                                       return (
-                                           <tr key={row.canal + index} className="hover:bg-slate-50">
-                                               <td className="px-6 py-4 max-w-xs truncate font-medium text-slate-800" title={row.canal}>{row.canal}</td>
-                                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{row.inscricoes}</td>
-                                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{row.check_ins}</td>
-                                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">{conversionRate.toFixed(1)}%</td>
-                                           </tr>
-                                       );
-                                   })}
-                               </tbody>
+                                <thead className="bg-slate-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Conv.</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-slate-200">
+                                    {data.tableData.map((row, index) => {
+                                        const conversionRate = (row.inscricoes || 0) > 0 ? ((row.check_ins || 0) / row.inscricoes * 100) : 0;
+                                        return (
+                                            <tr key={row.canal + index} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4 max-w-xs truncate font-medium text-slate-800" title={row.canal}>{row.canal}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{row.inscricoes}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{row.check_ins}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">{conversionRate.toFixed(1)}%</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
                             </table>
                         </div>
                     </div>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <ChartCard title={groupBy === 'content' ? "Inscrições por Conteúdo" : "Inscrições por Campanha"}>
-                            <PieChart>
-                                <Pie data={data.byContentChart || []} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>{(data.byContentChart || []).map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie>
-                                <Tooltip />
-                                <Legend wrapperStyle={{ maxHeight: '150px', overflowY: 'auto', top: '240px' }} />
-                            </PieChart>
-                        </ChartCard>
-                        <ChartCard title="Inscrições por Mídia">
-                            <PieChart>
-                                <Pie data={data.byMediumChart || []} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>{(data.byMediumChart || []).map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie>
-                                <Tooltip />
-                                <Legend wrapperStyle={{ maxHeight: '150px', overflowY: 'auto', top: '240px' }} />
-                            </PieChart>
-                        </ChartCard>
+                        {/* A lógica condicional aqui garante que não passamos filhos inválidos */}
+                        {data.byContentChart && data.byContentChart.length > 0 &&
+                            <ChartCard title={groupBy === 'content' ? "Inscrições por Conteúdo" : "Inscrições por Campanha"}>
+                                <PieChart>
+                                    <Pie data={data.byContentChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>{(data.byContentChart).map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie>
+                                    <Tooltip />
+                                    <Legend wrapperStyle={{ maxHeight: '150px', overflowY: 'auto', top: '240px' }} />
+                                </PieChart>
+                            </ChartCard>
+                        }
+                        {data.byMediumChart && data.byMediumChart.length > 0 &&
+                            <ChartCard title="Inscrições por Mídia">
+                                <PieChart>
+                                    <Pie data={data.byMediumChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>{(data.byMediumChart).map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie>
+                                    <Tooltip />
+                                    <Legend wrapperStyle={{ maxHeight: '150px', overflowY: 'auto', top: '240px' }} />
+                                </PieChart>
+                            </ChartCard>
+                        }
                     </div>
                     
                     <div className="w-full">
-                        <ChartCard title={`Inscrições vs. Check-ins por ${groupBy === 'content' ? 'Conteúdo' : 'Campanha'}`}>
+                       <ChartCard title={`Inscrições vs. Check-ins por ${groupBy === 'content' ? 'Conteúdo' : 'Campanha'}`}>
                             <BarChart data={data.tableData} margin={{ top: 5, right: 30, left: 20, bottom: 50 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="canal" angle={-45} textAnchor="end" height={100} interval={0} tick={{ fontSize: 10 }} />

@@ -15,11 +15,19 @@ type Question = { id: string; texto: string; opcoes: { texto: string; peso: numb
 type Survey = { id: string; nome: string; perguntas: Question[] };
 type Answers = { [key: string]: string };
 
+// ✅ NOVO TIPO PARA AS PROPS DOS FORMULÁRIOS
+type FormProps = {
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  isLoading: boolean;
+  activeLaunches: Launch[];
+};
+
 const initialLeadData = { nome: '', email: '' };
 const initialUtmData = { utm_source: '', utm_medium: '', utm_campaign: '', utm_content: '', utm_term: '' };
 
 // --- COMPONENTE DO FORMULÁRIO DE INSCRIÇÃO ---
-function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }) {
+// ✅ CORREÇÃO: Adicionada a tipagem nas props
+function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }: FormProps) {
     const [formData, setFormData] = useState({ ...initialLeadData, ...initialUtmData });
     const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
 
@@ -52,12 +60,11 @@ function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }) {
             const launchName = activeLaunches.find(l => l.id === selectedLaunchId)?.nome || '';
             const payload = { ...formData, launch_name: launchName };
 
-            // ✅ MÉTODO DE ENVIO ATUALIZADO PARA MELHOR DEPURACÃO
             const response = await fetch(INSCRICAO_SHEET_API_URL, {
                 method: 'POST',
                 body: JSON.stringify(payload),
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Necessário para o Apps Script
-                mode: 'cors', // Permite ler a resposta
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                mode: 'cors',
             });
 
             const result = await response.json();
@@ -78,7 +85,6 @@ function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }) {
 
     return (
         <form onSubmit={handleSubmit} className="p-6 bg-white rounded-lg shadow-md space-y-6 mt-4">
-            {/* O resto do JSX do formulário permanece o mesmo */}
             <h3 className="text-lg font-semibold text-slate-700">Preencher Dados da Inscrição</h3>
             <div>
                 <label htmlFor="launch-reference-inscricao" className="block text-sm font-medium text-slate-700">Lançamento de Referência</label>
@@ -135,8 +141,8 @@ function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }) {
 }
 
 // --- COMPONENTE DO FORMULÁRIO DE CHECK-IN ---
-function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }) {
-    // A lógica deste formulário permanece a mesma por agora
+// ✅ CORREÇÃO: Adicionada a tipagem nas props
+function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProps) {
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
     const [answers, setAnswers] = useState<Answers>({});
@@ -165,7 +171,6 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }) {
         const launchName = activeLaunches.find(l => l.id === selectedLaunchId)?.nome || '';
         const payload = { ...formData, respostas: answers, launch_name: launchName };
         try {
-            // ✅ MÉTODO DE ENVIO ATUALIZADO PARA MELHOR DEPURACÃO
             const response = await fetch(CHECKIN_SHEET_API_URL, {
                 method: 'POST',
                 body: JSON.stringify(payload),
@@ -192,7 +197,6 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }) {
 
     return (
         <form onSubmit={handleSubmit} className="p-6 bg-white rounded-lg shadow-md space-y-4 mt-4">
-            {/* O resto do JSX do formulário permanece o mesmo */}
             <h3 className="text-lg font-semibold text-slate-700">Preencher Dados do Check-in</h3>
             <div>
                 <label htmlFor="launch-reference-checkin" className="block text-sm font-medium text-slate-700">Lançamento de Referência</label>

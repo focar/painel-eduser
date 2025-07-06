@@ -8,7 +8,6 @@ import { FaSpinner } from 'react-icons/fa';
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
 type KPI = { total_inscricoes: number; total_checkins: number; total_compradores: number; };
-// ✅ Tipo da linha da tabela atualizado
 type TableRow = { utm_content: string; qtd_inscricoes: number; qtd_checkins: number; qtd_compradores: number; };
 type DashboardData = { kpis: KPI; tableData: TableRow[]; };
 
@@ -73,9 +72,8 @@ export default function PosicaoFinalPage() {
         fetchDashboardData();
     }, [selectedLaunch, groupBy]);
 
-    const kpis = data?.kpis;
-    const conversionRate = (kpis?.total_inscricoes ?? 0) > 0 ? ((kpis?.total_compradores ?? 0) / kpis!.total_inscricoes * 100).toFixed(2) + '%' : '0.00%';
-
+    // As variáveis kpis e conversionRate foram movidas para dentro do return
+    
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -106,50 +104,58 @@ export default function PosicaoFinalPage() {
 
             {isLoading && <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>}
 
-            {!isLoading && data && data.kpis && (
-                <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                        <KpiCard title="Total de Inscrições" value={kpis.total_inscricoes} />
-                        <KpiCard title="Total de Check-ins" value={kpis.total_checkins} />
-                        <KpiCard title="Total de Compradores" value={kpis.total_compradores} />
-                        <KpiCard title="Conversão Final (Vendas)" value={conversionRate} highlight />
-                    </div>
+            {/* ✅ CORREÇÃO: Verificação mais simples e cálculo das variáveis aqui dentro */}
+            {!isLoading && data?.kpis && (
+                (() => {
+                    const conversionRate = (data.kpis.total_inscricoes ?? 0) > 0 
+                        ? ((data.kpis.total_compradores ?? 0) / data.kpis.total_inscricoes * 100).toFixed(2) + '%' 
+                        : '0.00%';
 
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200">
-                                <thead className="bg-slate-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
-                                        {/* ✅ NOVA COLUNA ADICIONADA */}
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Compradores</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa de Conversão</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-slate-200">
-                                    {data.tableData?.map((row, index) => {
-                                        const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
-                                        return (
-                                        <tr key={index} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4 max-w-sm truncate font-medium text-slate-800" title={row.utm_content}>{row.utm_content}</td>
-                                            <td className="px-6 py-4 text-sm text-slate-500">{row.qtd_inscricoes}</td>
-                                            {/* ✅ NOVA CÉLULA ADICIONADA */}
-                                            <td className="px-6 py-4 text-sm text-slate-500">{row.qtd_checkins}</td>
-                                            <td className="px-6 py-4 text-sm text-slate-500 font-bold">{row.qtd_compradores}</td>
-                                            <td className="px-6 py-4 text-sm font-semibold text-green-600">{convRate}%</td>
-                                        </tr>
-                                    )})}
-                                </tbody>
-                            </table>
+                    return (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                                {/* ✅ Acesso direto e seguro aos dados */}
+                                <KpiCard title="Total de Inscrições" value={data.kpis.total_inscricoes} />
+                                <KpiCard title="Total de Check-ins" value={data.kpis.total_checkins} />
+                                <KpiCard title="Total de Compradores" value={data.kpis.total_compradores} />
+                                <KpiCard title="Conversão Final (Vendas)" value={conversionRate} highlight />
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-slate-200">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Compradores</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa de Conversão</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-slate-200">
+                                            {data.tableData?.map((row, index) => {
+                                                const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
+                                                return (
+                                                <tr key={index} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-4 max-w-sm truncate font-medium text-slate-800" title={row.utm_content}>{row.utm_content}</td>
+                                                    <td className="px-6 py-4 text-sm text-slate-500">{row.qtd_inscricoes}</td>
+                                                    <td className="px-6 py-4 text-sm text-slate-500">{row.qtd_checkins}</td>
+                                                    <td className="px-6 py-4 text-sm text-slate-500 font-bold">{row.qtd_compradores}</td>
+                                                    <td className="px-6 py-4 text-sm font-semibold text-green-600">{convRate}%</td>
+                                                </tr>
+                                            )})}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
+                    )
+                })()
             )}
             
-            {!isLoading && (!data || !data.kpis) && (
+            {!isLoading && !data?.kpis && (
                 <div className="text-center py-10 bg-white rounded-lg shadow-md"><p>Nenhum dado encontrado.</p></div>
             )}
         </div>

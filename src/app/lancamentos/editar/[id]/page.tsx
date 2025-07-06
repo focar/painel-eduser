@@ -160,7 +160,8 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
 }
 
 // --- Página Principal ---
-export default function EditarLancamentoPage({ params }: PageProps) {
+export default function EditarLancamentoPage({ params }: { params: { id: string } }) {
+
     const { id } = params;
     const [initialData, setInitialData] = useState<LaunchData | null>(null);
     const [isLoading, setIsLoading] = useState(true);

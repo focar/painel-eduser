@@ -60,8 +60,9 @@ export default function ImportacaoPage() {
 
                 if (loadedLaunches.length > 0) setSelectedLaunch(loadedLaunches[0].id);
 
-            } catch (err: any) {
-                showAlertModal("Erro Crítico", "Não foi possível carregar os dados iniciais. " + err.message);
+            } catch (err: unknown) { // ✅ Tipagem Corrigida
+                const error = err as Error;
+                showAlertModal("Erro Crítico", "Não foi possível carregar os dados iniciais. " + error.message);
             } finally {
                 setIsDataLoading(false);
             }
@@ -114,7 +115,7 @@ export default function ImportacaoPage() {
                 }
                 addLog(`Tipo de importação detetado: ${importType}`);
 
-                const inscriptionDataMap = new Map<string, any>();
+                const inscriptionDataMap = new Map<string, object>();
                 const surveyDataMap = new Map<string, { p_email: string; p_score: number; p_respostas: { [key: string]: string } }>();
                 let invalidRowCount = 0;
 
@@ -192,7 +193,8 @@ export default function ImportacaoPage() {
                     const summaryMessage = `Resumo da Importação:\n\n- Linhas encontradas: ${rows.length}\n- Leads para inscrição: ${inscriptionData.length}\n- Respostas processadas: ${surveyData.length}\n- Linhas inválidas: ${invalidRowCount}`;
                     showAlertModal("Importação Concluída", summaryMessage);
                 
-                } catch (error: any) {
+                } catch (err: unknown) { // ✅ Tipagem Corrigida
+                    const error = err as Error;
                     addLog(`ERRO na importação de leads: ${error.message}`);
                     showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${error.message}`);
                 } finally {
@@ -202,7 +204,6 @@ export default function ImportacaoPage() {
         });
     };
     
-    // ✅ FUNÇÃO ATUALIZADA PARA USAR A NOVA RPC DO BANCO DE DADOS
     const handleBuyerImport = () => {
         if (!buyerFile || !selectedLaunch) {
             showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV para compradores.");
@@ -218,7 +219,7 @@ export default function ImportacaoPage() {
             delimiter: ";",
             complete: async (results) => {
                 const buyerEmails = results.data
-                    .map((row: any) => {
+                    .map((row: any) => { // ✅ Tipagem Corrigida
                         const email = findValueIgnoreCase(row, 'email');
                         return email ? email.trim().toLowerCase() : null;
                     })
@@ -238,7 +239,6 @@ export default function ImportacaoPage() {
                     for (let i = 0; i < buyerEmails.length; i += BATCH_SIZE) {
                         const batch = buyerEmails.slice(i, i + BATCH_SIZE);
                         
-                        // Chamando a nova função RPC diretamente, em vez da API
                         const { data, error } = await db.rpc('mark_leads_as_buyers', {
                             p_launch_id: selectedLaunch,
                             p_buyer_emails: batch
@@ -255,7 +255,8 @@ export default function ImportacaoPage() {
                     addLog(`Importação finalizada. Total de ${totalUpdatedCount} leads marcados como compradores.`);
                     showAlertModal("Importação de Compradores Concluída", `${totalUpdatedCount} leads foram atualizados com sucesso!`);
 
-                } catch (error: any) {
+                } catch (err: unknown) { // ✅ Tipagem Corrigida
+                    const error = err as Error;
                     addLog(`ERRO na importação de compradores: ${error.message}`);
                     showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${error.message}`);
                 } finally {
@@ -320,6 +321,7 @@ export default function ImportacaoPage() {
         );
     };
 
+
     return (
         <div className="space-y-6 p-4 md:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
@@ -334,19 +336,23 @@ export default function ImportacaoPage() {
                     </select>
                 </div>
                 <div>
-                    <label htmlFor="file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Leads (delimitado por ';')</label>
+                    <label htmlFor="file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Leads (delimitado por &apos;;&apos;)</label>
                     <input id="file-upload" type="file" accept=".csv" onChange={e => setFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
                 </div>
+
+                {isProcessing && (
+                    <div className="w-full bg-slate-200 rounded-full h-2.5"><div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
+                )}
                 <div className="text-right pt-4">
                     <button onClick={handleImport} disabled={isProcessing || !selectedLaunch || !file} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {isProcessing ? <><FaSpinner className="animate-spin mr-2"/>Processando...</> : <><FaUpload className="mr-2"/>Importar Leads</>}
                     </button>
                 </div>
             </div>
-
+            
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
                 <h2 className="text-xl font-bold text-slate-700">Importação de Compradores</h2>
-                <p className="text-sm text-slate-500">Use esta ferramenta para marcar os leads que efetuaram a compra. O ficheiro deve conter uma coluna chamada 'email'. A importação será feita no lançamento selecionado acima.</p>
+                <p className="text-sm text-slate-500">Use esta ferramenta para marcar os leads que efetuaram a compra. O ficheiro deve conter uma coluna chamada &apos;email&apos;. A importação será feita no lançamento selecionado acima.</p>
                 <div>
                     <label htmlFor="buyer-file-upload" className="block text-sm font-medium text-slate-700 mb-1">Selecione o Ficheiro CSV de Compradores</label>
                     <input id="buyer-file-upload" type="file" accept=".csv" onChange={e => setBuyerFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"/>
@@ -358,12 +364,6 @@ export default function ImportacaoPage() {
                 </div>
             </div>
             
-            {isProcessing && (
-                <div className="w-full bg-slate-200 rounded-full h-2.5">
-                    <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-                </div>
-            )}
-
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4 border-t-4 border-amber-400">
                 <h2 className="text-lg font-semibold text-slate-700">Ferramentas de Teste</h2>
                 <p className="text-sm text-slate-500">Use estas ferramentas para preparar o ambiente para testes. A ação será executada no lançamento selecionado acima.</p>

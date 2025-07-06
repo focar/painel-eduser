@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/supabaseClient';
+import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
@@ -32,7 +32,7 @@ const StatCard = ({ title, value }: { title: string, value: string | number }) =
     </div>
 );
 
-// --- Hooks e Página Principal ---
+// --- Página Principal ---
 export default function DetalhamentoCanaisPage() {
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
@@ -43,7 +43,8 @@ export default function DetalhamentoCanaisPage() {
         if (!launchId) return;
         setIsLoading(true);
         try {
-            const { data, error } = await db.rpc('get_channel_details_data', { p_launch_id: launchId });
+            // ✅ CHAMANDO A NOVA FUNÇÃO OTIMIZADA
+            const { data, error } = await db.rpc('get_channel_details', { p_launch_id: launchId });
             if (error) throw error;
             setData(data);
         } catch (error) {
@@ -78,17 +79,20 @@ export default function DetalhamentoCanaisPage() {
         }
     }, [selectedLaunch, loadData]);
 
+    // A lógica de agrupamento hierárquico permanece a mesma
     const groupedDetails = useMemo(() => {
         if (!data?.details) return {};
         const groups: Record<string, Record<string, ChannelDetails[]>> = {};
         data.details.forEach(item => {
-            if (!groups[item.source]) {
-                groups[item.source] = {};
+            const source = item.source || 'N/A';
+            const medium = item.medium || 'N/A';
+            if (!groups[source]) {
+                groups[source] = {};
             }
-            if (!groups[item.source][item.medium]) {
-                groups[item.source][item.medium] = [];
+            if (!groups[source][medium]) {
+                groups[source][medium] = [];
             }
-            groups[item.source][item.medium].push(item);
+            groups[source][medium].push(item);
         });
         return groups;
     }, [data]);
@@ -105,8 +109,8 @@ export default function DetalhamentoCanaisPage() {
             </div>
 
             {isLoading ? (
-                <div className="text-center py-10"><p>A carregar dados...</p></div>
-            ) : !data ? (
+                <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>
+            ) : !data || !data.kpis ? (
                 <div className="text-center py-10 bg-white rounded-lg shadow-md"><p>Nenhum dado encontrado para este lançamento.</p></div>
             ) : (
                 <div className="space-y-6">
@@ -147,7 +151,7 @@ export default function DetalhamentoCanaisPage() {
                                                             const conversionRate = item.inscritos > 0 ? (item.checkins / item.inscritos) * 100 : 0;
                                                             return (
                                                                 <tr key={itemIndex} className="border-b border-slate-200">
-                                                                    <td className="pl-20 pr-6 py-4 text-sm text-slate-600">{item.content}</td>
+                                                                    <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={item.content}>{item.content}</td>
                                                                     <td className="px-6 py-4 text-sm text-slate-500">{item.inscritos}</td>
                                                                     <td className="px-6 py-4 text-sm text-slate-500">{item.checkins}</td>
                                                                     <td className="px-6 py-4 text-sm text-slate-500">{conversionRate.toFixed(1)}%</td>

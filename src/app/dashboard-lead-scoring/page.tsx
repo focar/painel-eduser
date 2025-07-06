@@ -76,14 +76,12 @@ export default function LeadScoringPage() {
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [noLaunchesFound, setNoLaunchesFound] = useState(false);
-    // ✅ NOVO ESTADO para controlar o agrupamento
     const [groupBy, setGroupBy] = useState('content');
 
     const loadDashboardData = useCallback(async (launchId: string) => {
         if (!launchId) return;
         setIsLoading(true);
         try {
-            // ✅ CHAMADA ATUALIZADA com o novo parâmetro
             const { data, error } = await db.rpc('get_full_lead_scoring_dashboard', { 
                 p_launch_id: launchId,
                 p_group_by: groupBy 
@@ -96,22 +94,18 @@ export default function LeadScoringPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [groupBy]); // ✅ Adicionada a dependência 'groupBy'
+    }, [groupBy]);
 
     useEffect(() => {
         const fetchLaunches = async () => {
-            try {
-                const { data: launchesData, error } = await db.rpc('get_launches_for_dropdown');
-                if (error) throw error;
-                if (launchesData && launchesData.length > 0) {
-                    setLaunches(launchesData);
-                    setSelectedLaunch(launchesData[0].id);
-                } else {
-                    setNoLaunchesFound(true);
-                }
-            } catch (error) {
-                console.error("Erro ao buscar lançamentos:", error);
+            const { data: launchesData, error } = await db.rpc('get_launches_for_dropdown');
+            if (error) throw error;
+            if (launchesData && launchesData.length > 0) {
+                setLaunches(launchesData);
+                setSelectedLaunch(launchesData[0].id);
+            } else {
                 setNoLaunchesFound(true);
+                setIsLoading(false);
             }
         };
         fetchLaunches();
@@ -121,7 +115,7 @@ export default function LeadScoringPage() {
         if (selectedLaunch) {
             loadDashboardData(selectedLaunch);
         }
-    }, [selectedLaunch, loadDashboardData]); // loadDashboardData já inclui a dependência do groupBy
+    }, [selectedLaunch, loadDashboardData]); 
     
     const renderContent = () => {
         if (isLoading) {
@@ -168,7 +162,6 @@ export default function LeadScoringPage() {
         <div className="space-y-6">
             <PageHeader title="Dashboard de Lead Scoring" launches={launches} selectedLaunch={selectedLaunch} onLaunchChange={setSelectedLaunch} />
             
-            {/* ✅ NOVO DROPDOWN para selecionar o agrupamento */}
             <div className="bg-white p-4 rounded-lg shadow-sm">
                 <label htmlFor="group-by-select" className="block text-sm font-medium text-slate-700">Agrupar Tabela Por:</label>
                 <select 

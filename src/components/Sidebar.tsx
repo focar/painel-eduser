@@ -14,7 +14,6 @@ const menuItems = [
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
             { name: "Acompanhamento Canais", href: "/acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/detalhamento-canais" },
-            // ✅ LINK ADICIONADO AQUI ✅
             { name: "Posição Final", href: "/Daskboard-posicao-final" },
         ],
     },

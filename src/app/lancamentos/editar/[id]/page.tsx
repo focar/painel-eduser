@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
 type LaunchData = {
@@ -20,6 +21,7 @@ type Survey = {
     nome: string;
 };
 
+// ✅ TIPO CORRIGIDO PARA A PÁGINA
 type PageProps = {
     params: { id: string };
 };
@@ -50,7 +52,7 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
             };
             fetchSurveys();
         }
-    }, [isOpen]);
+    }, [isOpen, launchId]);
 
     if (!isOpen) return null;
 
@@ -122,7 +124,7 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
         <div className="space-y-6 bg-white p-8 rounded-lg shadow-md">
             <div>
                 <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
-                <input type="text" name="nome" id="nome" value={formData.nome || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border rounded-md" required />
+                <input type="text" name="nome" id="nome" value={formData.nome || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" required />
             </div>
             <div>
                 <label htmlFor="descricao" className="block text-sm font-medium text-slate-700">Descrição</label>
@@ -141,7 +143,7 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
             {dateError && <p className="text-sm text-red-600">{dateError}</p>}
             <div>
                 <label htmlFor="status" className="block text-sm font-medium text-slate-700">Status</label>
-                <select name="status" id="status" value={formData.status || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white rounded-md">
+                <select name="status" id="status" value={formData.status || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white rounded-md border border-slate-300">
                     <option value="Planejado">Planejado</option>
                     <option value="Em Andamento">Em Andamento</option>
                     <option value="Concluído">Concluído</option>
@@ -236,7 +238,7 @@ export default function EditarLancamentoPage({ params }: PageProps) {
     };
 
     if (isLoading) {
-        return <div className="p-8 text-center">A carregar...</div>;
+        return <div className="p-8 text-center"><FaSpinner className="animate-spin text-blue-500" /></div>;
     }
     
     return (

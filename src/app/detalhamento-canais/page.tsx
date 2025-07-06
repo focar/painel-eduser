@@ -43,12 +43,13 @@ export default function DetalhamentoCanaisPage() {
         if (!launchId) return;
         setIsLoading(true);
         try {
-            // ✅ CHAMANDO A NOVA FUNÇÃO OTIMIZADA
+            // Usando a função otimizada 'get_channel_details'
             const { data, error } = await db.rpc('get_channel_details', { p_launch_id: launchId });
             if (error) throw error;
             setData(data);
-        } catch (error) {
-            console.error("Erro ao carregar dados de detalhamento:", error);
+        } catch (error: unknown) { // ✅ Tipagem Corrigida
+            const err = error as Error;
+            console.error("Erro ao carregar dados de detalhamento:", err.message);
             setData(null);
         } finally {
             setIsLoading(false);
@@ -66,8 +67,9 @@ export default function DetalhamentoCanaisPage() {
                 } else {
                     setIsLoading(false);
                 }
-            } catch (error) {
-                console.error("Erro ao buscar lançamentos:", error);
+            } catch (error: unknown) { // ✅ Tipagem Corrigida
+                const err = error as Error;
+                console.error("Erro ao buscar lançamentos:", err.message);
             }
         };
         fetchLaunches();
@@ -79,7 +81,6 @@ export default function DetalhamentoCanaisPage() {
         }
     }, [selectedLaunch, loadData]);
 
-    // A lógica de agrupamento hierárquico permanece a mesma
     const groupedDetails = useMemo(() => {
         if (!data?.details) return {};
         const groups: Record<string, Record<string, ChannelDetails[]>> = {};
@@ -96,6 +97,21 @@ export default function DetalhamentoCanaisPage() {
         });
         return groups;
     }, [data]);
+    
+    // ✅ LÓGICA DE RENDERIZAÇÃO DA TABELA SIMPLIFICADA para evitar o erro de parsing
+    const tableRows = Object.entries(groupedDetails).flatMap(([source, mediums]) => {
+        const sourceRow = { type: 'source', content: source, key: source };
+        const mediumRows = Object.entries(mediums).flatMap(([medium, contents]) => {
+            const mediumRow = { type: 'medium', content: medium, key: `${source}-${medium}` };
+            const contentRows = contents.map((item, index) => ({
+                type: 'content',
+                ...item,
+                key: `${source}-${medium}-${index}`
+            }));
+            return [mediumRow, ...contentRows];
+        });
+        return [sourceRow, ...mediumRows];
+    });
 
     return (
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -134,34 +150,37 @@ export default function DetalhamentoCanaisPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white">
-                                    {Object.keys(groupedDetails).length === 0 ? (
+                                    {tableRows.length === 0 ? (
                                         <tr><td colSpan={4} className="text-center py-5 text-slate-500">Nenhum dado UTM encontrado.</td></tr>
                                     ) : (
-                                        Object.entries(groupedDetails).map(([source, mediums]) => (
-                                            <React.Fragment key={source}>
-                                                <tr className="bg-slate-200">
-                                                    <td className="px-6 py-3 font-bold text-slate-800" colSpan={4}>{source}</td>
-                                                </tr>
-                                                {Object.entries(mediums).map(([medium, contents]) => (
-                                                    <React.Fragment key={medium}>
-                                                        <tr className="bg-slate-50 hover:bg-slate-100">
-                                                            <td className="pl-12 pr-6 py-3 font-semibold text-slate-700" colSpan={4}>{medium}</td>
-                                                        </tr>
-                                                        {contents.map((item, itemIndex) => {
-                                                            const conversionRate = item.inscritos > 0 ? (item.checkins / item.inscritos) * 100 : 0;
-                                                            return (
-                                                                <tr key={itemIndex} className="border-b border-slate-200">
-                                                                    <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={item.content}>{item.content}</td>
-                                                                    <td className="px-6 py-4 text-sm text-slate-500">{item.inscritos}</td>
-                                                                    <td className="px-6 py-4 text-sm text-slate-500">{item.checkins}</td>
-                                                                    <td className="px-6 py-4 text-sm text-slate-500">{conversionRate.toFixed(1)}%</td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                    </React.Fragment>
-                                                ))}
-                                            </React.Fragment>
-                                        ))
+                                        tableRows.map(row => {
+                                            if (row.type === 'source') {
+                                                return (
+                                                    <tr key={row.key} className="bg-slate-200">
+                                                        <td className="px-6 py-3 font-bold text-slate-800" colSpan={4}>{row.content}</td>
+                                                    </tr>
+                                                );
+                                            }
+                                            if (row.type === 'medium') {
+                                                return (
+                                                    <tr key={row.key} className="bg-slate-50 hover:bg-slate-100">
+                                                        <td className="pl-12 pr-6 py-3 font-semibold text-slate-700" colSpan={4}>{row.content}</td>
+                                                    </tr>
+                                                );
+                                            }
+                                            if (row.type === 'content') {
+                                                const conversionRate = (row.inscritos || 0) > 0 ? ((row.checkins || 0) / row.inscritos * 100) : 0;
+                                                return (
+                                                    <tr key={row.key} className="border-b border-slate-200">
+                                                        <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={row.content}>{row.content}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{row.inscritos}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{row.checkins}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{conversionRate.toFixed(1)}%</td>
+                                                    </tr>
+                                                );
+                                            }
+                                            return null;
+                                        })
                                     )}
                                 </tbody>
                             </table>

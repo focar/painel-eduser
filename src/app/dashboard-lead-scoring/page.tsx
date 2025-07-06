@@ -43,10 +43,11 @@ const ScoringTable = ({ data, groupBy }: { data: TableData[], groupBy: string })
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-green-600 uppercase tracking-wider">Quente (>80)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-green-600 uppercase tracking-wider">Quente (&gt;80)</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-lime-600 uppercase tracking-wider">Quente-Morno</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-amber-600 uppercase tracking-wider">Morno</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">Morno-Frio</th>
+                        {/* ✅ CORREÇÃO AQUI: Trocado '<' por '&lt;' */}
                         <th className="px-6 py-3 text-left text-xs font-medium text-red-600 uppercase tracking-wider">Frio (&lt;35)</th>
                     </tr>
                 </thead>
@@ -89,7 +90,8 @@ export default function LeadScoringPage() {
             if (error) throw error;
             setData(data);
         } catch (error) {
-            console.error("Erro ao buscar dados do dashboard:", error);
+            const err = error as Error; // ✅ Tipagem Corrigida
+            console.error("Erro ao buscar dados do dashboard:", err);
             setData(null);
         } finally {
             setIsLoading(false);
@@ -98,14 +100,20 @@ export default function LeadScoringPage() {
 
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data: launchesData, error } = await db.rpc('get_launches_for_dropdown');
-            if (error) throw error;
-            if (launchesData && launchesData.length > 0) {
-                setLaunches(launchesData);
-                setSelectedLaunch(launchesData[0].id);
-            } else {
+            try {
+                const { data: launchesData, error } = await db.rpc('get_launches_for_dropdown');
+                if (error) throw error;
+                if (launchesData && launchesData.length > 0) {
+                    setLaunches(launchesData);
+                    setSelectedLaunch(launchesData[0].id);
+                } else {
+                    setNoLaunchesFound(true);
+                    setIsLoading(false);
+                }
+            } catch (error) {
+                const err = error as Error; // ✅ Tipagem Corrigida
+                console.error("Erro ao buscar lançamentos:", err);
                 setNoLaunchesFound(true);
-                setIsLoading(false);
             }
         };
         fetchLaunches();

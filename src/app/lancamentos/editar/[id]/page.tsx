@@ -20,7 +20,11 @@ type Survey = {
     nome: string;
 };
 
-// --- Componente do Modal de Associação de Pesquisa ---
+type PageProps = {
+    params: { id: string };
+};
+
+// --- Componente do Modal ---
 function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
     isOpen: boolean;
     onClose: () => void;
@@ -36,11 +40,10 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
             const fetchSurveys = async () => {
                 const { data, error } = await db.from('pesquisas').select('id, nome').order('nome');
                 if (error) {
-                    console.error("Erro ao buscar pesquisas:", error);
                     toast.error("Não foi possível carregar as pesquisas.");
                 } else {
-                    setSurveys(data);
-                    if (data.length > 0) {
+                    setSurveys(data || []);
+                    if (data && data.length > 0) {
                         setSelectedSurvey(data[0].id);
                     }
                 }
@@ -66,16 +69,14 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
             <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-lg">
                 <h3 className="text-xl font-bold text-slate-800 mb-4">Associar Pesquisa</h3>
                 <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Selecione uma pesquisa existente para associar a este lançamento ou crie uma nova.</p>
+                    <p className="text-sm text-slate-600">Selecione uma pesquisa para associar ou crie uma nova.</p>
                     <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
                         {surveys.length > 0 ? surveys.map(survey => (
                             <label key={survey.id} className="flex items-center p-2 rounded-md hover:bg-slate-100 cursor-pointer">
-                                <input type="radio" name="survey" value={survey.id} checked={selectedSurvey === survey.id} onChange={(e) => setSelectedSurvey(e.target.value)} className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500" />
+                                <input type="radio" name="survey" value={survey.id} checked={selectedSurvey === survey.id} onChange={(e) => setSelectedSurvey(e.target.value)} className="h-4 w-4 text-blue-600"/>
                                 <span className="ml-3 text-slate-700">{survey.nome}</span>
                             </label>
-                        )) : (
-                            <p className="text-center text-slate-500 p-4">Nenhuma pesquisa encontrada.</p>
-                        )}
+                        )) : <p className="text-center text-slate-500 p-4">Nenhuma pesquisa encontrada.</p>}
                     </div>
                 </div>
                 <div className="mt-6 flex justify-between items-center">
@@ -100,7 +101,6 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
     const [formData, setFormData] = useState(initialData);
     const [dateError, setDateError] = useState<string | null>(null);
     const router = useRouter();
-    const today = new Date().toISOString().split('T')[0];
 
     useEffect(() => { setFormData(initialData); }, [initialData]);
 
@@ -122,26 +122,26 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
         <div className="space-y-6 bg-white p-8 rounded-lg shadow-md">
             <div>
                 <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
-                <input type="text" name="nome" id="nome" value={formData.nome || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
+                <input type="text" name="nome" id="nome" value={formData.nome || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border rounded-md" required />
             </div>
             <div>
                 <label htmlFor="descricao" className="block text-sm font-medium text-slate-700">Descrição</label>
-                <textarea name="descricao" id="descricao" rows={4} value={formData.descricao || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+                <textarea name="descricao" id="descricao" rows={4} value={formData.descricao || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border rounded-md" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <label htmlFor="data_inicio" className="block text-sm font-medium text-slate-700">Data de Início</label>
-                    <input type="date" name="data_inicio" id="data_inicio" value={formData.data_inicio || ''} onChange={handleChange} min={today} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+                    <input type="date" name="data_inicio" id="data_inicio" value={formData.data_inicio || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" />
                 </div>
                 <div>
                     <label htmlFor="data_fim" className="block text-sm font-medium text-slate-700">Data de Fim</label>
-                    <input type="date" name="data_fim" id="data_fim" value={formData.data_fim || ''} onChange={handleChange} min={formData.data_inicio || today} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+                    <input type="date" name="data_fim" id="data_fim" value={formData.data_fim || ''} onChange={handleChange} min={formData.data_inicio || ''} className="mt-1 block w-full px-3 py-2 border rounded-md" />
                 </div>
             </div>
             {dateError && <p className="text-sm text-red-600">{dateError}</p>}
             <div>
                 <label htmlFor="status" className="block text-sm font-medium text-slate-700">Status</label>
-                <select name="status" id="status" value={formData.status || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-slate-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <select name="status" id="status" value={formData.status || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white rounded-md">
                     <option value="Planejado">Planejado</option>
                     <option value="Em Andamento">Em Andamento</option>
                     <option value="Concluído">Concluído</option>
@@ -158,7 +158,7 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
 }
 
 // --- Página Principal ---
-export default function EditarLancamentoPage({ params }: { params: { id: string } }) {
+export default function EditarLancamentoPage({ params }: PageProps) {
     const { id } = params;
     const [initialData, setInitialData] = useState<LaunchData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -179,7 +179,8 @@ export default function EditarLancamentoPage({ params }: { params: { id: string 
                 
                 const formattedData = { ...data, data_inicio: data.data_inicio ? data.data_inicio.split('T')[0] : '', data_fim: data.data_fim ? data.data_fim.split('T')[0] : '' };
                 setInitialData(formattedData as LaunchData);
-            } catch (err: any) {
+            } catch (error: unknown) {
+                const err = error as Error;
                 toast.error(err.message);
             } finally {
                 setIsLoading(false);
@@ -203,7 +204,8 @@ export default function EditarLancamentoPage({ params }: { params: { id: string 
             toast.success("Lançamento atualizado com sucesso!");
             setTimeout(andThen, 200);
 
-        } catch (err: any) {
+        } catch (error: unknown) {
+            const err = error as Error;
             toast.error("Falha ao atualizar o lançamento: " + err.message);
         } finally {
             setIsSaving(false);
@@ -225,18 +227,16 @@ export default function EditarLancamentoPage({ params }: { params: { id: string 
             
             toast.success('Pesquisa associada com sucesso!');
             setIsAssociateModalOpen(false);
-            
-            // ✅ CORREÇÃO FINAL APLICADA AQUI ✅
-            // Redireciona para a lista de lançamentos após o sucesso.
             router.push('/lancamentos');
 
-        } catch (err: any) {
+        } catch (error: unknown) {
+            const err = error as Error;
             toast.error('Falha ao associar a pesquisa: ' + err.message);
         }
     };
 
     if (isLoading) {
-        return <div className="p-8 text-center"><i className="fas fa-spinner fa-spin"></i> Carregando lançamento...</div>;
+        return <div className="p-8 text-center">A carregar...</div>;
     }
     
     return (

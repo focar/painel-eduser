@@ -99,19 +99,21 @@ export default function DetalhamentoCanaisPage() {
     }, [data]);
     
     // ✅ LÓGICA DE RENDERIZAÇÃO DA TABELA SIMPLIFICADA para evitar o erro de parsing
-    const tableRows = Object.entries(groupedDetails).flatMap(([source, mediums]) => {
-        const sourceRow = { type: 'source', content: source, key: source };
-        const mediumRows = Object.entries(mediums).flatMap(([medium, contents]) => {
-            const mediumRow = { type: 'medium', content: medium, key: `${source}-${medium}` };
-            const contentRows = contents.map((item, index) => ({
-                type: 'content',
-                ...item,
-                key: `${source}-${medium}-${index}`
-            }));
-            return [mediumRow, ...contentRows];
+    const tableRows = useMemo(() => {
+        return Object.entries(groupedDetails).flatMap(([source, mediums]) => {
+            const sourceRow = { type: 'source', content: source, key: source };
+            const mediumRows = Object.entries(mediums).flatMap(([medium, contents]) => {
+                const mediumRow = { type: 'medium', content: medium, key: `${source}-${medium}` };
+                const contentRows = contents.map((item, index) => ({
+                    type: 'content',
+                    ...item,
+                    key: `${source}-${medium}-${index}`
+                }));
+                return [mediumRow, ...contentRows];
+            });
+            return [sourceRow, ...mediumRows];
         });
-        return [sourceRow, ...mediumRows];
-    });
+    }, [groupedDetails]);
 
     return (
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -143,7 +145,7 @@ export default function DetalhamentoCanaisPage() {
                             <table className="min-w-full">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarquia UTM (Source > Medium > Content)</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarquia UTM (Source &gt; Medium &gt; Content)</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscritos</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Conversão</th>
@@ -169,12 +171,13 @@ export default function DetalhamentoCanaisPage() {
                                                 );
                                             }
                                             if (row.type === 'content') {
-                                                const conversionRate = (row.inscritos || 0) > 0 ? ((row.checkins || 0) / row.inscritos * 100) : 0;
+                                                const item = row as ChannelDetails;
+                                                const conversionRate = (item.inscritos || 0) > 0 ? ((item.checkins || 0) / item.inscritos * 100) : 0;
                                                 return (
                                                     <tr key={row.key} className="border-b border-slate-200">
-                                                        <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={row.content}>{row.content}</td>
-                                                        <td className="px-6 py-4 text-sm text-slate-500">{row.inscritos}</td>
-                                                        <td className="px-6 py-4 text-sm text-slate-500">{row.checkins}</td>
+                                                        <td className="pl-20 pr-6 py-4 text-sm text-slate-600 max-w-sm truncate" title={item.content}>{item.content}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{item.inscritos}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-500">{item.checkins}</td>
                                                         <td className="px-6 py-4 text-sm text-slate-500">{conversionRate.toFixed(1)}%</td>
                                                     </tr>
                                                 );

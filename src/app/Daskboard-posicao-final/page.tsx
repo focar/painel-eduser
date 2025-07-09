@@ -70,13 +70,10 @@ export default function PosicaoFinalPage() {
         fetchDashboardData();
     }, [selectedLaunch, groupBy, supabase]);
 
-    // ### INÍCIO DA CORREÇÃO ###
-    // A lógica de cálculo agora é mais segura e explícita para o TypeScript
     const kpis = data?.kpis;
     const conversionRate = kpis && kpis.total_inscricoes > 0
         ? ((kpis.total_compradores ?? 0) / kpis.total_inscricoes * 100).toFixed(2) + '%'
         : '0.00%';
-    // ### FIM DA CORREÇÃO ###
     
     return (
         <div className="space-y-6 p-4 md:p-6">

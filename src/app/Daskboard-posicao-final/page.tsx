@@ -71,7 +71,7 @@ export default function PosicaoFinalPage() {
     }, [selectedLaunch, groupBy, supabase]);
 
     // ### INÍCIO DA CORREÇÃO ###
-    // A lógica de cálculo agora é mais segura e explícita
+    // A lógica de cálculo agora é mais segura e explícita para o TypeScript
     const kpis = data?.kpis;
     const conversionRate = kpis && kpis.total_inscricoes > 0
         ? ((kpis.total_compradores ?? 0) / kpis.total_inscricoes * 100).toFixed(2) + '%'

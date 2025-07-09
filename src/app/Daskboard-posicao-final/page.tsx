@@ -1,32 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { db } from '@/lib/supabaseClient';
+import React, { useState, useEffect, useCallback } from 'react';
+// CORREÇÃO: Importa o cliente recomendado
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
 import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
-type KPI = { total_inscricoes: number; total_checkins: number; total_compradores: number; };
+type KpiData = { total_inscricoes: number; total_checkins: number; total_compradores: number; };
 type TableRow = { utm_content: string; qtd_inscricoes: number; qtd_checkins: number; qtd_compradores: number; };
-type DashboardData = { kpis: KPI; tableData: TableRow[]; };
+type DashboardData = { kpis: KpiData; tableData: TableRow[]; };
 
 // --- Componentes ---
-const KpiCard = ({ title, value, subValue, highlight = false }: { title: string, value: string | number, subValue?: string, highlight?: boolean }) => {
-    const cardClasses = highlight ? "bg-green-100 border-green-200" : "bg-white";
-    const titleClasses = highlight ? "text-green-700" : "text-slate-500";
-    const valueClasses = highlight ? "text-green-800" : "text-slate-800";
-    return (
-        <div className={`${cardClasses} p-4 rounded-lg shadow-md border`}>
-            <p className={`text-sm font-medium ${titleClasses}`}>{title}</p>
-            <p className={`text-3xl font-bold mt-1 ${valueClasses}`}>{value}</p>
-            {subValue && <p className="text-xs text-slate-400 mt-1">{subValue}</p>}
-        </div>
-    );
-}
+const KpiCard = ({ title, value, highlight = false }: { title: string, value: string | number, highlight?: boolean }) => (
+    <div className={`p-4 rounded-lg shadow-md border text-center ${highlight ? "bg-green-100 border-green-200" : "bg-white"}`}>
+        <p className={`text-sm font-medium ${highlight ? "text-green-700" : "text-slate-500"}`}>{title}</p>
+        <p className={`text-3xl font-bold mt-1 ${highlight ? "text-green-800" : "text-slate-800"}`}>{value}</p>
+    </div>
+);
 
 // --- Página Principal ---
 export default function PosicaoFinalPage() {
+    // CORREÇÃO: Usa o cliente correto
+    const supabase = createClientComponentClient();
+    
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [data, setData] = useState<DashboardData | null>(null);
@@ -36,17 +34,22 @@ export default function PosicaoFinalPage() {
     // Busca os lançamentos para o dropdown
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data, error } = await db.rpc('get_launches_for_dropdown');
-            if (data && data.length > 0) {
-                setLaunches(data);
-                setSelectedLaunch(data[0].id);
+            // CORREÇÃO: Usa a variável 'supabase' e a tabela correta
+            const { data, error } = await supabase.from('lancamentos').select('id, nome, status');
+            if (data) {
+                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
+                const filtered = data.filter(l => l.status === 'Em Andamento' || l.status === 'Concluído').sort((a,b) => statusOrder[a.status] - statusOrder[b.status]);
+                setLaunches(filtered);
+                if (filtered.length > 0) {
+                    setSelectedLaunch(filtered[0].id);
+                }
             } else {
                 setIsLoading(false);
                 if (error) console.error("Erro ao buscar lançamentos:", error);
             }
         };
         fetchLaunches();
-    }, []);
+    }, [supabase]);
 
     // Busca os dados do dashboard quando um lançamento ou filtro muda
     useEffect(() => {
@@ -55,7 +58,8 @@ export default function PosicaoFinalPage() {
         const fetchDashboardData = async () => {
             setIsLoading(true);
             try {
-                const { data, error } = await db.rpc('get_final_position_dashboard', { 
+                // CORREÇÃO: Usa a variável 'supabase'
+                const { data, error } = await supabase.rpc('get_final_position_dashboard', { 
                     p_launch_id: selectedLaunch,
                     p_group_by: groupBy
                 });
@@ -70,19 +74,22 @@ export default function PosicaoFinalPage() {
         };
 
         fetchDashboardData();
-    }, [selectedLaunch, groupBy]);
+    }, [selectedLaunch, groupBy, supabase]);
 
-    // As variáveis kpis e conversionRate foram movidas para dentro do return
+    const kpis = data?.kpis;
+    const conversionRate = (kpis?.total_inscricoes ?? 0) > 0 
+        ? ((kpis?.total_compradores ?? 0) / kpis.total_inscricoes * 100).toFixed(2) + '%' 
+        : '0.00%';
     
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-slate-800">Dashboard de Posição Final</h1>
-                <div className="bg-white p-2 rounded-lg shadow-md">
+        <div className="space-y-6 p-4 md:p-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Dashboard de Posição Final</h1>
+                <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
                     <select 
                         value={selectedLaunch} 
                         onChange={e => setSelectedLaunch(e.target.value)}
-                        className="px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent"
+                        className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent"
                     >
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                     </select>
@@ -104,55 +111,46 @@ export default function PosicaoFinalPage() {
 
             {isLoading && <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>}
 
-            {/* ✅ CORREÇÃO: Verificação mais simples e cálculo das variáveis aqui dentro */}
             {!isLoading && data?.kpis && (
-                (() => {
-                    const conversionRate = (data.kpis.total_inscricoes ?? 0) > 0 
-                        ? ((data.kpis.total_compradores ?? 0) / data.kpis.total_inscricoes * 100).toFixed(2) + '%' 
-                        : '0.00%';
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <KpiCard title="Total de Inscrições" value={kpis.total_inscricoes} />
+                        <KpiCard title="Total de Check-ins" value={kpis.total_checkins} />
+                        <KpiCard title="Total de Compradores" value={kpis.total_compradores} />
+                        <KpiCard title="Conversão Final (Vendas)" value={conversionRate} highlight />
+                    </div>
 
-                    return (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                                {/* ✅ Acesso direto e seguro aos dados */}
-                                <KpiCard title="Total de Inscrições" value={data.kpis.total_inscricoes} />
-                                <KpiCard title="Total de Check-ins" value={data.kpis.total_checkins} />
-                                <KpiCard title="Total de Compradores" value={data.kpis.total_compradores} />
-                                <KpiCard title="Conversão Final (Vendas)" value={conversionRate} highlight />
-                            </div>
-
-                            <div className="bg-white p-6 rounded-lg shadow-md">
-                                <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-slate-200">
-                                        <thead className="bg-slate-50">
-                                            <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Compradores</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa de Conversão</th>
+                    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
+                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                                <thead className="bg-slate-50 hidden md:table-header-group">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Compradores</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa de Conversão</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white">
+                                    {data.tableData?.map((row, index) => {
+                                        const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
+                                        return (
+                                            <tr key={index} className="block md:table-row border rounded-lg shadow-sm mb-4 md:border-b md:border-slate-200 md:shadow-none md:rounded-none">
+                                                <td className="p-3 md:px-4 md:py-4 font-medium text-slate-800 max-w-full truncate" title={row.utm_content}><span className="md:hidden text-xs font-bold uppercase text-slate-500">Canal: </span>{row.utm_content}</td>
+                                                <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600"><span className="md:hidden font-bold">Inscrições: </span>{row.qtd_inscricoes}</td>
+                                                <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600"><span className="md:hidden font-bold">Check-ins: </span>{row.qtd_checkins}</td>
+                                                <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600 font-bold"><span className="md:hidden font-bold">Compradores: </span>{row.qtd_compradores}</td>
+                                                <td className="p-3 md:px-4 md:py-4 text-sm font-semibold text-green-600"><span className="md:hidden font-bold">Taxa Conv.: </span>{convRate}%</td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="bg-white divide-y divide-slate-200">
-                                            {data.tableData?.map((row, index) => {
-                                                const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
-                                                return (
-                                                <tr key={index} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-4 max-w-sm truncate font-medium text-slate-800" title={row.utm_content}>{row.utm_content}</td>
-                                                    <td className="px-6 py-4 text-sm text-slate-500">{row.qtd_inscricoes}</td>
-                                                    <td className="px-6 py-4 text-sm text-slate-500">{row.qtd_checkins}</td>
-                                                    <td className="px-6 py-4 text-sm text-slate-500 font-bold">{row.qtd_compradores}</td>
-                                                    <td className="px-6 py-4 text-sm font-semibold text-green-600">{convRate}%</td>
-                                                </tr>
-                                            )})}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
-                    )
-                })()
+                    </div>
+                </div>
             )}
             
             {!isLoading && !data?.kpis && (

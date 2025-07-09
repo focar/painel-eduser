@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '@/lib/supabaseClient';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Papa from 'papaparse';
 import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck } from 'react-icons/fa';
 
@@ -20,7 +20,7 @@ const findValueIgnoreCase = (obj: CsvRow, key: string): string | undefined => {
 const BATCH_SIZE = 500;
 
 export default function ImportacaoPage() {
-    // --- Estados ---
+    const supabase = createClientComponentClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
@@ -32,7 +32,6 @@ export default function ImportacaoPage() {
     const [modal, setModal] = useState<ModalState>({ isOpen: false, type: 'alert', title: '', message: '' });
     const [buyerFile, setBuyerFile] = useState<File | null>(null);
 
-    // --- Funções do Modal ---
     const showAlertModal = (title: string, message: string) => setModal({ isOpen: true, type: 'alert', title, message });
     const showConfirmationModal = (title: string, message: string, onConfirm: () => void) => setModal({ isOpen: true, type: 'confirmation', title, message, onConfirm });
     const handleCloseModal = () => setModal({ isOpen: false, type: 'alert', title: '', message: '' });
@@ -41,26 +40,26 @@ export default function ImportacaoPage() {
         handleCloseModal();
     };
 
-    // --- Busca de Dados Iniciais ---
     useEffect(() => {
         const fetchData = async () => {
             setIsDataLoading(true);
             try {
                 const [launchResult, questionResult] = await Promise.all([
-                    db.rpc('get_launches_for_dropdown'),
-                    db.from("perguntas").select('id, texto, tipo, opcoes')
+                    supabase.from("lancamentos").select('id, nome, status'),
+                    supabase.from("perguntas").select('id, texto, tipo, opcoes')
                 ]);
 
                 if (launchResult.error) throw launchResult.error;
                 if (questionResult.error) throw questionResult.error;
 
-                const loadedLaunches = launchResult.data || [];
-                setLaunches(loadedLaunches);
+                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
+                const filtered = (launchResult.data || []).filter(l => l.status === 'Em Andamento' || l.status === 'Concluído').sort((a,b) => statusOrder[a.status] - statusOrder[b.status]);
+                
+                setLaunches(filtered);
                 setQuestions(questionResult.data || []);
+                if (filtered.length > 0) setSelectedLaunch(filtered[0].id);
 
-                if (loadedLaunches.length > 0) setSelectedLaunch(loadedLaunches[0].id);
-
-            } catch (err: unknown) { // ✅ Tipagem Corrigida
+            } catch (err: unknown) {
                 const error = err as Error;
                 showAlertModal("Erro Crítico", "Não foi possível carregar os dados iniciais. " + error.message);
             } finally {
@@ -68,10 +67,10 @@ export default function ImportacaoPage() {
             }
         };
         fetchData();
-    }, []);
+    }, [supabase]);
     
     const addLog = useCallback((message: string) => {
-        setLog(prev => [...prev.slice(-200), `[${new Date().toLocaleTimeString()}] ${message}`]);
+        setLog(prev => [`[${new Date().toLocaleTimeString()}] ${message}`, ...prev.slice(0, 200)]);
     }, []);
 
     const handleImport = () => {
@@ -81,7 +80,7 @@ export default function ImportacaoPage() {
         }
         setIsProcessing(true);
         setProgress(0);
-        setLog(['Aguardando operação de importação de leads...']);
+        setLog(prev => ['Aguardando operação de importação de leads...', ...prev]);
         
         Papa.parse(file, {
             header: true,
@@ -164,7 +163,7 @@ export default function ImportacaoPage() {
                         addLog(`Enviando ${inscriptionData.length} registos de inscrição em lotes...`);
                         for (let i = 0; i < inscriptionData.length; i += BATCH_SIZE) {
                             const batch = inscriptionData.slice(i, i + BATCH_SIZE);
-                            const { error } = await db.rpc('bulk_insert_leads', { p_leads_data: batch });
+                            const { error } = await supabase.rpc('bulk_insert_leads', { p_leads_data: batch });
                             if (error) throw new Error(`Falha ao inserir lote de leads: ${error.message}`);
                             const currentProgress = Math.round(((i + batch.length) / inscriptionData.length) * 50);
                             setProgress(currentProgress);
@@ -177,7 +176,7 @@ export default function ImportacaoPage() {
                         addLog(`Enviando ${surveyData.length} atualizações de score em lotes...`);
                         for (let i = 0; i < surveyData.length; i += BATCH_SIZE) {
                             const batch = surveyData.slice(i, i + BATCH_SIZE);
-                            const { error } = await db.rpc('bulk_process_survey_results', { p_survey_data: batch, p_launch_id: selectedLaunch });
+                            const { error } = await supabase.rpc('bulk_process_survey_results', { p_survey_data: batch, p_launch_id: selectedLaunch });
                             if (error) throw new Error(`Falha ao processar lote de respostas: ${error.message}`);
                             const baseProgress = (importType === 'COMPOSTO') ? 50 : 0;
                             const currentProgress = baseProgress + Math.round(((i + batch.length) / surveyData.length) * (100 - baseProgress - 10));
@@ -193,7 +192,7 @@ export default function ImportacaoPage() {
                     const summaryMessage = `Resumo da Importação:\n\n- Linhas encontradas: ${rows.length}\n- Leads para inscrição: ${inscriptionData.length}\n- Respostas processadas: ${surveyData.length}\n- Linhas inválidas: ${invalidRowCount}`;
                     showAlertModal("Importação Concluída", summaryMessage);
                 
-                } catch (err: unknown) { // ✅ Tipagem Corrigida
+                } catch (err: unknown) {
                     const error = err as Error;
                     addLog(`ERRO na importação de leads: ${error.message}`);
                     showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${error.message}`);
@@ -211,15 +210,15 @@ export default function ImportacaoPage() {
         }
         setIsProcessing(true);
         setProgress(0);
-        setLog(['Aguardando operação de importação de compradores...']);
+        setLog(prev => ['Aguardando operação de importação de compradores...',...prev]);
 
         Papa.parse(buyerFile, {
             header: true,
             skipEmptyLines: true,
             delimiter: ";",
             complete: async (results) => {
-                const buyerEmails = results.data
-                    .map((row: any) => { // ✅ Tipagem Corrigida
+                const buyerEmails = (results.data as CsvRow[])
+                    .map((row: any) => {
                         const email = findValueIgnoreCase(row, 'email');
                         return email ? email.trim().toLowerCase() : null;
                     })
@@ -239,7 +238,7 @@ export default function ImportacaoPage() {
                     for (let i = 0; i < buyerEmails.length; i += BATCH_SIZE) {
                         const batch = buyerEmails.slice(i, i + BATCH_SIZE);
                         
-                        const { data, error } = await db.rpc('mark_leads_as_buyers', {
+                        const { data, error } = await supabase.rpc('mark_leads_as_buyers', {
                             p_launch_id: selectedLaunch,
                             p_buyer_emails: batch
                         });
@@ -255,7 +254,7 @@ export default function ImportacaoPage() {
                     addLog(`Importação finalizada. Total de ${totalUpdatedCount} leads marcados como compradores.`);
                     showAlertModal("Importação de Compradores Concluída", `${totalUpdatedCount} leads foram atualizados com sucesso!`);
 
-                } catch (err: unknown) { // ✅ Tipagem Corrigida
+                } catch (err: unknown) {
                     const error = err as Error;
                     addLog(`ERRO na importação de compradores: ${error.message}`);
                     showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${error.message}`);
@@ -268,20 +267,15 @@ export default function ImportacaoPage() {
     };
 
     const handleClearLeads = async () => {
-        if (!selectedLaunch) {
-            showAlertModal("Atenção", "Selecione um lançamento para limpar os leads.");
-            return;
-        }
+        if (!selectedLaunch) return;
         const launchName = launches.find(l => l.id === selectedLaunch)?.nome;
-        
         showConfirmationModal(
             "Confirmar Limpeza",
             `Tem a certeza de que quer apagar TODOS os leads e respostas do lançamento "${launchName}"? Esta ação é irreversível.`,
             async () => {
                 setIsProcessing(true);
                 addLog(`Iniciando limpeza de leads para o lançamento: ${launchName}...`);
-                const { data, error } = await db.rpc('clear_leads_from_launch', { p_launch_id: selectedLaunch });
-                
+                const { data, error } = await supabase.rpc('clear_leads_from_launch', { p_launch_id: selectedLaunch });
                 if (error) {
                     addLog(`ERRO ao limpar leads: ${error.message}`);
                     showAlertModal("Erro", `Não foi possível limpar os leads. ${error.message}`);
@@ -295,20 +289,15 @@ export default function ImportacaoPage() {
     };
 
     const handleRefreshDates = async () => {
-        if (!selectedLaunch) {
-            showAlertModal("Atenção", "Selecione um lançamento para atualizar as datas.");
-            return;
-        }
+        if (!selectedLaunch) return;
         const launchName = launches.find(l => l.id === selectedLaunch)?.nome;
-
         showConfirmationModal(
             "Confirmar Atualização",
             `Tem a certeza de que quer atualizar as datas de todos os leads do lançamento "${launchName}" para os últimos 7 dias?`,
             async () => {
                 setIsProcessing(true);
                 addLog(`Iniciando atualização de datas para o lançamento: ${launchName}...`);
-                const { data, error } = await db.rpc('refresh_lead_dates_for_launch', { p_launch_id: selectedLaunch });
-
+                const { data, error } = await supabase.rpc('refresh_lead_dates_for_launch', { p_launch_id: selectedLaunch });
                 if (error) {
                     addLog(`ERRO ao atualizar datas: ${error.message}`);
                     showAlertModal("Erro", `Não foi possível atualizar as datas. ${error.message}`);
@@ -321,15 +310,14 @@ export default function ImportacaoPage() {
         );
     };
 
-
     return (
         <div className="space-y-6 p-4 md:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
             
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
                 <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação de Leads</h2>
-                <div>
-                    <label htmlFor="launch-select" className="block text-sm font-medium text-slate-700 mb-1">1. Selecione o Lançamento de Destino</label>
+                <div className='space-y-4'>
+                    <label htmlFor="launch-select" className="block text-sm font-medium text-slate-700">1. Selecione o Lançamento de Destino</label>
                     <select id="launch-select" value={selectedLaunch} onChange={e => setSelectedLaunch(e.target.value)} disabled={isDataLoading || isProcessing} className="w-full sm:w-1/2 px-3 py-2 border border-slate-300 rounded-md disabled:bg-slate-100">
                         {isDataLoading ? <option>A carregar lançamentos...</option> : <option value="">Selecione...</option>}
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}

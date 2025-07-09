@@ -1,45 +1,60 @@
-// Conteúdo ATUALIZADO para: src/app/perguntas/editar/[id]/page.tsx
+// Conteúdo FINAL e CORRIGIDO para: src/app/perguntas/editar/[id]/page.tsx
 
-'use client'; // Transformamos esta página em um Componente de Cliente
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import QuestionForm from "@/components/question/QuestionForm";
-import { db } from "@/lib/supabaseClient";
+// CORREÇÃO: Importa o cliente recomendado
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-// A página agora recebe 'params' como qualquer componente de cliente
-export default function EditarPerguntaPage({ params }: { params: { id: string } }) {
-    const [initialData, setInitialData] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+export default function EditarPerguntaPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  // CORREÇÃO: Cria a instância do cliente da forma correta
+  const supabase = createClientComponentClient();
+  const [initialData, setInitialData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    // Usamos o useEffect para buscar os dados no lado do cliente
-    useEffect(() => {
-        const fetchQuestion = async () => {
-            if (!params.id) return;
-            try {
-                const { data, error } = await db.from('perguntas').select('*').eq('id', params.id).single();
-                if (error || !data) {
-                    throw new Error("Pergunta não encontrada.");
-                }
-                setInitialData(data);
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setIsLoading(false);
-            }
-        };
+  useEffect(() => {
+    const fetchQuestion = async () => {
+      if (!params.id) return;
+      try {
+        // CORREÇÃO: Usa a variável 'supabase' local
+        const { data, error: dbError } = await supabase
+          .from("perguntas")
+          .select("*")
+          .eq("id", params.id)
+          .single();
 
-        fetchQuestion();
-    }, [params.id]);
+        if (dbError || !data) {
+          throw new Error("Pergunta não encontrada ou erro ao buscar.");
+        }
+        setInitialData(data);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    if (isLoading) {
-        return <div className="p-8 text-center"><i className="fas fa-spinner fa-spin"></i> Carregando pergunta...</div>;
-    }
+    fetchQuestion();
+    // CORREÇÃO: Adicionado 'supabase' ao array de dependências do useEffect
+  }, [params.id, supabase]);
 
-    if (error) {
-        return <div className="p-8 text-center text-red-500">{error}</div>;
-    }
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center">
+        <i className="fas fa-spinner fa-spin"></i> Carregando pergunta...
+      </div>
+    );
+  }
 
-    // Renderizamos o mesmo formulário, passando os dados que buscamos
-    return <QuestionForm initialData={initialData} />;
+  if (error) {
+    return <div className="p-8 text-center text-red-500">{error}</div>;
+  }
+
+  return <QuestionForm initialData={initialData} />;
 }

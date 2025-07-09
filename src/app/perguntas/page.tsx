@@ -1,13 +1,11 @@
-// Conteúdo CORRIGIDO para: src/app/perguntas/page.tsx
-
 'use client';
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/supabaseClient';
+// CORREÇÃO: Importa o novo cliente e remove a importação antiga do 'db'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { showAlertModal } from '@/lib/modals';
 
-// --- Tipos de Dados ---
 type Question = {
   id: string;
   texto: string;
@@ -16,13 +14,16 @@ type Question = {
 };
 
 export default function PerguntasPage() {
+  // CORREÇÃO: Cria a instância do cliente da forma correta
+  const supabase = createClientComponentClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchQuestions = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await db
+      // CORREÇÃO: Usa a nova variável 'supabase' em vez de 'db'
+      const { data, error } = await supabase
         .from('perguntas')
         .select(`id, texto, tipo, pesquisas_perguntas(count)`)
         .order('created_at', { ascending: false });
@@ -39,8 +40,6 @@ export default function PerguntasPage() {
   useEffect(() => {
     fetchQuestions();
   }, []);
-
-  // A função handleDelete foi removida daqui.
 
   return (
     <div className="space-y-6">
@@ -80,7 +79,6 @@ export default function PerguntasPage() {
                       <td className="p-4 text-center font-semibold">{usageCount}</td>
                       <td className="p-4 space-x-4">
                         <Link href={`/perguntas/editar/${question.id}`} className="text-blue-600 hover:text-blue-800 font-medium">Editar</Link>
-                        {/* O botão de Excluir foi removido desta linha */}
                       </td>
                     </tr>
                   )

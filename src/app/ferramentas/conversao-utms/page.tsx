@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/supabaseClient';
+// CORREÇÃO: Importa o cliente recomendado
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
-import { FaSpinner, FaPlus, FaEdit } from 'react-icons/fa';
+import { FaSpinner, FaEdit } from 'react-icons/fa';
 
 type UtmAlias = {
     id: number;
@@ -13,16 +14,20 @@ type UtmAlias = {
 };
 
 export default function ConversaoUtmsPage() {
+    // CORREÇÃO: Usa o cliente correto
+    const supabase = createClientComponentClient();
+    
     const [aliases, setAliases] = useState<UtmAlias[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     
-    const [formData, setFormData] = useState<Partial<UtmAlias>>({ utm_type: 'content' });
+    const [formData, setFormData] = useState<Partial<UtmAlias>>({ utm_type: 'content', raw_value: '', display_name: '' });
     const [isEditing, setIsEditing] = useState<number | null>(null);
 
     const fetchAliases = async () => {
         setIsLoading(true);
-        const { data, error } = await db.from('utm_aliases').select('*').order('utm_type').order('raw_value');
+        // CORREÇÃO: Usa a variável 'supabase'
+        const { data, error } = await supabase.from('utm_aliases').select('*').order('utm_type').order('raw_value');
         if (error) {
             toast.error("Erro ao carregar as conversões.");
         } else {
@@ -33,7 +38,7 @@ export default function ConversaoUtmsPage() {
 
     useEffect(() => {
         fetchAliases();
-    }, []);
+    }, []); // O 'supabase' não é necessário aqui pois a função não é recriada com ele
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -47,24 +52,23 @@ export default function ConversaoUtmsPage() {
         }
         setIsSaving(true);
         
-        // ✅ CORREÇÃO APLICADA AQUI ✅
-        // Usamos .trim() para limpar espaços e quebras de linha antes de salvar.
         const dataToSave = {
             utm_type: formData.utm_type.trim(),
             raw_value: formData.raw_value.trim(),
             display_name: formData.display_name.trim(),
         };
-
+        
+        // CORREÇÃO: Usa a variável 'supabase'
         const { error } = isEditing 
-            ? await db.from('utm_aliases').update(dataToSave).eq('id', isEditing)
-            : await db.from('utm_aliases').insert(dataToSave);
+            ? await supabase.from('utm_aliases').update(dataToSave).eq('id', isEditing)
+            : await supabase.from('utm_aliases').insert(dataToSave);
         
         if (error) {
             toast.error(`Falha ao salvar: ${error.message}`);
         } else {
             toast.success(`Conversão ${isEditing ? 'atualizada' : 'criada'} com sucesso!`);
             resetForm();
-            fetchAliases();
+            fetchAliases(); // Recarrega a lista
         }
         setIsSaving(false);
     };
@@ -81,10 +85,10 @@ export default function ConversaoUtmsPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-slate-800">Gerenciador de Conversão de UTMs</h1>
+        <div className="space-y-6 p-4 md:p-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Gerenciador de Conversão de UTMs</h1>
             
-            <form onSubmit={handleSubmit} className="p-6 bg-white rounded-lg shadow-md space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 md:p-6 bg-white rounded-lg shadow-md space-y-4">
                 <h2 className="text-xl font-semibold text-slate-700">{isEditing ? 'Editar Conversão' : 'Adicionar Nova Conversão'}</h2>
                 
                 <div className="space-y-4">
@@ -107,19 +111,19 @@ export default function ConversaoUtmsPage() {
                         <input type="text" name="display_name" id="display_name" value={formData.display_name || ''} onChange={handleInputChange} className="mt-1 w-full p-2 border border-slate-300 rounded-md" placeholder="Anúncio de Teste Estático para o LC20 de Março"/>
                     </div>
                 </div>
-                <div className="flex justify-end space-x-3 pt-4">
-                    {isEditing && <button type="button" onClick={resetForm} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300">Cancelar Edição</button>}
-                    <button type="submit" disabled={isSaving} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50">
-                        {isSaving ? <FaSpinner className="animate-spin"/> : (isEditing ? 'Atualizar' : 'Adicionar')}
+                <div className="flex flex-col sm:flex-row justify-end items-center gap-3 pt-4">
+                    {isEditing && <button type="button" onClick={resetForm} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 w-full sm:w-auto">Cancelar Edição</button>}
+                    <button type="submit" disabled={isSaving} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:opacity-50 w-full sm:w-auto">
+                        {isSaving ? <FaSpinner className="animate-spin mx-auto"/> : (isEditing ? 'Atualizar' : 'Adicionar')}
                     </button>
                 </div>
             </form>
 
             <div className="bg-white rounded-lg shadow-md">
-                <h2 className="text-xl font-semibold text-slate-700 mb-4 p-6">Conversões Salvas</h2>
+                <h2 className="text-xl font-semibold text-slate-700 p-4 md:p-6">Conversões Salvas</h2>
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-slate-50 hidden md:table-header-group">
                             <tr>
                                 <th className="px-6 py-3 text-left font-medium text-slate-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-6 py-3 text-left font-medium text-slate-500 uppercase tracking-wider">Valor Original</th>
@@ -127,14 +131,14 @@ export default function ConversaoUtmsPage() {
                                 <th className="px-6 py-3 text-left font-medium text-slate-500 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-slate-200">
-                            {isLoading ? (<tr><td colSpan={4} className="text-center p-4">Carregando...</td></tr>) 
+                        <tbody className="bg-white">
+                            {isLoading ? (<tr><td colSpan={4} className="text-center p-4"><FaSpinner className="animate-spin text-blue-600 text-2xl mx-auto" /></td></tr>) 
                             : aliases.map(alias => (
-                                <tr key={alias.id} className="hover:bg-slate-50">
-                                    <td className="px-6 py-4 whitespace-nowrap"><span className="px-2 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-800">{alias.utm_type}</span></td>
-                                    <td className="px-6 py-4 max-w-sm truncate" title={alias.raw_value}>{alias.raw_value}</td>
-                                    <td className="px-6 py-4 max-w-sm truncate font-medium text-slate-800" title={alias.display_name}>{alias.display_name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                <tr key={alias.id} className="block md:table-row border rounded-lg shadow-sm mb-4 md:border-none md:shadow-none md:mb-0 md:border-b">
+                                    <td className="p-3 md:px-6 md:py-4 whitespace-nowrap"><span className="md:hidden font-bold text-slate-500">Tipo: </span><span className="px-2 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-800">{alias.utm_type}</span></td>
+                                    <td className="p-3 md:px-6 md:py-4 max-w-full md:max-w-sm truncate" title={alias.raw_value}><span className="md:hidden font-bold text-slate-500">Valor Original: </span>{alias.raw_value}</td>
+                                    <td className="p-3 md:px-6 md:py-4 max-w-full md:max-w-sm truncate font-medium text-slate-800" title={alias.display_name}><span className="md:hidden font-bold text-slate-500">Nome Amigável: </span>{alias.display_name}</td>
+                                    <td className="p-3 md:px-6 md-py-4 whitespace-nowrap">
                                         <button onClick={() => handleEdit(alias)} className="text-blue-600 hover:text-blue-800" title="Editar">
                                             <FaEdit />
                                         </button>

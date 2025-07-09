@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { db } from '@/lib/supabaseClient';
+import { useState, useEffect, useCallback, ChangeEvent, FormEvent, Dispatch, SetStateAction } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaPlus, FaTasks } from 'react-icons/fa';
 
@@ -10,68 +10,83 @@ const INSCRICAO_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwHxYWQ
 const CHECKIN_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbzzjJiDDrASt2S11VFOSjAkhDas3C-CpDKh_Qq4P7nClUVcRgLpRY5prcm-Ln8IgdRH/exec";
 
 // --- TIPOS DE DADOS ---
-type Launch = { id: string; nome: string; };
+type Launch = { id: string; nome: string; status: string; };
 type Question = { id: string; texto: string; opcoes: { texto: string; peso: number }[] | null; };
 type Survey = { id: string; nome: string; perguntas: Question[] };
 type Answers = { [key: string]: string };
 
-// ✅ NOVO TIPO PARA AS PROPS DOS FORMULÁRIOS
 type FormProps = {
-  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  isLoading: boolean;
-  activeLaunches: Launch[];
+    setIsLoading: Dispatch<SetStateAction<boolean>>;
+    isLoading: boolean;
+    activeLaunches: Launch[];
 };
 
 const initialLeadData = { nome: '', email: '' };
 const initialUtmData = { utm_source: '', utm_medium: '', utm_campaign: '', utm_content: '', utm_term: '' };
 
 // --- COMPONENTE DO FORMULÁRIO DE INSCRIÇÃO ---
-// ✅ CORREÇÃO: Adicionada a tipagem nas props
 function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }: FormProps) {
     const [formData, setFormData] = useState({ ...initialLeadData, ...initialUtmData });
     const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
 
+    // Efeito para carregar UTMs salvos no início
     useEffect(() => {
-        const savedUtms = localStorage.getItem('simulador_utms');
-        if (savedUtms) setFormData(prev => ({ ...prev, ...JSON.parse(savedUtms) }));
+        try {
+            const savedUtms = localStorage.getItem('simulador_utms');
+            if (savedUtms) {
+                setFormData(prev => ({ ...prev, ...JSON.parse(savedUtms) }));
+            }
+        } catch (error) {
+            console.error("Erro ao carregar UTMs do localStorage", error);
+        }
     }, []);
 
+    // Efeito para salvar UTMs a cada mudança
     useEffect(() => {
-        const { nome, email, ...utmsToSave } = formData;
-        localStorage.setItem('simulador_utms', JSON.stringify(utmsToSave));
+        try {
+            const { nome, email, ...utmsToSave } = formData;
+            localStorage.setItem('simulador_utms', JSON.stringify(utmsToSave));
+        } catch (error) {
+            console.error("Erro ao salvar UTMs no localStorage", error);
+        }
     }, [formData]);
 
+    // Efeito para preencher utm_campaign ao selecionar um lançamento
     useEffect(() => {
         if (selectedLaunchId) {
             const selected = activeLaunches.find(l => l.id === selectedLaunchId);
-            if (selected) setFormData(prev => ({ ...prev, utm_campaign: selected.nome }));
+            if (selected) {
+                setFormData(prev => ({ ...prev, utm_campaign: selected.nome }));
+            }
         }
+        // A lógica que limpava o campo foi removida para manter a persistência.
     }, [selectedLaunchId, activeLaunches]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (!formData.email) { toast.error("O campo e-mail é obrigatório."); return; }
         setIsLoading(true);
         try {
             const launchName = activeLaunches.find(l => l.id === selectedLaunchId)?.nome || '';
             const payload = { ...formData, launch_name: launchName };
-
             const response = await fetch(INSCRICAO_SHEET_API_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload),
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                mode: 'cors',
+                method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain;charset=utf-8' }, mode: 'cors',
             });
-
             const result = await response.json();
             if (result.status === 'success') {
                 toast.success("Inscrição enviada com sucesso!");
-                setFormData(prev => ({ ...prev, ...initialLeadData }));
-                setSelectedLaunchId('');
+                // ### INÍCIO DA CORREÇÃO ###
+                // Limpa apenas os dados do lead, mantendo os UTMs.
+                setFormData(prev => ({
+                    ...prev, // Mantém todos os campos existentes (incluindo UTMs)
+                    nome: '', // Limpa o nome
+                    email: '' // Limpa o e-mail
+                }));
+                // ### FIM DA CORREÇÃO ###
             } else {
                 throw new Error(result.message || "Ocorreu um erro no script do Google.");
             }
@@ -84,13 +99,13 @@ function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }: FormPr
     };
 
     return (
-        <form onSubmit={handleSubmit} className="p-6 bg-white rounded-lg shadow-md space-y-6 mt-4">
+        <form onSubmit={handleSubmit} className="p-4 md:p-6 bg-white rounded-lg shadow-md space-y-6 mt-4">
             <h3 className="text-lg font-semibold text-slate-700">Preencher Dados da Inscrição</h3>
             <div>
                 <label htmlFor="launch-reference-inscricao" className="block text-sm font-medium text-slate-700">Lançamento de Referência</label>
                 <select id="launch-reference-inscricao" value={selectedLaunchId} onChange={e => setSelectedLaunchId(e.target.value)} className="mt-1 w-full p-2 border border-slate-300 rounded-md bg-white">
                     <option value="">Nenhum (preenchimento manual)</option>
-                    {activeLaunches.map(launch => <option key={launch.id} value={launch.id}>{launch.nome}</option>)}
+                    {activeLaunches.map(launch => <option key={launch.id} value={launch.id}>{launch.nome} ({launch.status})</option>)}
                 </select>
             </div>
             <fieldset>
@@ -141,8 +156,8 @@ function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }: FormPr
 }
 
 // --- COMPONENTE DO FORMULÁRIO DE CHECK-IN ---
-// ✅ CORREÇÃO: Adicionada a tipagem nas props
 function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProps) {
+    const supabase = createClientComponentClient();
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
     const [answers, setAnswers] = useState<Answers>({});
@@ -151,12 +166,12 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProp
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            const { data, error } = await db.from('pesquisas').select(`id, nome, perguntas ( id, texto, opcoes )`).eq('status', 'Ativo');
+            const { data, error } = await supabase.from('pesquisas').select(`id, nome, perguntas ( id, texto, opcoes )`).eq('status', 'Ativo');
             if (error) { toast.error("Não foi possível carregar as pesquisas."); }
             else if (data) { setSurveys(data as Survey[]); }
         };
         fetchInitialData();
-    }, []);
+    }, [supabase]);
 
     const handleSurveySelect = (surveyId: string) => {
         const survey = surveys.find(s => s.id === surveyId) || null;
@@ -164,7 +179,7 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProp
         setAnswers({});
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (!formData.email) { toast.error("O campo e-mail é obrigatório."); return; }
         setIsLoading(true);
@@ -172,10 +187,7 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProp
         const payload = { ...formData, respostas: answers, launch_name: launchName };
         try {
             const response = await fetch(CHECKIN_SHEET_API_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload),
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                mode: 'cors',
+                method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain;charset=utf-8' }, mode: 'cors',
             });
             const result = await response.json();
             if (result.status === 'success') {
@@ -196,13 +208,13 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProp
     };
 
     return (
-        <form onSubmit={handleSubmit} className="p-6 bg-white rounded-lg shadow-md space-y-4 mt-4">
+        <form onSubmit={handleSubmit} className="p-4 md:p-6 bg-white rounded-lg shadow-md space-y-4 mt-4">
             <h3 className="text-lg font-semibold text-slate-700">Preencher Dados do Check-in</h3>
             <div>
                 <label htmlFor="launch-reference-checkin" className="block text-sm font-medium text-slate-700">Lançamento de Referência</label>
                 <select id="launch-reference-checkin" value={selectedLaunchId} onChange={e => setSelectedLaunchId(e.target.value)} required className="mt-1 w-full p-2 border border-slate-300 rounded-md bg-white">
                     <option value="">Selecione um lançamento...</option>
-                    {activeLaunches.map(launch => <option key={launch.id} value={launch.id}>{launch.nome}</option>)}
+                    {activeLaunches.map(launch => <option key={launch.id} value={launch.id}>{launch.nome} ({launch.status})</option>)}
                 </select>
             </div>
             <div>
@@ -248,27 +260,37 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProp
 
 // --- PÁGINA PRINCIPAL ---
 export default function SimuladorPage() {
+    const supabase = createClientComponentClient();
     const [mode, setMode] = useState<'inscricao' | 'checkin' | null>('inscricao');
     const [isLoading, setIsLoading] = useState(false);
     const [activeLaunches, setActiveLaunches] = useState<Launch[]>([]);
 
     useEffect(() => {
-        db.from('lancamentos').select('id, nome').eq('status', 'Em Andamento')
-          .order('created_at', { ascending: false })
-          .then(({ data }) => {
-            if (data) setActiveLaunches(data);
-          });
-    }, []);
+        const fetchLaunches = async () => {
+            const { data, error } = await supabase.from('lancamentos').select('id, nome, status');
+            if (error) {
+                console.error("Erro ao buscar lançamentos:", error);
+                setActiveLaunches([]);
+            } else if (data) {
+                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
+                const filteredAndSorted = data
+                    .filter(launch => launch.status === 'Em Andamento' || launch.status === 'Concluído')
+                    .sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+                setActiveLaunches(filteredAndSorted);
+            }
+        };
+        fetchLaunches();
+    }, [supabase]);
 
     return (
-        <div className="space-y-6 max-w-2xl">
-            <h1 className="text-3xl font-bold text-slate-800">Simulador de Inscrição e Check-in</h1>
+        <div className="space-y-6 max-w-4xl p-4 md:p-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-800">Simulador de Inscrição e Check-in</h1>
             <p className="text-sm text-slate-500">Escolha qual tipo de ação você deseja simular.</p>
-            <div className="flex space-x-4">
-                <button onClick={() => setMode('inscricao')} className={`flex items-center font-bold py-2 px-4 rounded-lg transition-colors ${mode === 'inscricao' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                <button onClick={() => setMode('inscricao')} className={`w-full sm:w-auto flex items-center justify-center font-bold py-2 px-4 rounded-lg transition-colors ${mode === 'inscricao' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
                     <FaPlus className="mr-2" /> Simular Inscrição
                 </button>
-                <button onClick={() => setMode('checkin')} className={`flex items-center font-bold py-2 px-4 rounded-lg transition-colors ${mode === 'checkin' ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+                <button onClick={() => setMode('checkin')} className={`w-full sm:w-auto flex items-center justify-center font-bold py-2 px-4 rounded-lg transition-colors ${mode === 'checkin' ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
                     <FaTasks className="mr-2" /> Simular Check-in
                 </button>
             </div>

@@ -1,11 +1,10 @@
-// Conteúdo FINAL e CORRIGIDO para: src/app/pesquisas/page.tsx
-
 'use client';
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/supabaseClient';
+// CORREÇÃO: Importa o novo cliente
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { showAlertModal, showConfirmationModal } from '@/lib/modals';
 
 type Survey = {
@@ -17,13 +16,16 @@ type Survey = {
 };
 
 export default function PesquisasPage() {
+    // CORREÇÃO: Cria a instância do cliente da forma correta
+    const supabase = createClientComponentClient();
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
     const fetchSurveys = async () => {
         setIsLoading(true);
-        const { data, error } = await db
+        // CORREÇÃO: Usa a variável 'supabase'
+        const { data, error } = await supabase
             .from('pesquisas')
             .select(`id, nome, categoria_pesquisa, status, pesquisas_perguntas(count)`)
             .order('status', { ascending: true })
@@ -32,7 +34,6 @@ export default function PesquisasPage() {
         if (error) {
             showAlertModal('Erro ao carregar pesquisas', error.message);
         } else {
-            // Filtra para não mostrar pesquisas inativas por padrão (opcional)
             setSurveys(data?.filter(s => s.status !== 'Inativo') || []);
         }
         setIsLoading(false);
@@ -42,27 +43,25 @@ export default function PesquisasPage() {
         fetchSurveys();
     }, []);
     
-    // ### INÍCIO DA CORREÇÃO ###
-    // A função agora se chama 'handleInactivate' e apenas atualiza o status.
     const handleInactivate = async (surveyId: string, surveyName: string) => {
-        showConfirmationModal(`Tem certeza que deseja inativar a pesquisa "${surveyName}"? Ela não poderá mais ser usada em novos lançamentos, mas os dados existentes serão mantidos.`, async () => {
+        showConfirmationModal(`Tem certeza que deseja inativar a pesquisa "${surveyName}"?`, async () => {
             try {
-                // AÇÃO PRINCIPAL: Atualiza o status para 'Inativo' em vez de deletar
-                const { error } = await db
+                // CORREÇÃO: Usa a variável 'supabase'
+                const { error } = await supabase
                     .from('pesquisas')
                     .update({ status: 'Inativo' })
                     .eq('id', surveyId);
 
                 if (error) throw error;
                 showAlertModal('Sucesso', 'Pesquisa inativada com sucesso.');
-                fetchSurveys(); // Recarrega a lista para que a pesquisa inativada suma da tela
+                fetchSurveys();
             } catch (err: any) {
                 showAlertModal('Erro ao inativar', err.message);
             }
         });
     };
-    // ### FIM DA CORREÇÃO ###
 
+    // O resto do seu JSX não muda...
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -101,7 +100,6 @@ export default function PesquisasPage() {
                                             <td className="p-4"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor}`}>{survey.status}</span></td>
                                             <td className="p-4 space-x-4">
                                                 <Link href={`/pesquisas/editar/${survey.id}`} className="text-blue-600 hover:text-blue-800 font-medium">Editar</Link>
-                                                {/* CORREÇÃO: Botão agora chama 'handleInactivate' e tem texto e cor diferentes */}
                                                 <button onClick={() => handleInactivate(survey.id, survey.nome)} className="text-orange-600 hover:text-orange-800 font-medium">Inativar</button>
                                             </td>
                                         </tr>

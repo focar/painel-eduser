@@ -1,8 +1,10 @@
 // src/app/lancamentos/editar/[id]/page.tsx
 
-import { db } from '@/lib/supabaseClient';
+// CORREÇÃO: Vamos usar o cliente recomendado para Componentes de Servidor
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import EditForm from './EditForm'; // Importa o nosso componente de cliente
+import EditForm from './EditForm';
 
 type LaunchData = {
     id: string;
@@ -17,8 +19,12 @@ type PageProps = {
     params: { id: string };
 };
 
+// A função agora é assíncrona para usar o cliente de servidor
 async function getLaunchById(id: string) {
-    const { data, error } = await db
+    // CORREÇÃO: Criação do cliente de servidor
+    const supabase = createServerComponentClient({ cookies });
+
+    const { data, error } = await supabase
         .from('lancamentos')
         .select('*')
         .eq('id', id)
@@ -28,6 +34,7 @@ async function getLaunchById(id: string) {
         notFound();
     }
     
+    // Formata as datas no servidor antes de passar para o cliente
     return { 
         ...data, 
         data_inicio: data.data_inicio ? data.data_inicio.split('T')[0] : '', 
@@ -37,5 +44,6 @@ async function getLaunchById(id: string) {
 
 export default async function EditarLancamentoPage({ params }: PageProps) {
     const initialData = await getLaunchById(params.id);
+    // Passa os dados para o componente de cliente que contém o formulário
     return <EditForm initialData={initialData as LaunchData} />;
 }

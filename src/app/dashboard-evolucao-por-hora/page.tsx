@@ -31,7 +31,7 @@ export default function EvolucaoCanalPage() {
   const supabase = createClientComponentClient();
 
   const [selectedLaunchId, setSelectedLaunchId] = useState<string | null>(null);
-  const [period, setPeriod] = useState<'Hoje' | 'Ontem' | '7 Dias' | 'Todos'>('7 Dias');
+  const [period, setPeriod] = useState<'Hoje' | 'Ontem' | '7 Dias' | 'Todos'>('Hoje');
   const [selectedUtm, setSelectedUtm] = useState<string>('Todos');
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [apiResponse, setApiResponse] = useState<ApiResponse | null>(null);
@@ -41,27 +41,18 @@ export default function EvolucaoCanalPage() {
   useEffect(() => {
     const fetchLaunches = async () => {
       const { data, error } = await supabase.from('lancamentos').select('id, nome, status');
-      
       if (error) {
         console.error("Erro ao buscar lançamentos:", error);
         setLaunches([]);
       } else if (data) {
-        // ### INÍCIO DA CORREÇÃO ###
-        const statusOrder: { [key: string]: number } = {
-          'Em Andamento': 1,
-          'Concluído': 2,
-        };
-
+        const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
         const filteredAndSorted = data
           .filter(launch => launch.status === 'Em Andamento' || launch.status === 'Concluído')
           .sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
-        
         setLaunches(filteredAndSorted);
-        
         if (filteredAndSorted.length > 0) {
           setSelectedLaunchId(filteredAndSorted[0].id);
         }
-        // ### FIM DA CORREÇÃO ###
       }
     };
     fetchLaunches();
@@ -95,13 +86,11 @@ export default function EvolucaoCanalPage() {
           startDate = new Date('2020-01-01T00:00:00Z');
           endDate = endOfDay(now);
       }
-      
       const { data, error } = await supabase.rpc('get_dashboard_evolucao_canal', {
         p_launch_id: selectedLaunchId,
         p_start_datetime: startDate.toISOString(),
         p_end_datetime: endDate.toISOString(),
       });
-
       if (error) {
         console.error('Erro ao buscar dados do dashboard:', error);
         setApiResponse(null);
@@ -114,6 +103,7 @@ export default function EvolucaoCanalPage() {
     setSelectedUtm('Todos');
   }, [selectedLaunchId, period, supabase]);
 
+  // --- Lógica de processamento de dados (useMemo) ---
   const filteredDetailedData = useMemo(() => {
     if (!apiResponse) return [];
     if (selectedUtm === 'Todos') return apiResponse.detailed_data;
@@ -121,13 +111,11 @@ export default function EvolucaoCanalPage() {
   }, [apiResponse, selectedUtm]);
 
   const periodKpis = useMemo(() => {
-    return filteredDetailedData.reduce(
-      (acc, curr) => {
-        acc.inscricoes += curr.inscricoes;
-        acc.checkins += curr.checkins;
-        return acc;
-      }, { inscricoes: 0, checkins: 0 }
-    );
+    return filteredDetailedData.reduce((acc, curr) => {
+      acc.inscricoes += curr.inscricoes;
+      acc.checkins += curr.checkins;
+      return acc;
+    }, { inscricoes: 0, checkins: 0 });
   }, [filteredDetailedData]);
 
   const groupedDataForTable = useMemo<GroupedData>(() => {
@@ -155,38 +143,42 @@ export default function EvolucaoCanalPage() {
         'Check-ins': hourlyTotals[i]?.checkins || 0,
     }));
   }, [filteredDetailedData]);
+  // --- Fim da Lógica ---
 
   return (
-    <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-bold text-gray-800">Evolução de Canal</h1>
+    <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen">
+      <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Evolução de Canal</h1>
 
       {/* Filtros Principais */}
       <div className="p-4 bg-white rounded-lg shadow-md">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-          <div>
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="w-full md:w-auto">
             <label className="block text-sm font-medium text-gray-700">Lançamento</label>
             <select 
               value={selectedLaunchId || ''} 
               onChange={(e) => setSelectedLaunchId(e.target.value)} 
-              className="mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 p-2 w-full border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               disabled={!launches.length}
             >
               {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
             </select>
           </div>
-          <div>
+          <div className="w-full md:w-auto">
             <label className="block text-sm font-medium text-gray-700">Período</label>
+            {/* ### INÍCIO DA CORREÇÃO ### */}
             <div className="flex items-center space-x-2 mt-1">
               {['Hoje', 'Ontem', '7 Dias', 'Todos'].map(p => (
                 <button 
                   key={p} 
                   onClick={() => setPeriod(p as any)} 
-                  className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${period === p ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  // CORREÇÃO: Removido 'w-full' para permitir que os botões tenham larguras naturais
+                  className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors flex-1 md:flex-none ${period === p ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                 >
                   {p}
                 </button>
               ))}
             </div>
+            {/* ### FIM DA CORREÇÃO ### */}
           </div>
         </div>
       </div>
@@ -198,7 +190,7 @@ export default function EvolucaoCanalPage() {
       ) : (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 bg-white rounded-lg shadow"><h3 className="text-gray-500">Total Inscrições (Geral)</h3><p className="text-2xl font-bold">{apiResponse?.kpis?.total_geral_inscritos ?? 0}</p></div>
             <div className="p-4 bg-white rounded-lg shadow"><h3 className="text-gray-500">Total Check-ins (Geral)</h3><p className="text-2xl font-bold">{apiResponse?.kpis?.total_geral_checkins ?? 0}</p></div>
             <div className="p-4 bg-white rounded-lg shadow"><h3 className="text-gray-500">Inscrições no Período</h3><p className="text-2xl font-bold">{periodKpis.inscricoes}</p></div>
@@ -208,7 +200,7 @@ export default function EvolucaoCanalPage() {
           {/* Filtro Secundário */}
           <div className="p-4 bg-white rounded-lg shadow-md">
             <label htmlFor="utm-filter" className="block text-sm font-medium text-gray-700">Filtrar por UTM Content</label>
-            <select id="utm-filter" value={selectedUtm} onChange={(e) => setSelectedUtm(e.target.value)} className="mt-1 p-2 border border-gray-300 rounded-md w-full md:w-auto">
+            <select id="utm-filter" value={selectedUtm} onChange={(e) => setSelectedUtm(e.target.value)} className="mt-1 p-2 w-full border border-gray-300 rounded-md">
               <option value="Todos">Todos os canais</option>
               {apiResponse?.available_utm_contents?.map(utm => <option key={utm} value={utm}>{utm}</option>)}
             </select>
@@ -242,8 +234,8 @@ export default function EvolucaoCanalPage() {
                         <div key={day} className="pl-4 border-l border-r border-b">
                           <h4 className="font-semibold p-2 bg-gray-50">{new Date(day).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</h4>
                           <table className="min-w-full text-sm">
-                            <thead className="sr-only sm:not-sr-only">
-                              <tr className="bg-gray-100">
+                            <thead className="bg-gray-100">
+                              <tr>
                                 <th className="p-2 text-left font-medium text-gray-600 w-1/3">Hora</th>
                                 <th className="p-2 text-left font-medium text-gray-600 w-1/3">Inscrições</th>
                                 <th className="p-2 text-left font-medium text-gray-600 w-1/3">Check-ins</th>
@@ -252,9 +244,9 @@ export default function EvolucaoCanalPage() {
                             <tbody className="divide-y divide-gray-200">
                               {hours.map((item, index) => (
                                 <tr key={index}>
-                                  <td className="p-2" data-label="Hora">{`${item.hour.toString().padStart(2, '0')}:00`}</td>
-                                  <td className="p-2" data-label="Inscrições">{item.inscricoes}</td>
-                                  <td className="p-2" data-label="Check-ins">{item.checkins}</td>
+                                  <td className="p-2">{`${item.hour.toString().padStart(2, '0')}:00`}</td>
+                                  <td className="p-2">{item.inscricoes}</td>
+                                  <td className="p-2">{item.checkins}</td>
                                 </tr>
                               ))}
                             </tbody>

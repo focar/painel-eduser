@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { db } from '@/lib/supabaseClient';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
-// É uma boa prática mover estes tipos para um ficheiro central, como 'src/types.ts',
-// mas por enquanto, vamos mantê-los aqui para simplicidade.
 type LaunchData = {
     id: string;
     nome: string;
@@ -24,6 +23,7 @@ type Survey = {
 
 // --- Componente Principal do Lado do Cliente ---
 export default function EditForm({ initialData }: { initialData: LaunchData }) {
+    const supabase = createClientComponentClient();
     const { id } = initialData;
     const [isSaving, setIsSaving] = useState(false);
     const [isAssociateModalOpen, setIsAssociateModalOpen] = useState(false);
@@ -32,7 +32,7 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
     const handleSaveFlow = async (updatedData: Partial<LaunchData>, andThen: () => void) => {
         setIsSaving(true);
         try {
-            const { error: updateError } = await db.from('lancamentos').update({ 
+            const { error: updateError } = await supabase.from('lancamentos').update({ 
                 nome: updatedData.nome, 
                 descricao: updatedData.descricao, 
                 data_inicio: updatedData.data_inicio, 
@@ -62,7 +62,7 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
 
     const handleAssociateSurvey = async (surveyId: string) => {
         try {
-            const { error } = await db.rpc('associate_survey_to_launch', { p_launch_id: id, p_survey_id: surveyId });
+            const { error } = await supabase.rpc('associate_survey_to_launch', { p_launch_id: id, p_survey_id: surveyId });
             if (error) throw error;
             
             toast.success('Pesquisa associada com sucesso!');
@@ -76,7 +76,7 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
     };
     
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 p-4 md:p-0">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Editar Lançamento</h1>
             <LaunchForm 
                 initialData={initialData}
@@ -102,6 +102,7 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
     onAssociate: (surveyId: string) => void;
     launchId: string;
 }) {
+    const supabase = createClientComponentClient();
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [selectedSurvey, setSelectedSurvey] = useState<string>('');
     const router = useRouter();
@@ -109,7 +110,7 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
     useEffect(() => {
         if (isOpen) {
             const fetchSurveys = async () => {
-                const { data, error } = await db.from('pesquisas').select('id, nome').order('nome');
+                const { data, error } = await supabase.from('pesquisas').select('id, nome').order('nome');
                 if (error) {
                     toast.error("Não foi possível carregar as pesquisas.");
                 } else {
@@ -121,7 +122,7 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
             };
             fetchSurveys();
         }
-    }, [isOpen, launchId]);
+    }, [isOpen, launchId, supabase]);
 
     if (!isOpen) return null;
 
@@ -150,9 +151,9 @@ function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
                         )) : <p className="text-center text-slate-500 p-4">Nenhuma pesquisa encontrada.</p>}
                     </div>
                 </div>
-                <div className="mt-6 flex justify-between items-center">
-                    <button onClick={handleCreateNew} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-sm">Criar Nova Pesquisa</button>
-                    <div className="space-x-3">
+                <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+                    <button onClick={handleCreateNew} className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-sm">Criar Nova Pesquisa</button>
+                    <div className="space-x-3 flex justify-end w-full sm:w-auto">
                         <button onClick={onClose} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
                         <button onClick={handleAssociate} disabled={!selectedSurvey} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold disabled:opacity-50">Salvar Associação</button>
                     </div>
@@ -189,7 +190,7 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
     };
 
     return (
-        <div className="space-y-6 bg-white p-8 rounded-lg shadow-md">
+        <div className="space-y-6 bg-white p-6 md:p-8 rounded-lg shadow-md">
             <div>
                 <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
                 <input type="text" name="nome" id="nome" value={formData.nome || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" required />
@@ -218,10 +219,10 @@ function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: {
                     <option value="Cancelado">Cancelado</option>
                 </select>
             </div>
-            <div className="flex justify-end pt-4 space-x-4">
-                <button type="button" onClick={() => router.push('/lancamentos')} className="px-6 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
-                <button type="button" onClick={() => onSave(formData)} disabled={isSaving || !!dateError} className="px-6 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 font-semibold disabled:opacity-50">{isSaving ? 'A salvar...' : 'Salvar'}</button>
-                <button type="button" onClick={() => onSaveAndAssociate(formData)} disabled={isSaving || !!dateError} className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold disabled:opacity-50">{isSaving ? 'A salvar...' : 'Salvar e Associar Pesquisa'}</button>
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-end pt-4">
+                <button type="button" onClick={() => router.push('/lancamentos')} className="w-full sm:w-auto px-6 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
+                <button type="button" onClick={() => onSave(formData)} disabled={isSaving || !!dateError} className="w-full sm:w-auto px-6 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 font-semibold disabled:opacity-50">{isSaving ? <FaSpinner className="animate-spin mx-auto"/> : 'Salvar'}</button>
+                <button type="button" onClick={() => onSaveAndAssociate(formData)} disabled={isSaving || !!dateError} className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold disabled:opacity-50">{isSaving ? <FaSpinner className="animate-spin mx-auto"/> : 'Salvar e Associar Pesquisa'}</button>
             </div>
         </div>
     );

@@ -1,13 +1,11 @@
-// Conteúdo FINAL para: src/components/question/QuestionForm.tsx
+"use client";
 
-'use client';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { showAlertModal } from "@/lib/modals";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { db } from '@/lib/supabaseClient';
-import { showAlertModal } from '@/lib/modals';
-
-// O tipo de dados interno continua usando 'peso' para não quebrar outras funções
+// Tipos de Dados
 type Option = {
   texto: string;
   peso: number;
@@ -25,47 +23,61 @@ type QuestionFormProps = {
 };
 
 export default function QuestionForm({ initialData }: QuestionFormProps) {
+  const supabase = createClientComponentClient();
   const router = useRouter();
+
   const [question, setQuestion] = useState({
-    texto: initialData?.texto || '',
-    tipo: initialData?.tipo || 'Texto Aberto',
+    texto: initialData?.texto || "",
+    tipo: initialData?.tipo || "Texto Aberto",
   });
 
   const [options, setOptions] = useState<Option[]>(
-    initialData?.opcoes?.map(opt => ({
-      texto: opt.texto || '',
+    initialData?.opcoes?.map((opt) => ({
+      texto: opt.texto || "",
       peso: (opt as any).peso ?? (opt as any).pontos ?? 0,
     })) || []
   );
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ### INÍCIO DA CORREÇÃO ###
-  // Nova função para lidar com a mudança do tipo da pergunta
+  // Efeito para configurar as opções iniciais para "Sim / Não" ao carregar
+  useEffect(() => {
+    if (initialData?.tipo === "Sim / Não" && initialData.opcoes) {
+      setOptions(initialData.opcoes);
+    }
+  }, [initialData]);
+
+  // Função para lidar com a mudança do tipo da pergunta
   const handleTypeChange = (newType: string) => {
     setQuestion({ ...question, tipo: newType });
 
-    // Se o tipo for "Sim / Não", pré-popula as opções e impede a edição dos textos
-    if (newType === 'Sim / Não') {
-      // Verifica se as opções já não são "Sim" e "Não" para não sobrescrever os pesos
-      if (options.length !== 2 || options[0].texto !== 'Sim' || options[1].texto !== 'Não') {
+    if (newType === "Sim / Não") {
+      // Apenas altera se as opções não forem já "Sim" e "Não" para não sobrescrever
+      if (
+        options.length !== 2 ||
+        options[0].texto !== "Sim" ||
+        options[1].texto !== "Não"
+      ) {
         setOptions([
-          { texto: 'Sim', peso: 1 }, // Valor padrão de 1 para Sim
-          { texto: 'Não', peso: 0 },  // Valor padrão de 0 para Não
+          { texto: "Sim", peso: 1 },
+          { texto: "Não", peso: 0 },
         ]);
       }
     }
   };
-  // ### FIM DA CORREÇÃO ###
 
-  const handleOptionChange = (index: number, field: 'texto' | 'peso', value: string | number) => {
+  const handleOptionChange = (
+    index: number,
+    field: "texto" | "peso",
+    value: string | number
+  ) => {
     const newOptions = [...options];
     newOptions[index] = { ...newOptions[index], [field]: value };
     setOptions(newOptions);
   };
 
   const addOption = () => {
-    setOptions([...options, { texto: '', peso: 0 }]);
+    setOptions([...options, { texto: "", peso: 0 }]);
   };
 
   const removeOption = (index: number) => {
@@ -79,20 +91,22 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
       const questionToSave = {
         id: initialData?.id,
         ...question,
-        // CORREÇÃO: Salva as opções para ambos os tipos
-        opcoes: question.tipo === 'Múltipla Escolha' || question.tipo === 'Sim / Não' ? options : [],
-        modified_at: new Date().toISOString()
+        opcoes:
+          question.tipo === "Múltipla Escolha" || question.tipo === "Sim / Não"
+            ? options
+            : [],
+        modified_at: new Date().toISOString(),
       };
-      
-      const { error } = await db.from('perguntas').upsert(questionToSave);
-      
+
+      const { error } = await supabase.from("perguntas").upsert(questionToSave);
+
       if (error) throw error;
-      
-      showAlertModal('Sucesso!', 'Pergunta salva com sucesso!');
-      router.push('/perguntas');
+
+      showAlertModal("Sucesso!", "Pergunta salva com sucesso!");
+      router.push("/perguntas");
       router.refresh();
-    } catch (err: any) { 
-      showAlertModal('Erro ao Salvar', err.message);
+    } catch (err: any) {
+      showAlertModal("Erro ao Salvar", err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -101,64 +115,118 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6">{initialData ? 'Editar Pergunta' : 'Criar Nova Pergunta'}</h1>
+        <h1 className="text-2xl font-bold mb-6">
+          {initialData ? "Editar Pergunta" : "Criar Nova Pergunta"}
+        </h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="texto" className="block text-sm font-medium text-slate-700">Texto da Pergunta</label>
+            <label
+              htmlFor="texto"
+              className="block text-sm font-medium text-slate-700"
+            >
+              Texto da Pergunta
+            </label>
             <textarea
               id="texto"
               value={question.texto}
-              onChange={e => setQuestion({ ...question, texto: e.target.value })}
+              onChange={(e) =>
+                setQuestion({ ...question, texto: e.target.value })
+              }
               required
               rows={3}
               className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm"
             />
           </div>
           <div>
-            <label htmlFor="tipo" className="block text-sm font-medium">Tipo de Resposta</label>
-            {/* CORREÇÃO: Usa a nova função handleTypeChange */}
-            <select id="tipo" value={question.tipo} onChange={e => handleTypeChange(e.target.value)} className="mt-1 w-full border-slate-300 rounded-md">
+            <label htmlFor="tipo" className="block text-sm font-medium">
+              Tipo de Resposta
+            </label>
+            <select
+              id="tipo"
+              value={question.tipo}
+              onChange={(e) => handleTypeChange(e.target.value)}
+              className="mt-1 w-full border-slate-300 rounded-md"
+            >
               <option>Texto Aberto</option>
               <option>Múltipla Escolha</option>
               <option>Sim / Não</option>
             </select>
           </div>
-          {/* CORREÇÃO: Mostra a seção de opções para ambos os tipos */}
-          {(question.tipo === 'Múltipla Escolha' || question.tipo === 'Sim / Não') && (
+          {(question.tipo === "Múltipla Escolha" ||
+            question.tipo === "Sim / Não") && (
             <div className="pt-4 border-t">
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium">Opções de Resposta</label>
-                <label className="block text-sm font-medium text-slate-500 pr-12">Pontos</label>
+                <label className="block text-sm font-medium">
+                  Opções de Resposta
+                </label>
+                <label className="block text-sm font-medium text-slate-500 pr-12">
+                  Pontos
+                </label>
               </div>
               <div className="space-y-3">
                 {options.map((opt, index) => (
                   <div key={index} className="flex items-center gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="Texto da opção" 
-                      value={opt.texto} 
-                      onChange={e => handleOptionChange(index, 'texto', e.target.value)} 
-                      className="flex-grow p-2 border rounded-md" 
-                      // CORREÇÃO: Desabilita a edição do texto para "Sim / Não"
-                      disabled={question.tipo === 'Sim / Não'}
+                    <input
+                      type="text"
+                      placeholder="Texto da opção"
+                      value={opt.texto}
+                      onChange={(e) =>
+                        handleOptionChange(index, "texto", e.target.value)
+                      }
+                      className="flex-grow p-2 border rounded-md"
+                      disabled={question.tipo === "Sim / Não"}
                     />
-                    <input type="number" placeholder="Pontos" value={opt.peso} onChange={e => handleOptionChange(index, 'peso', parseInt(e.target.value) || 0)} className="w-24 p-2 border rounded-md text-center"/>
-                    {/* CORREÇÃO: Esconde o botão de remover para "Sim / Não" */}
-                    {question.tipo === 'Múltipla Escolha' && (
-                      <button type="button" onClick={() => removeOption(index)} className="text-red-500 hover:text-red-700 font-bold text-xl">&times;</button>
+                    <input
+                      type="number"
+                      placeholder="Pontos"
+                      value={opt.peso}
+                      onChange={(e) =>
+                        handleOptionChange(
+                          index,
+                          "peso",
+                          parseInt(e.target.value, 10) || 0
+                        )
+                      }
+                      className="w-24 p-2 border rounded-md text-center"
+                    />
+                    {question.tipo === "Múltipla Escolha" && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(index)}
+                        className="text-red-500 hover:text-red-700 font-bold text-xl"
+                      >
+                        &times;
+                      </button>
                     )}
                   </div>
                 ))}
               </div>
-              {/* CORREÇÃO: Esconde o botão de adicionar para "Sim / Não" */}
-              {question.tipo === 'Múltipla Escolha' && (
-                <button type="button" onClick={addOption} className="mt-3 text-sm text-blue-600 font-semibold hover:text-blue-800">+ Adicionar Opção</button>
+              {question.tipo === "Múltipla Escolha" && (
+                <button
+                  type="button"
+                  onClick={addOption}
+                  className="mt-3 text-sm text-blue-600 font-semibold hover:text-blue-800"
+                >
+                  + Adicionar Opção
+                </button>
               )}
             </div>
           )}
           <div className="flex justify-end pt-4 gap-4">
-            <button type="button" onClick={() => router.push('/perguntas')} className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300">Cancelar</button>
-            <button type="submit" disabled={isSubmitting} className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50 hover:bg-slate-700">{isSubmitting ? 'Salvando...' : 'Salvar'}</button>
+            <button
+              type="button"
+              onClick={() => router.push("/perguntas")}
+              className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50 hover:bg-slate-700"
+            >
+              {isSubmitting ? "Salvando..." : "Salvar"}
+            </button>
           </div>
         </form>
       </div>

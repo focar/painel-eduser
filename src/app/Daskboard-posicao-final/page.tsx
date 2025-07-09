@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-// CORREÇÃO: Importa o cliente recomendado
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
 import { FaSpinner } from 'react-icons/fa';
@@ -16,13 +15,12 @@ type DashboardData = { kpis: KpiData; tableData: TableRow[]; };
 const KpiCard = ({ title, value, highlight = false }: { title: string, value: string | number, highlight?: boolean }) => (
     <div className={`p-4 rounded-lg shadow-md border text-center ${highlight ? "bg-green-100 border-green-200" : "bg-white"}`}>
         <p className={`text-sm font-medium ${highlight ? "text-green-700" : "text-slate-500"}`}>{title}</p>
-        <p className={`text-3xl font-bold mt-1 ${highlight ? "text-green-800" : "text-slate-800"}`}>{value}</p>
+        <p className={`text-2xl md:text-3xl font-bold mt-1 ${highlight ? "text-green-800" : "text-slate-800"}`}>{value}</p>
     </div>
 );
 
 // --- Página Principal ---
 export default function PosicaoFinalPage() {
-    // CORREÇÃO: Usa o cliente correto
     const supabase = createClientComponentClient();
     
     const [launches, setLaunches] = useState<Launch[]>([]);
@@ -31,10 +29,8 @@ export default function PosicaoFinalPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [groupBy, setGroupBy] = useState('content');
 
-    // Busca os lançamentos para o dropdown
     useEffect(() => {
         const fetchLaunches = async () => {
-            // CORREÇÃO: Usa a variável 'supabase' e a tabela correta
             const { data, error } = await supabase.from('lancamentos').select('id, nome, status');
             if (data) {
                 const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
@@ -51,14 +47,12 @@ export default function PosicaoFinalPage() {
         fetchLaunches();
     }, [supabase]);
 
-    // Busca os dados do dashboard quando um lançamento ou filtro muda
     useEffect(() => {
         if (!selectedLaunch) return;
         
         const fetchDashboardData = async () => {
             setIsLoading(true);
             try {
-                // CORREÇÃO: Usa a variável 'supabase'
                 const { data, error } = await supabase.rpc('get_final_position_dashboard', { 
                     p_launch_id: selectedLaunch,
                     p_group_by: groupBy
@@ -76,10 +70,13 @@ export default function PosicaoFinalPage() {
         fetchDashboardData();
     }, [selectedLaunch, groupBy, supabase]);
 
+    // ### INÍCIO DA CORREÇÃO ###
+    // A lógica de cálculo agora é mais segura e explícita
     const kpis = data?.kpis;
-    const conversionRate = (kpis?.total_inscricoes ?? 0) > 0 
-        ? ((kpis?.total_compradores ?? 0) / kpis.total_inscricoes * 100).toFixed(2) + '%' 
+    const conversionRate = kpis && kpis.total_inscricoes > 0
+        ? ((kpis.total_compradores ?? 0) / kpis.total_inscricoes * 100).toFixed(2) + '%'
         : '0.00%';
+    // ### FIM DA CORREÇÃO ###
     
     return (
         <div className="space-y-6 p-4 md:p-6">
@@ -111,7 +108,7 @@ export default function PosicaoFinalPage() {
 
             {isLoading && <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>}
 
-            {!isLoading && data?.kpis && (
+            {!isLoading && kpis && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                         <KpiCard title="Total de Inscrições" value={kpis.total_inscricoes} />
@@ -134,7 +131,7 @@ export default function PosicaoFinalPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white">
-                                    {data.tableData?.map((row, index) => {
+                                    {data?.tableData?.map((row, index) => {
                                         const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
                                         return (
                                             <tr key={index} className="block md:table-row border rounded-lg shadow-sm mb-4 md:border-b md:border-slate-200 md:shadow-none md:rounded-none">
@@ -153,7 +150,7 @@ export default function PosicaoFinalPage() {
                 </div>
             )}
             
-            {!isLoading && !data?.kpis && (
+            {!isLoading && !kpis && (
                 <div className="text-center py-10 bg-white rounded-lg shadow-md"><p>Nenhum dado encontrado.</p></div>
             )}
         </div>

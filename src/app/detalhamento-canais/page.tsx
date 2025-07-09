@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-// CORREÇÃO: Importa o cliente recomendado
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { FaSpinner, FaChevronDown } from 'react-icons/fa';
 
-// --- Tipos de Dados ---
+// --- Data Types ---
 type Launch = { id: string; nome: string; status: string; };
 type Kpis = {
     total_inscriptions: number;
@@ -24,10 +23,9 @@ type DashboardData = {
     kpis: Kpis;
     details: ChannelDetails[];
 };
-
 type GroupedDetails = Record<string, Record<string, ChannelDetails[]>>;
 
-// --- Componentes ---
+// --- Components ---
 const StatCard = ({ title, value }: { title: string, value: string | number }) => (
     <div className="bg-white p-4 rounded-lg shadow-md text-center">
         <h3 className="text-md font-medium text-slate-500 uppercase">{title}</h3>
@@ -35,16 +33,14 @@ const StatCard = ({ title, value }: { title: string, value: string | number }) =
     </div>
 );
 
-// --- Página Principal ---
+// --- Main Page Component ---
 export default function DetalhamentoCanaisPage() {
-    // CORREÇÃO: Usa o cliente correto
     const supabase = createClientComponentClient();
     
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    // Estado para controlar os itens abertos no accordion mobile
     const [openItems, setOpenItems] = useState<Record<string, boolean>>({});
 
     const toggleItem = (key: string) => {
@@ -55,13 +51,12 @@ export default function DetalhamentoCanaisPage() {
         if (!launchId) return;
         setIsLoading(true);
         try {
-            // CORREÇÃO: Usa a variável 'supabase'
             const { data, error } = await supabase.rpc('get_channel_details', { p_launch_id: launchId });
             if (error) throw error;
             setData(data);
         } catch (error: unknown) {
             const err = error as Error;
-            console.error("Erro ao carregar dados de detalhamento:", err.message);
+            console.error("Error loading channel details:", err.message);
             setData(null);
         } finally {
             setIsLoading(false);
@@ -71,20 +66,21 @@ export default function DetalhamentoCanaisPage() {
     useEffect(() => {
         const fetchLaunches = async () => {
             try {
-                // CORREÇÃO: Usa a variável 'supabase'
                 const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status');
                 if (error) throw error;
-                if (launchesData && launchesData.length > 0) {
+                if (launchesData) {
                     const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
                     const filtered = launchesData.filter(l => l.status === 'Em Andamento' || l.status === 'Concluído').sort((a,b) => statusOrder[a.status] - statusOrder[b.status]);
                     setLaunches(filtered);
-                    setSelectedLaunch(filtered[0].id);
+                    if (filtered.length > 0) {
+                        setSelectedLaunch(filtered[0].id);
+                    }
                 } else {
                     setIsLoading(false);
                 }
             } catch (error: unknown) {
                 const err = error as Error;
-                console.error("Erro ao buscar lançamentos:", err.message);
+                console.error("Error fetching launches:", err.message);
             }
         };
         fetchLaunches();
@@ -136,13 +132,12 @@ export default function DetalhamentoCanaisPage() {
                     <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
                         <h2 className="text-lg font-semibold text-slate-700 mb-4">Detalhes por Hierarquia UTM</h2>
                         
-                        {/* ### INÍCIO DA MUDANÇA PARA RESPONSIVIDADE ### */}
-                        {/* Versão Desktop: Tabela tradicional */}
                         <div className="hidden md:block overflow-x-auto">
                             <table className="min-w-full">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarquia UTM (Source > Medium > Content)</th>
+                                        {/* CORRECTED LINE */}
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarquia UTM (Source &gt; Medium &gt; Content)</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscritos</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Conversão</th>
@@ -174,7 +169,6 @@ export default function DetalhamentoCanaisPage() {
                             </table>
                         </div>
 
-                        {/* Versão Mobile: Lista "Sanfona" (Accordion) */}
                         <div className="md:hidden space-y-2">
                             {Object.entries(groupedDetails).map(([source, mediums]) => (
                                 <div key={source} className="border rounded-lg overflow-hidden">
@@ -214,7 +208,6 @@ export default function DetalhamentoCanaisPage() {
                                 </div>
                             ))}
                         </div>
-                        {/* ### FIM DA MUDANÇA PARA RESPONSIVIDADE ### */}
                     </div>
                 </div>
             )}

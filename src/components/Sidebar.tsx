@@ -3,13 +3,23 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; // Importa o hook para saber a rota atual
+import { FaChartPie, FaRocket, FaTools, FaMapSigns } from 'react-icons/fa';
+
+const iconMap = {
+  "fa-chart-pie": <FaChartPie />,
+  "fa-rocket": <FaRocket />,
+  "fa-tools": <FaTools />,
+  "fa-map-signs": <FaMapSigns />,
+  // Adicione outros ícones aqui conforme necessário
+};
 
 const menuItems = [
     {
         title: "Dashboards",
         icon: "fa-chart-pie",
         links: [
-            { name: "Resumo Diário", href: "/dashboard-resumo" },
+            { name: "Evolução de Canal ", href: "/dashboard-evolucao-por-hora" },
+             { name: "Resumo Diário", href: "/dashboard-resumo" },
             { name: "Performance e Controle", href: "/dashboard-performance" },
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
             { name: "Acompanhamento Canais", href: "/acompanhamento-canais" },
@@ -34,6 +44,7 @@ const menuItems = [
             { name: "Importação", href: "/importacao" },
             { name: "Simulador de Inscrição", href: "/ferramentas/simulador-inscricao" },
             { name: "Conversão UTMs", href: "/ferramentas/conversao-utms" },
+            { name: "Mapeamento de Colunas", href: "/ferramentas/mapeamento", icon: "fa-map-signs" },
         ],
     },
 ];

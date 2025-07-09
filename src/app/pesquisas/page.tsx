@@ -1,12 +1,12 @@
 // Conteúdo FINAL e CORRIGIDO para: src/app/pesquisas/page.tsx
 
-'use client'; // Esta página agora precisa ser um client component para ter o botão de delete
+'use client';
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/supabaseClient';
-import { showAlertModal, showConfirmationModal } from '@/lib/modals'; // Assumindo que teremos um ficheiro de modais
+import { showAlertModal, showConfirmationModal } from '@/lib/modals';
 
 type Survey = {
     id: string;
@@ -32,7 +32,8 @@ export default function PesquisasPage() {
         if (error) {
             showAlertModal('Erro ao carregar pesquisas', error.message);
         } else {
-            setSurveys(data || []);
+            // Filtra para não mostrar pesquisas inativas por padrão (opcional)
+            setSurveys(data?.filter(s => s.status !== 'Inativo') || []);
         }
         setIsLoading(false);
     };
@@ -41,22 +42,26 @@ export default function PesquisasPage() {
         fetchSurveys();
     }, []);
     
-    // Função para deletar a pesquisa
-    const handleDelete = async (surveyId: string, surveyName: string) => {
-        showConfirmationModal(`Tem certeza que deseja excluir a pesquisa "${surveyName}"?`, async () => {
+    // ### INÍCIO DA CORREÇÃO ###
+    // A função agora se chama 'handleInactivate' e apenas atualiza o status.
+    const handleInactivate = async (surveyId: string, surveyName: string) => {
+        showConfirmationModal(`Tem certeza que deseja inativar a pesquisa "${surveyName}"? Ela não poderá mais ser usada em novos lançamentos, mas os dados existentes serão mantidos.`, async () => {
             try {
-                // Primeiro, deleta as associações
-                await db.from('pesquisas_perguntas').delete().eq('pesquisa_id', surveyId);
-                // Depois, deleta a pesquisa
-                const { error } = await db.from('pesquisas').delete().eq('id', surveyId);
+                // AÇÃO PRINCIPAL: Atualiza o status para 'Inativo' em vez de deletar
+                const { error } = await db
+                    .from('pesquisas')
+                    .update({ status: 'Inativo' })
+                    .eq('id', surveyId);
+
                 if (error) throw error;
-                showAlertModal('Sucesso', 'Pesquisa excluída com sucesso.');
-                fetchSurveys(); // Recarrega a lista
+                showAlertModal('Sucesso', 'Pesquisa inativada com sucesso.');
+                fetchSurveys(); // Recarrega a lista para que a pesquisa inativada suma da tela
             } catch (err: any) {
-                showAlertModal('Erro ao excluir', err.message);
+                showAlertModal('Erro ao inativar', err.message);
             }
         });
     };
+    // ### FIM DA CORREÇÃO ###
 
     return (
         <div className="space-y-6">
@@ -82,10 +87,9 @@ export default function PesquisasPage() {
                             {isLoading ? (
                                 <tr><td colSpan={5} className="p-4 text-center"><i className="fas fa-spinner fa-spin"></i> Carregando...</td></tr>
                             ) : surveys.length === 0 ? (
-                                <tr><td colSpan={5} className="p-4 text-center">Nenhuma pesquisa encontrada.</td></tr>
+                                <tr><td colSpan={5} className="p-4 text-center">Nenhuma pesquisa ativa encontrada.</td></tr>
                             ) : (
                                 surveys.map(survey => {
-                                    // A LINHA CORRIGIDA E SEGURA
                                     const questionCount = (survey.pesquisas_perguntas && survey.pesquisas_perguntas[0]?.count) || 0;
                                     const statusColor = survey.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
 
@@ -97,7 +101,8 @@ export default function PesquisasPage() {
                                             <td className="p-4"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor}`}>{survey.status}</span></td>
                                             <td className="p-4 space-x-4">
                                                 <Link href={`/pesquisas/editar/${survey.id}`} className="text-blue-600 hover:text-blue-800 font-medium">Editar</Link>
-                                                <button onClick={() => handleDelete(survey.id, survey.nome)} className="text-red-600 hover:text-red-800 font-medium">Excluir</button>
+                                                {/* CORREÇÃO: Botão agora chama 'handleInactivate' e tem texto e cor diferentes */}
+                                                <button onClick={() => handleInactivate(survey.id, survey.nome)} className="text-orange-600 hover:text-orange-800 font-medium">Inativar</button>
                                             </td>
                                         </tr>
                                     )

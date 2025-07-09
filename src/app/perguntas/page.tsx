@@ -1,11 +1,11 @@
-// Conteúdo para: src/app/perguntas/page.tsx
+// Conteúdo CORRIGIDO para: src/app/perguntas/page.tsx
 
 'use client';
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/supabaseClient';
-import { showConfirmationModal, showAlertModal } from '@/lib/modals';
+import { showAlertModal } from '@/lib/modals';
 
 // --- Tipos de Dados ---
 type Question = {
@@ -19,7 +19,6 @@ export default function PerguntasPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Função para buscar os dados, pode ser chamada para recarregar a lista
   const fetchQuestions = async () => {
     setIsLoading(true);
     try {
@@ -37,29 +36,11 @@ export default function PerguntasPage() {
     }
   };
 
-  // Busca os dados quando a página carrega
   useEffect(() => {
     fetchQuestions();
   }, []);
 
-  // Lógica para remover a trava e permitir a exclusão
-  const handleDelete = async (questionId: string, questionText: string) => {
-    showConfirmationModal(`Tem certeza que deseja excluir a pergunta "${questionText}"? Esta ação não pode ser desfeita.`, async () => {
-      try {
-        // No novo sistema, permitimos a exclusão, então primeiro removemos as associações
-        await db.from('pesquisas_perguntas').delete().eq('pergunta_id', questionId);
-        
-        // Depois, excluímos a pergunta
-        const { error } = await db.from('perguntas').delete().eq('id', questionId);
-        if (error) throw error;
-
-        showAlertModal('Sucesso', 'A pergunta foi excluída.');
-        fetchQuestions(); // Recarrega a lista de perguntas
-      } catch (err: any) {
-        showAlertModal('Erro ao Excluir', err.message);
-      }
-    });
-  };
+  // A função handleDelete foi removida daqui.
 
   return (
     <div className="space-y-6">
@@ -99,7 +80,7 @@ export default function PerguntasPage() {
                       <td className="p-4 text-center font-semibold">{usageCount}</td>
                       <td className="p-4 space-x-4">
                         <Link href={`/perguntas/editar/${question.id}`} className="text-blue-600 hover:text-blue-800 font-medium">Editar</Link>
-                        <button onClick={() => handleDelete(question.id, question.texto)} className="text-red-600 hover:text-red-800 font-medium">Excluir</button>
+                        {/* O botão de Excluir foi removido desta linha */}
                       </td>
                     </tr>
                   )

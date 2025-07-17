@@ -1,32 +1,35 @@
 // src/app/lancamentos/editar/[id]/page.tsx
 
-// CORREÇÃO: Vamos usar o cliente recomendado para Componentes de Servidor
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import EditForm from './EditForm';
 
+// --- Tipos de Dados ---
+type LaunchEvent = {
+    nome: string;
+    data_inicio: string;
+    data_fim: string;
+};
+
 type LaunchData = {
     id: string;
     nome: string;
     descricao: string;
-    data_inicio: string;
-    data_fim: string;
     status: string;
+    eventos: LaunchEvent[];
 };
 
 type PageProps = {
     params: { id: string };
 };
 
-// A função agora é assíncrona para usar o cliente de servidor
-async function getLaunchById(id: string) {
-    // CORREÇÃO: Criação do cliente de servidor
+async function getLaunchById(id: string): Promise<LaunchData> {
     const supabase = createServerComponentClient({ cookies });
 
     const { data, error } = await supabase
         .from('lancamentos')
-        .select('*')
+        .select('id, nome, descricao, status, eventos') // Busca a nova estrutura
         .eq('id', id)
         .single();
 
@@ -34,16 +37,13 @@ async function getLaunchById(id: string) {
         notFound();
     }
     
-    // Formata as datas no servidor antes de passar para o cliente
     return { 
         ...data, 
-        data_inicio: data.data_inicio ? data.data_inicio.split('T')[0] : '', 
-        data_fim: data.data_fim ? data.data_fim.split('T')[0] : '' 
+        eventos: data.eventos || [] // Garante que eventos seja sempre um array
     };
 }
 
 export default async function EditarLancamentoPage({ params }: PageProps) {
     const initialData = await getLaunchById(params.id);
-    // Passa os dados para o componente de cliente que contém o formulário
-    return <EditForm initialData={initialData as LaunchData} />;
+    return <EditForm initialData={initialData} />;
 }

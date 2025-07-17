@@ -1,3 +1,5 @@
+// src/app/lancamentos/editar/[id]/EditForm.tsx
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,42 +9,149 @@ import toast from 'react-hot-toast';
 import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
+type LaunchEvent = {
+    id: number; // ID temporário
+    nome: string;
+    data_inicio: string;
+    data_fim: string;
+    is_custom: boolean;
+};
+
 type LaunchData = {
     id: string;
     nome: string;
     descricao: string;
-    data_inicio: string;
-    data_fim: string;
     status: string;
+    eventos: { nome: string; data_inicio: string; data_fim: string }[];
 };
 
-type Survey = {
-    id: string;
-    nome: string;
+// --- Configurações de Eventos ---
+const defaultEventNames = [
+    "Planejamento", "Pré-lançamento", "Início da Captação",
+    "Live 1", "Live 2", "Abertura do Carrinho", "Fechamento do Carrinho"
+];
+
+const eventColorMap: { [key: string]: string } = {
+    'padrão': 'bg-white text-slate-800', 'planejamento': 'bg-gray-500 text-white',
+    'pré-lançamento': 'bg-[#dabd62] text-white', 'início da captação': 'bg-blue-500 text-white',
+    'live 1': 'bg-[#d864c3] text-white', 'live 2': 'bg-[#b983b6] text-white',
+    'abertura do carrinho': 'bg-green-500 text-white', 'fechamento do carrinho': 'bg-[#e6567f] text-white',
 };
 
-// --- Componente Principal do Lado do Cliente ---
+const getEventColorClasses = (eventName: string): string => {
+    const lowerCaseName = eventName.toLowerCase();
+    return eventColorMap[lowerCaseName] || eventColorMap['padrão'];
+};
+
+// --- Componente Principal ---
 export default function EditForm({ initialData }: { initialData: LaunchData }) {
     const supabase = createClientComponentClient();
-    const { id } = initialData;
-    const [isSaving, setIsSaving] = useState(false);
-    const [isAssociateModalOpen, setIsAssociateModalOpen] = useState(false);
     const router = useRouter();
+    const [isSaving, setIsSaving] = useState(false);
+    
+    const [formData, setFormData] = useState({
+        nome: initialData.nome,
+        descricao: initialData.descricao,
+        status: initialData.status,
+    });
+    
+    const [events, setEvents] = useState<LaunchEvent[]>([]);
 
-    const handleSaveFlow = async (updatedData: Partial<LaunchData>, andThen: () => void) => {
+    useEffect(() => {
+        // Popula o formulário com os dados iniciais
+        setFormData({
+            nome: initialData.nome,
+            descricao: initialData.descricao,
+            status: initialData.status,
+        });
+
+        // Combina os eventos salvos com a lista padrão
+        const existingEvents = new Map(initialData.eventos.map(e => [e.nome, e]));
+        const combinedEvents: LaunchEvent[] = defaultEventNames.map((name, index) => {
+            const existing = existingEvents.get(name);
+            return {
+                id: Date.now() + index,
+                nome: name,
+                data_inicio: existing?.data_inicio?.split('T')[0] || '',
+                data_fim: existing?.data_fim?.split('T')[0] || '',
+                is_custom: false,
+            };
+        });
+
+        // Adiciona os eventos personalizados que foram salvos
+        initialData.eventos.forEach((event, index) => {
+            if (!defaultEventNames.includes(event.nome)) {
+                combinedEvents.push({
+                    id: Date.now() + defaultEventNames.length + index,
+                    nome: event.nome,
+                    data_inicio: event.data_inicio?.split('T')[0] || '',
+                    data_fim: event.data_fim?.split('T')[0] || '',
+                    is_custom: true,
+                });
+            }
+        });
+        
+        // Garante que haja sempre dois campos personalizados em branco
+        let customEventCount = combinedEvents.filter(e => e.is_custom).length;
+        while (customEventCount < 2) {
+            combinedEvents.push({ id: Date.now() + combinedEvents.length, nome: '', data_inicio: '', data_fim: '', is_custom: true });
+            customEventCount++;
+        }
+
+        setEvents(combinedEvents);
+    }, [initialData]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+    
+    const handleEventChange = (index: number, field: 'nome' | 'data_inicio' | 'data_fim', value: string) => {
+        const newEvents = [...events];
+        newEvents[index][field] = value;
+        setEvents(newEvents);
+    };
+
+    const handleSave = async () => {
+        if (!formData.nome) {
+            toast.error('O nome do lançamento é obrigatório.');
+            return;
+        }
+
+        const eventsWithDates = events.filter(event => event.nome && event.data_inicio);
+        if (eventsWithDates.length === 0) {
+            toast.error('Por favor, preencha a data de início de pelo menos um marco.');
+            return;
+        }
+        
         setIsSaving(true);
+        
+        const allDates = eventsWithDates.flatMap(e => [e.data_inicio, e.data_fim]).filter(Boolean);
+        const minDate = allDates.reduce((min, p) => p < min ? p : min, allDates[0]);
+        const maxDate = allDates.reduce((max, p) => p > max ? p : max, allDates[0]);
+
+        const formattedEvents = eventsWithDates.map(({ nome, data_inicio, data_fim }) => ({ 
+            nome, 
+            data_inicio, 
+            data_fim: data_fim || data_inicio
+        }));
+
         try {
-            const { error: updateError } = await supabase.from('lancamentos').update({ 
-                nome: updatedData.nome, 
-                descricao: updatedData.descricao, 
-                data_inicio: updatedData.data_inicio, 
-                data_fim: updatedData.data_fim, 
-                status: updatedData.status 
-            }).eq('id', id);
-            if (updateError) throw updateError;
+            const { error } = await supabase
+                .from('lancamentos')
+                .update({
+                    ...formData,
+                    data_inicio: minDate,
+                    data_fim: maxDate || minDate,
+                    eventos: formattedEvents,
+                })
+                .eq('id', initialData.id);
+
+            if (error) throw error;
             
             toast.success("Lançamento atualizado com sucesso!");
-            setTimeout(andThen, 200);
+            router.push('/lancamentos');
+            router.refresh();
 
         } catch (error: unknown) {
             const err = error as Error;
@@ -52,177 +161,56 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
         }
     };
 
-    const handleSave = (data: Partial<LaunchData>) => {
-        handleSaveFlow(data, () => router.push('/lancamentos'));
-    };
-
-    const handleSaveAndAssociate = (data: Partial<LaunchData>) => {
-        handleSaveFlow(data, () => setIsAssociateModalOpen(true));
-    };
-
-    const handleAssociateSurvey = async (surveyId: string) => {
-        try {
-            const { error } = await supabase.rpc('associate_survey_to_launch', { p_launch_id: id, p_survey_id: surveyId });
-            if (error) throw error;
-            
-            toast.success('Pesquisa associada com sucesso!');
-            setIsAssociateModalOpen(false);
-            router.push('/lancamentos');
-
-        } catch (error: unknown) {
-            const err = error as Error;
-            toast.error('Falha ao associar a pesquisa: ' + err.message);
-        }
-    };
-    
     return (
-        <div className="space-y-6 p-4 md:p-0">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Editar Lançamento</h1>
-            <LaunchForm 
-                initialData={initialData}
-                onSave={handleSave}
-                onSaveAndAssociate={handleSaveAndAssociate}
-                isSaving={isSaving}
-            />
-            <AssociateSurveyModal
-                isOpen={isAssociateModalOpen}
-                onClose={() => setIsAssociateModalOpen(false)}
-                onAssociate={handleAssociateSurvey}
-                launchId={id}
-            />
-        </div>
-    );
-}
-
-// --- Componentes Aninhados (Modal e Formulário) ---
-
-function AssociateSurveyModal({ isOpen, onClose, onAssociate, launchId }: {
-    isOpen: boolean;
-    onClose: () => void;
-    onAssociate: (surveyId: string) => void;
-    launchId: string;
-}) {
-    const supabase = createClientComponentClient();
-    const [surveys, setSurveys] = useState<Survey[]>([]);
-    const [selectedSurvey, setSelectedSurvey] = useState<string>('');
-    const router = useRouter();
-
-    useEffect(() => {
-        if (isOpen) {
-            const fetchSurveys = async () => {
-                const { data, error } = await supabase.from('pesquisas').select('id, nome').order('nome');
-                if (error) {
-                    toast.error("Não foi possível carregar as pesquisas.");
-                } else {
-                    setSurveys(data || []);
-                    if (data && data.length > 0) {
-                        setSelectedSurvey(data[0].id);
-                    }
-                }
-            };
-            fetchSurveys();
-        }
-    }, [isOpen, launchId, supabase]);
-
-    if (!isOpen) return null;
-
-    const handleAssociate = () => {
-        if (selectedSurvey) {
-            onAssociate(selectedSurvey);
-        }
-    };
-
-    const handleCreateNew = () => {
-        router.push(`/pesquisas/criar?redirect_url=/lancamentos/editar/${launchId}`);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-lg">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">Associar Pesquisa</h3>
-                <div className="space-y-4">
-                    <p className="text-sm text-slate-600">Selecione uma pesquisa para associar ou crie uma nova.</p>
-                    <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
-                        {surveys.length > 0 ? surveys.map(survey => (
-                            <label key={survey.id} className="flex items-center p-2 rounded-md hover:bg-slate-100 cursor-pointer">
-                                <input type="radio" name="survey" value={survey.id} checked={selectedSurvey === survey.id} onChange={(e) => setSelectedSurvey(e.target.value)} className="h-4 w-4 text-blue-600"/>
-                                <span className="ml-3 text-slate-700">{survey.nome}</span>
-                            </label>
-                        )) : <p className="text-center text-slate-500 p-4">Nenhuma pesquisa encontrada.</p>}
+        <div className="max-w-4xl mx-auto p-4">
+            <div className="bg-white p-8 rounded-lg shadow-md">
+                <h1 className="text-2xl font-bold text-slate-800 mb-6">Editar Lançamento</h1>
+                <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+                    {/* Campos Principais */}
+                    <div>
+                        <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
+                        <input type="text" name="nome" id="nome" value={formData.nome} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" />
                     </div>
-                </div>
-                <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
-                    <button onClick={handleCreateNew} className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-sm">Criar Nova Pesquisa</button>
-                    <div className="space-x-3 flex justify-end w-full sm:w-auto">
-                        <button onClick={onClose} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
-                        <button onClick={handleAssociate} disabled={!selectedSurvey} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold disabled:opacity-50">Salvar Associação</button>
+                    <div>
+                        <label htmlFor="descricao" className="block text-sm font-medium text-slate-700">Descrição (Opcional)</label>
+                        <textarea name="descricao" id="descricao" value={formData.descricao} onChange={handleChange} rows={4} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" />
                     </div>
-                </div>
-            </div>
-        </div>
-    );
-}
+                    <div>
+                        <label htmlFor="status" className="block text-sm font-medium text-slate-700">Status</label>
+                        <select name="status" id="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md bg-white">
+                            <option>Planejado</option><option>Em Andamento</option><option>Concluído</option><option>Cancelado</option>
+                        </select>
+                    </div>
+                    
+                    {/* Gestão de Eventos */}
+                    <div className="space-y-4 pt-4 border-t">
+                        <h3 className="text-lg font-medium text-slate-800">Marcos do Lançamento</h3>
+                        {events.map((event, index) => {
+                            const colorClasses = getEventColorClasses(event.nome);
+                            return (
+                                <div key={event.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-4 p-3 bg-slate-50 rounded-md border">
+                                    <input type="text" placeholder="Nome do Evento Personalizado" value={event.nome} readOnly={!event.is_custom} onChange={(e) => handleEventChange(index, 'nome', e.target.value)} className={`w-full px-3 py-2 border border-slate-300 rounded-md font-semibold ${colorClasses}`} />
+                                    <div className="flex items-center gap-2">
+                                         <label className="text-sm text-slate-600">Início:</label>
+                                         <input type="date" value={event.data_inicio} onChange={(e) => handleEventChange(index, 'data_inicio', e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md" required={!!event.nome} />
+                                    </div>
+                                   <div className="flex items-center gap-2">
+                                        <label className="text-sm text-slate-600">Fim:</label>
+                                        <input type="date" value={event.data_fim} min={event.data_inicio} onChange={(e) => handleEventChange(index, 'data_fim', e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md" />
+                                   </div>
+                                </div>
+                            );
+                        })}
+                    </div>
 
-function LaunchForm({ initialData, onSave, onSaveAndAssociate, isSaving }: { 
-    initialData: LaunchData, 
-    onSave: (updatedData: Partial<LaunchData>) => void,
-    onSaveAndAssociate: (updatedData: Partial<LaunchData>) => void,
-    isSaving: boolean 
-}) {
-    const [formData, setFormData] = useState(initialData);
-    const [dateError, setDateError] = useState<string | null>(null);
-    const router = useRouter();
-
-    useEffect(() => { setFormData(initialData); }, [initialData]);
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        const newFormData = { ...formData, [name]: value };
-        setFormData(newFormData);
-
-        if (name === 'data_inicio' || name === 'data_fim') {
-            const startDate = newFormData.data_inicio;
-            const endDate = newFormData.data_fim;
-            if (startDate && endDate && endDate < startDate) {
-                setDateError('A data de fim não pode ser anterior à data de início.');
-            } else { setDateError(null); }
-        }
-    };
-
-    return (
-        <div className="space-y-6 bg-white p-6 md:p-8 rounded-lg shadow-md">
-            <div>
-                <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
-                <input type="text" name="nome" id="nome" value={formData.nome || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" required />
-            </div>
-            <div>
-                <label htmlFor="descricao" className="block text-sm font-medium text-slate-700">Descrição</label>
-                <textarea name="descricao" id="descricao" rows={4} value={formData.descricao || ''} onChange={handleChange} autoComplete="off" className="mt-1 block w-full px-3 py-2 border rounded-md" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label htmlFor="data_inicio" className="block text-sm font-medium text-slate-700">Data de Início</label>
-                    <input type="date" name="data_inicio" id="data_inicio" value={formData.data_inicio || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" />
-                </div>
-                <div>
-                    <label htmlFor="data_fim" className="block text-sm font-medium text-slate-700">Data de Fim</label>
-                    <input type="date" name="data_fim" id="data_fim" value={formData.data_fim || ''} onChange={handleChange} min={formData.data_inicio || ''} className="mt-1 block w-full px-3 py-2 border rounded-md" />
-                </div>
-            </div>
-            {dateError && <p className="text-sm text-red-600">{dateError}</p>}
-            <div>
-                <label htmlFor="status" className="block text-sm font-medium text-slate-700">Status</label>
-                <select name="status" id="status" value={formData.status || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white rounded-md border border-slate-300">
-                    <option value="Planejado">Planejado</option>
-                    <option value="Em Andamento">Em Andamento</option>
-                    <option value="Concluído">Concluído</option>
-                    <option value="Cancelado">Cancelado</option>
-                </select>
-            </div>
-            <div className="flex flex-col gap-4 sm:flex-row sm:justify-end pt-4">
-                <button type="button" onClick={() => router.push('/lancamentos')} className="w-full sm:w-auto px-6 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
-                <button type="button" onClick={() => onSave(formData)} disabled={isSaving || !!dateError} className="w-full sm:w-auto px-6 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 font-semibold disabled:opacity-50">{isSaving ? <FaSpinner className="animate-spin mx-auto"/> : 'Salvar'}</button>
-                <button type="button" onClick={() => onSaveAndAssociate(formData)} disabled={isSaving || !!dateError} className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold disabled:opacity-50">{isSaving ? <FaSpinner className="animate-spin mx-auto"/> : 'Salvar e Associar Pesquisa'}</button>
+                    {/* Botões de Ação */}
+                    <div className="flex justify-end pt-4 gap-4 border-t border-slate-200 mt-6">
+                        <button type="button" onClick={() => router.push('/lancamentos')} className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300">Cancelar</button>
+                        <button type="submit" disabled={isSaving} className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg hover:bg-slate-700 disabled:opacity-50">
+                            {isSaving ? <FaSpinner className="animate-spin mx-auto" /> : 'Salvar Alterações'}
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     );

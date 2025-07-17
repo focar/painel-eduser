@@ -1,178 +1,210 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, ReactElement } from 'react';
-// CORREÇÃO: Importa o cliente recomendado
+import React, { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { FaUsers, FaCheck, FaPercentage, FaSpinner } from 'react-icons/fa';
+import { FaSpinner, FaFileCsv } from 'react-icons/fa';
 
-// --- Tipos de Dados ---
+// --- Tipagens de Dados ---
 type Launch = { id: string; nome: string; status: string; };
-type Kpis = {
-    total_inscriptions: number;
-    total_checkins: number;
-};
-type TableRow = {
-    midia: string;
-    dimension: string;
-    inscritos: number;
-    checkins: number;
-};
-type DashboardData = {
-    kpis: Kpis;
-    tableData: TableRow[] | null;
+
+type TableData = {
+    canal: string;
+    inscricoes: number;
+    check_ins: number;
 };
 
-// --- Componentes ---
-const StatCard = ({ title, value, icon }: { title: string, value: string | number, icon: React.ReactNode }) => (
-    <div className="bg-white p-6 rounded-lg shadow-md flex items-center gap-4">
-        <div className="bg-blue-100 p-3 rounded-full">{icon}</div>
-        <div>
-            <h3 className="text-md font-medium text-slate-500">{title}</h3>
-            <p className="text-2xl font-bold text-slate-800 mt-1">{value}</p>
+type DashboardData = {
+    tableData: TableData[];
+};
+
+// --- Componentes de UI ---
+
+const PageHeader = ({ title, launches, selectedLaunch, onLaunchChange, isLoading }: { title: string; launches: Launch[]; selectedLaunch: string; onLaunchChange: (id: string) => void; isLoading: boolean; }) => (
+    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">{title}</h1>
+        <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
+            <select value={selectedLaunch} onChange={(e) => onLaunchChange(e.target.value)} disabled={isLoading} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium">
+                {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
+            </select>
         </div>
     </div>
 );
 
-// --- Página Principal ---
-export default function AcompanhamentoCanaisPage() {
-    // CORREÇÃO: Usa o cliente correto
-    const supabase = createClientComponentClient();
+const ChannelTable = ({ data, launchName, utmName }: { data: TableData[], launchName: string, utmName: string }) => {
     
+    const exportToCSV = () => {
+        const headers = ["Canal", "Inscrições", "Check-ins", "Taxa de Check-in"];
+        
+        const csvRows = [
+            headers.join(','),
+            ...data.map(row => {
+                const conversionRate = row.inscricoes > 0 ? (row.check_ins / row.inscricoes * 100).toFixed(1) + '%' : '0.0%';
+                return [
+                    `"${row.canal.replace(/"/g, '""')}"`,
+                    row.inscricoes,
+                    row.check_ins,
+                    `"${conversionRate}"`
+                ].join(',');
+            })
+        ];
+
+        const csvString = csvRows.join('\n');
+        const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        const safeLaunchName = launchName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        link.setAttribute('download', `acompanhamento_${utmName}_${safeLaunchName}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    return (
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-slate-700">Resultados Agrupados</h2>
+                <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors">
+                    <FaFileCsv />
+                    Exportar
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="min-w-full">
+                    <thead className="bg-slate-50 hidden md:table-header-group">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Canal</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Inscrições</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Check-ins</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Taxa de Check-in</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                        {data.map((row, index) => {
+                             const conversionRate = row.inscricoes > 0 ? (row.check_ins / row.inscricoes * 100) : 0;
+                             return (
+                                <tr key={row.canal + index} className="block md:table-row border-b">
+                                    <td className="p-3 md:px-4 md:py-4 font-medium text-slate-900 md:max-w-xs truncate" title={row.canal}>
+                                        <span className="md:hidden text-xs font-bold uppercase text-slate-500">Canal: </span>{row.canal}
+                                    </td>
+                                    <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600"><span className="md:hidden font-bold">Inscrições: </span>{row.inscricoes.toLocaleString('pt-BR')}</td>
+                                    <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600"><span className="md:hidden font-bold">Check-ins: </span>{row.check_ins.toLocaleString('pt-BR')}</td>
+                                    <td className="p-3 md:px-4 md:py-4 md:text-center text-sm font-semibold text-blue-600"><span className="md:hidden font-bold">Taxa de Check-in: </span>{conversionRate.toFixed(1)}%</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+// --- Componente Principal da Página ---
+export default function AcompanhamentoCanaisPage() {
+    const supabase = createClientComponentClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [groupBy, setGroupBy] = useState('content');
+    const [noLaunchesFound, setNoLaunchesFound] = useState(false);
+    const [groupByUtm, setGroupByUtm] = useState('utm_source');
 
-    const loadData = useCallback(async () => {
-        if (!selectedLaunch) return;
+    const utmOptions = [
+        { value: 'utm_source', label: 'UTM Source' },
+        { value: 'utm_medium', label: 'UTM Medium' },
+        { value: 'utm_campaign', label: 'UTM Campaign' },
+        { value: 'utm_content', label: 'UTM Content' },
+        { value: 'utm_term', label: 'UTM Term' },
+    ];
+
+    const loadDashboardData = useCallback(async (launchId: string) => {
+        if (!launchId) return;
         setIsLoading(true);
         try {
-            // CORREÇÃO: Usa a variável 'supabase'
-            const { data, error } = await supabase.rpc('get_channel_summary_data', { 
-                p_launch_id: selectedLaunch,
-                p_group_by: groupBy
+            const { data, error } = await supabase.rpc('get_channel_tracking_dashboard', {
+                p_launch_id: launchId,
+                p_group_by_utm: groupByUtm
             });
             if (error) throw error;
             setData(data);
         } catch (error) {
-            console.error("Erro ao carregar dados:", error);
+            console.error("Erro ao buscar dados do dashboard:", error as Error);
             setData(null);
         } finally {
             setIsLoading(false);
         }
-    }, [selectedLaunch, groupBy, supabase]);
+    }, [groupByUtm, supabase]);
 
     useEffect(() => {
         const fetchLaunches = async () => {
-            // CORREÇÃO: Usa a variável 'supabase'
-            const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status');
-            if (error) {
-                console.error("Erro ao buscar lançamentos:", error);
-            } else if (launchesData && launchesData.length > 0) {
-                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
-                const filtered = launchesData.filter(l => l.status === 'Em Andamento' || l.status === 'Concluído').sort((a,b) => statusOrder[a.status] - statusOrder[b.status]);
-                setLaunches(filtered);
-                if (filtered.length > 0) {
-                    setSelectedLaunch(filtered[0].id);
+            try {
+                const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+                if (error) throw error;
+                if (launchesData && launchesData.length > 0) {
+                    const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
+                    const sorted = [...launchesData].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
+                    setLaunches(sorted);
+                    if (!selectedLaunch) {
+                        setSelectedLaunch(sorted[0].id);
+                    }
+                } else {
+                    setNoLaunchesFound(true);
+                    setIsLoading(false);
                 }
-            } else {
-                setIsLoading(false);
+            } catch (error) {
+                console.error("Erro ao buscar lançamentos:", error as Error);
+                setNoLaunchesFound(true);
             }
         };
         fetchLaunches();
-    }, [supabase]);
+    }, [supabase, selectedLaunch]);
 
     useEffect(() => {
         if (selectedLaunch) {
-            loadData();
+            loadDashboardData(selectedLaunch);
         }
-    }, [selectedLaunch, groupBy, loadData]);
+    }, [selectedLaunch, loadDashboardData]);
 
-    const checkinsTotal = data?.kpis?.total_checkins ?? 0;
-    const inscriptionsTotal = data?.kpis?.total_inscriptions ?? 0;
-    const overallConversionRate = inscriptionsTotal > 0 ? ((checkinsTotal / inscriptionsTotal) * 100).toFixed(1) + '%' : '0.0%';
+    const renderContent = () => {
+        if (isLoading) {
+            return <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>;
+        }
+        if (!data || !data.tableData || data.tableData.length === 0) {
+            return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum dado encontrado para esta seleção.</p></div>;
+        }
+        
+        return (
+             <ChannelTable 
+                data={data.tableData}
+                launchName={launches.find(l => l.id === selectedLaunch)?.nome || 'export'}
+                utmName={groupByUtm}
+            />
+        );
+    };
+
+    if (noLaunchesFound) {
+        return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum lançamento válido foi encontrado.</p></div>;
+    }
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Acompanhamento de Canais</h1>
-                <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
-                    <select
-                        value={selectedLaunch}
-                        onChange={(e) => setSelectedLaunch(e.target.value)}
-                        className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent"
-                        disabled={launches.length === 0}
-                    >
-                        {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
-                    </select>
-                </div>
+        <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
+            <PageHeader title="Acompanhamento de Canais" launches={launches} selectedLaunch={selectedLaunch} onLaunchChange={setSelectedLaunch} isLoading={isLoading} />
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+                <label htmlFor="group-by-select" className="block text-sm font-medium text-slate-700">Agrupar Por:</label>
+                <select
+                    id="group-by-select"
+                    value={groupByUtm}
+                    onChange={e => setGroupByUtm(e.target.value)}
+                    disabled={isLoading}
+                    className="mt-1 block w-full sm:w-1/3 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                >
+                    {utmOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                </select>
             </div>
-            
-            {isLoading ? (
-                <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>
-            ) : !data || !data.kpis ? (
-                <div className="text-center py-10 bg-white rounded-lg shadow-md"><p>Nenhum dado encontrado para este lançamento.</p></div>
-            ) : (
-                <div className="space-y-6">
-                    {/* KPIs */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <StatCard title="Total Inscrições" value={inscriptionsTotal} icon={<FaUsers className="text-blue-500" />} />
-                        <StatCard title="Total Check-ins" value={checkinsTotal} icon={<FaCheck className="text-green-500" />} />
-                        <StatCard title="Taxa de Check-in Geral" value={overallConversionRate} icon={<FaPercentage className="text-purple-500" />} />
-                    </div>
-                    
-                    {/* Filtro */}
-                    <div className="bg-white p-4 rounded-lg shadow-md">
-                        <label htmlFor="group-by-select" className="block text-sm font-medium text-slate-700">Analisar por Dimensão Secundária:</label>
-                        <select
-                            id="group-by-select"
-                            value={groupBy}
-                            onChange={(e) => setGroupBy(e.target.value)}
-                            className="mt-1 px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white w-full sm:w-1/3"
-                        >
-                            <option value="content">UTM Content</option>
-                            <option value="campaign">UTM Campaign</option>
-                        </select>
-                    </div>
-
-                    {/* Tabela de Dados */}
-                    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Mídia e {groupBy === 'content' ? 'Conteúdo' : 'Campanha'}</h2>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full">
-                                <thead className="bg-slate-50 hidden md:table-header-group">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Mídia (Medium)</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{groupBy === 'content' ? 'Content' : 'Campaign'}</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscritos</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa de Check-in</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white">
-                                    {data.tableData && data.tableData.length > 0 ? data.tableData.map((item, index) => {
-                                        const conversionRate = item.inscritos > 0 ? (item.checkins / item.inscritos) * 100 : 0;
-                                        return (
-                                            <tr key={`${item.midia}-${item.dimension}-${index}`} className="block md:table-row border rounded-lg shadow-sm mb-4 md:border-b md:border-slate-200 md:shadow-none md:rounded-none">
-                                                <td className="p-3 md:px-4 md:py-4 font-medium text-slate-800"><span className="md:hidden text-xs font-bold uppercase text-slate-500">Mídia: </span>{item.midia || "Sem Mídia"}</td>
-                                                <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600 max-w-full md:max-w-sm truncate" title={item.dimension}><span className="md:hidden text-xs font-bold uppercase text-slate-500">{groupBy === 'content' ? 'Content' : 'Campaign'}: </span>{item.dimension || "Sem Conteúdo"}</td>
-                                                <td className="p-3 md:px-4 md:py-4 text-sm text-slate-500"><span className="md:hidden font-bold">Inscritos: </span>{item.inscritos}</td>
-                                                <td className="p-3 md:px-4 md:py-4 text-sm text-slate-500 font-bold"><span className="md:hidden font-bold">Check-ins: </span>{item.checkins}</td>
-                                                <td className="p-3 md:px-4 md:py-4 text-sm font-semibold"><span className="md:hidden font-bold">Taxa de Check-in: </span>{conversionRate.toFixed(1)}%</td>
-                                            </tr>
-                                        );
-                                    }) : (
-                                        <tr>
-                                            <td colSpan={5} className="text-center p-10 text-slate-500">Nenhum dado de canal encontrado para este lançamento.</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {renderContent()}
         </div>
     );
 }

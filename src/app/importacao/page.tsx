@@ -3,13 +3,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Papa from 'papaparse';
-import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck } from 'react-icons/fa';
+import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck, FaMagic, FaSave } from 'react-icons/fa';
 
 // --- Tipos ---
 type Launch = { id: string; nome: string; status: string; };
 type Question = { id: string; texto: string; tipo: string; opcoes: { texto: string; peso: number; }[] | null; };
 type CsvRow = { [key: string]: string };
 type ModalState = { isOpen: boolean; type: 'alert' | 'confirmation'; title: string; message: string; onConfirm?: () => void; };
+type AnalysisResult = {
+  pergunta_id: number;
+  texto_pergunta: string;
+  resposta_dada: string;
+  indice_impacto: number;
+  peso_proposto: number;
+};
 
 // --- Função Auxiliar ---
 const findValueIgnoreCase = (obj: CsvRow, key: string): string | undefined => {
@@ -31,6 +38,11 @@ export default function ImportacaoPage() {
     const [isDataLoading, setIsDataLoading] = useState(true);
     const [modal, setModal] = useState<ModalState>({ isOpen: false, type: 'alert', title: '', message: '' });
     const [buyerFile, setBuyerFile] = useState<File | null>(null);
+
+    // --- ESTADOS PARA ANÁLISE ---
+    const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [buyersImported, setBuyersImported] = useState(false);
 
     const showAlertModal = (title: string, message: string) => setModal({ isOpen: true, type: 'alert', title, message });
     const showConfirmationModal = (title: string, message: string, onConfirm: () => void) => setModal({ isOpen: true, type: 'confirmation', title, message, onConfirm });
@@ -80,7 +92,7 @@ export default function ImportacaoPage() {
         }
         setIsProcessing(true);
         setProgress(0);
-        setLog(prev => ['Aguardando operação de importação de leads...', ...prev]);
+        setLog(['Aguardando operação de importação de leads...']);
         
         Papa.parse(file, {
             header: true,
@@ -203,14 +215,14 @@ export default function ImportacaoPage() {
         });
     };
     
-    const handleBuyerImport = () => {
+    const handleBuyerImport = async () => {
         if (!buyerFile || !selectedLaunch) {
             showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV para compradores.");
             return;
         }
         setIsProcessing(true);
         setProgress(0);
-        setLog(prev => ['Aguardando operação de importação de compradores...',...prev]);
+        setLog(['Aguardando operação de importação de compradores...']);
 
         Papa.parse(buyerFile, {
             header: true,
@@ -235,6 +247,11 @@ export default function ImportacaoPage() {
                 let totalUpdatedCount = 0;
                 try {
                     addLog(`Enviando ${buyerEmails.length} e-mails para marcar como compradores em lotes de ${BATCH_SIZE}...`);
+                    
+                    const { error: resetError } = await supabase.rpc('reset_buyers_for_launch', { p_launch_id: selectedLaunch });
+                    if (resetError) throw new Error(`Falha ao resetar compradores: ${resetError.message}`);
+                    addLog('Status de comprador resetado para todos os leads do lançamento.');
+
                     for (let i = 0; i < buyerEmails.length; i += BATCH_SIZE) {
                         const batch = buyerEmails.slice(i, i + BATCH_SIZE);
                         
@@ -253,6 +270,7 @@ export default function ImportacaoPage() {
 
                     addLog(`Importação finalizada. Total de ${totalUpdatedCount} leads marcados como compradores.`);
                     showAlertModal("Importação de Compradores Concluída", `${totalUpdatedCount} leads foram atualizados com sucesso!`);
+                    setBuyersImported(true);
 
                 } catch (err: unknown) {
                     const error = err as Error;
@@ -264,6 +282,71 @@ export default function ImportacaoPage() {
                 }
             }
         });
+    };
+
+    const handleAnalyzeLaunch = async () => {
+        if (!selectedLaunch) {
+            showAlertModal("Atenção", "Por favor, selecione um lançamento.");
+            return;
+        }
+        setIsProcessing(true);
+        addLog(`Iniciando análise da "Fórmula Mágica" para o lançamento...`);
+        try {
+            const { data, error } = await supabase.rpc('propor_novos_pesos_respostas', { p_launch_id: selectedLaunch });
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                showAlertModal("Análise Concluída", "A análise foi executada, mas não encontrou dados de respostas suficientes para gerar propostas.");
+                addLog("Análise não gerou propostas. Verifique se os leads responderam às pesquisas.");
+                return;
+            }
+            addLog(`Análise concluída com sucesso. ${data.length} propostas de score geradas.`);
+            setAnalysisResults(data);
+            setIsAnalysisModalOpen(true);
+        } catch (err: unknown) {
+            const error = err as Error;
+            addLog(`ERRO na análise do lançamento: ${error.message}`);
+            showAlertModal("Erro na Análise", `Ocorreu um erro ao executar a "Fórmula Mágica". Mensagem: ${error.message}`);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+    
+    const handleUpdateWeights = async () => {
+        setIsProcessing(true);
+        addLog(`Iniciando atualização de pesos para ${analysisResults.length} respostas...`);
+        let updatedCount = 0;
+        try {
+            for (const result of analysisResults) {
+                const { error } = await supabase.rpc('atualizar_peso_resposta', {
+                    p_pergunta_id: result.pergunta_id,
+                    p_texto_resposta: result.resposta_dada,
+                    p_novo_peso: result.peso_proposto
+                });
+                if (error) throw new Error(`Falha ao atualizar a resposta "${result.resposta_dada}": ${error.message}`);
+                updatedCount++;
+            }
+            addLog(`Atualização concluída! ${updatedCount} pesos foram atualizados com sucesso.`);
+            showAlertModal("Sucesso", "Os pesos das respostas foram atualizados com sucesso no Banco de Perguntas!");
+        } catch (err: unknown) {
+            const error = err as Error;
+            addLog(`ERRO ao atualizar pesos: ${error.message}`);
+            showAlertModal("Erro na Atualização", `Ocorreu um erro. ${updatedCount} pesos foram atualizados antes da falha. Mensagem: ${error.message}`);
+        } finally {
+            setIsProcessing(false);
+            setIsAnalysisModalOpen(false);
+        }
+    };
+    
+    const handleWeightChange = (perguntaId: number, respostaDada: string, novoPeso: string) => {
+        const pesoNumerico = parseInt(novoPeso, 10);
+        if (isNaN(pesoNumerico)) return;
+        setAnalysisResults(prevResults => 
+            prevResults.map(r => 
+                (r.pergunta_id === perguntaId && r.resposta_dada === respostaDada)
+                    ? { ...r, peso_proposto: pesoNumerico }
+                    : r
+            )
+        );
     };
 
     const handleClearLeads = async () => {
@@ -314,11 +397,21 @@ export default function ImportacaoPage() {
         <div className="space-y-6 p-4 md:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
             
+            {/* Bloco de Importação de Leads */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
                 <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação de Leads</h2>
                 <div className='space-y-4'>
                     <label htmlFor="launch-select" className="block text-sm font-medium text-slate-700">1. Selecione o Lançamento de Destino</label>
-                    <select id="launch-select" value={selectedLaunch} onChange={e => setSelectedLaunch(e.target.value)} disabled={isDataLoading || isProcessing} className="w-full sm:w-1/2 px-3 py-2 border border-slate-300 rounded-md disabled:bg-slate-100">
+                    <select 
+                        id="launch-select" 
+                        value={selectedLaunch} 
+                        onChange={e => {
+                            setSelectedLaunch(e.target.value);
+                            setBuyersImported(false);
+                        }} 
+                        disabled={isDataLoading || isProcessing} 
+                        className="w-full sm:w-1/2 px-3 py-2 border border-slate-300 rounded-md disabled:bg-slate-100"
+                    >
                         {isDataLoading ? <option>A carregar lançamentos...</option> : <option value="">Selecione...</option>}
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                     </select>
@@ -327,31 +420,35 @@ export default function ImportacaoPage() {
                     <label htmlFor="file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Leads (delimitado por &apos;;&apos;)</label>
                     <input id="file-upload" type="file" accept=".csv" onChange={e => setFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
                 </div>
-
-                {isProcessing && (
+                {isProcessing && progress > 0 && (
                     <div className="w-full bg-slate-200 rounded-full h-2.5"><div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
                 )}
                 <div className="text-right pt-4">
                     <button onClick={handleImport} disabled={isProcessing || !selectedLaunch || !file} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                        {isProcessing ? <><FaSpinner className="animate-spin mr-2"/>Processando...</> : <><FaUpload className="mr-2"/>Importar Leads</>}
+                        <FaUpload className="mr-2"/>Importar Leads
                     </button>
                 </div>
             </div>
             
+            {/* Bloco de Importação de Compradores e Análise */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
                 <h2 className="text-xl font-bold text-slate-700">Importação de Compradores</h2>
-                <p className="text-sm text-slate-500">Use esta ferramenta para marcar os leads que efetuaram a compra. O ficheiro deve conter uma coluna chamada &apos;email&apos;. A importação será feita no lançamento selecionado acima.</p>
+                <p className="text-sm text-slate-500">Após o fim do lançamento, importe a lista de compradores para marcar os leads e ativar a análise de scores.</p>
                 <div>
                     <label htmlFor="buyer-file-upload" className="block text-sm font-medium text-slate-700 mb-1">Selecione o Ficheiro CSV de Compradores</label>
                     <input id="buyer-file-upload" type="file" accept=".csv" onChange={e => setBuyerFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"/>
                 </div>
-                <div className="text-right pt-4">
-                    <button onClick={handleBuyerImport} disabled={isProcessing || !selectedLaunch || !buyerFile} className="inline-flex items-center bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50">
-                        {isProcessing ? <><FaSpinner className="animate-spin mr-2"/>Processando...</> : <><FaUserCheck className="mr-2"/>Importar Compradores</>}
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
+                    <button onClick={handleBuyerImport} disabled={isProcessing || !selectedLaunch || !buyerFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                        <FaUserCheck className="mr-2"/>Importar Compradores
+                    </button>
+                    <button onClick={handleAnalyzeLaunch} disabled={isProcessing || !selectedLaunch || !buyersImported} className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed" title={!buyersImported ? "Importe os compradores primeiro" : "Analisar Lançamento"}>
+                        <FaMagic className="mr-2"/>Analisar e Propor Scores
                     </button>
                 </div>
             </div>
             
+            {/* Bloco de Ferramentas de Teste */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4 border-t-4 border-amber-400">
                 <h2 className="text-lg font-semibold text-slate-700">Ferramentas de Teste</h2>
                 <p className="text-sm text-slate-500">Use estas ferramentas para preparar o ambiente para testes. A ação será executada no lançamento selecionado acima.</p>
@@ -365,11 +462,61 @@ export default function ImportacaoPage() {
                 </div>
             </div>
             
+            {/* Bloco de Log */}
             <div className="bg-white p-6 rounded-lg shadow-lg">
                 <h2 className="text-lg font-semibold text-slate-700 mb-4">Log de Operações</h2>
                 <pre className="bg-slate-900 text-white text-xs p-4 rounded-md h-96 overflow-y-auto font-mono">{log.join('\n')}</pre>
             </div>
 
+            {/* Modal de Análise */}
+            {isAnalysisModalOpen && (
+                <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4">
+                    <div className="bg-slate-50 rounded-lg shadow-2xl p-4 sm:p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-center border-b pb-3 mb-4">
+                           <h3 className="text-2xl font-bold text-slate-800">Proposta de Novos Pesos</h3>
+                           <button onClick={() => setIsAnalysisModalOpen(false)} className="text-slate-500 hover:text-slate-800 text-3xl leading-none">&times;</button>
+                        </div>
+                        <div className="overflow-y-auto flex-grow">
+                            <table className="min-w-full divide-y divide-slate-200">
+                                <thead className="bg-slate-100 sticky top-0">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Pergunta</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Resposta</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Índice Impacto</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Peso Proposto</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-slate-200">
+                                    {analysisResults.map((result) => (
+                                        <tr key={`${result.pergunta_id}-${result.resposta_dada}`} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3 text-sm text-slate-600">{result.texto_pergunta}</td>
+                                            <td className="px-4 py-3 text-sm font-medium text-slate-800">{result.resposta_dada}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-600">{result.indice_impacto}</td>
+                                            <td className="px-4 py-3">
+                                                <input 
+                                                    type="number" 
+                                                    value={result.peso_proposto}
+                                                    onChange={(e) => handleWeightChange(result.pergunta_id, result.resposta_dada, e.target.value)}
+                                                    className="w-20 p-1 border border-slate-300 rounded-md"
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                         <div className="mt-6 flex justify-end space-x-3 border-t pt-4">
+                            <button onClick={() => setIsAnalysisModalOpen(false)} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
+                            <button onClick={handleUpdateWeights} disabled={isProcessing} className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold inline-flex items-center disabled:opacity-50">
+                                {isProcessing ? <FaSpinner className="animate-spin mr-2"/> : <FaSave className="mr-2"/>}
+                                Salvar Pesos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Modal de Alerta/Confirmação */}
             {modal.isOpen && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4">
                     <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md">

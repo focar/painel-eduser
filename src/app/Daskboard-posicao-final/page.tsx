@@ -8,7 +8,8 @@ import { FaSpinner } from 'react-icons/fa';
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
 type KpiData = { total_inscricoes: number; total_checkins: number; total_compradores: number; };
-type TableRow = { utm_content: string; qtd_inscricoes: number; qtd_checkins: number; qtd_compradores: number; };
+// Alterado para 'canal' para ser genérico
+type TableRow = { canal: string; qtd_inscricoes: number; qtd_checkins: number; qtd_compradores: number; };
 type DashboardData = { kpis: KpiData; tableData: TableRow[]; };
 
 // --- Componentes ---
@@ -27,7 +28,26 @@ export default function PosicaoFinalPage() {
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [groupBy, setGroupBy] = useState('content');
+    // Alterado para 'source' como padrão
+    const [groupBy, setGroupBy] = useState('source');
+
+    const loadData = useCallback(async (launchId: string) => {
+        if (!launchId) return;
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase.rpc('get_final_position_dashboard', { 
+                p_launch_id: launchId,
+                p_group_by: groupBy
+            });
+            if (error) throw error;
+            setData(data);
+        } catch (err: any) {
+            toast.error("Erro ao carregar dados do dashboard.");
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [groupBy, supabase]);
 
     useEffect(() => {
         const fetchLaunches = async () => {
@@ -48,27 +68,10 @@ export default function PosicaoFinalPage() {
     }, [supabase]);
 
     useEffect(() => {
-        if (!selectedLaunch) return;
-        
-        const fetchDashboardData = async () => {
-            setIsLoading(true);
-            try {
-                const { data, error } = await supabase.rpc('get_final_position_dashboard', { 
-                    p_launch_id: selectedLaunch,
-                    p_group_by: groupBy
-                });
-                if (error) throw error;
-                setData(data);
-            } catch (err: any) {
-                toast.error("Erro ao carregar dados do dashboard.");
-                console.error(err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchDashboardData();
-    }, [selectedLaunch, groupBy, supabase]);
+        if (selectedLaunch) {
+            loadData(selectedLaunch);
+        }
+    }, [selectedLaunch, loadData]);
 
     const kpis = data?.kpis;
     const conversionRate = kpis && kpis.total_inscricoes > 0
@@ -76,7 +79,7 @@ export default function PosicaoFinalPage() {
         : '0.00%';
     
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Dashboard de Posição Final</h1>
                 <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
@@ -98,24 +101,25 @@ export default function PosicaoFinalPage() {
                     onChange={e => setGroupBy(e.target.value)}
                     className="mt-1 block w-full sm:w-1/3 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                 >
-                    <option value="content">UTM Content</option>
-                    <option value="campaign">UTM Campaign</option>
+                    {/* --- FILTROS ATUALIZADOS --- */}
+                    <option value="source">UTM Source</option>
+                    <option value="medium">UTM Medium</option>
                 </select>
             </div>
 
             {isLoading && <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>}
 
-            {!isLoading && kpis && (
+            {!isLoading && data && kpis && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                        <KpiCard title="Total de Inscrições" value={kpis.total_inscricoes} />
-                        <KpiCard title="Total de Check-ins" value={kpis.total_checkins} />
-                        <KpiCard title="Total de Compradores" value={kpis.total_compradores} />
+                        <KpiCard title="Total de Inscrições" value={kpis.total_inscricoes.toLocaleString('pt-BR')} />
+                        <KpiCard title="Total de Check-ins" value={kpis.total_checkins.toLocaleString('pt-BR')} />
+                        <KpiCard title="Total de Compradores" value={kpis.total_compradores.toLocaleString('pt-BR')} />
                         <KpiCard title="Conversão Final (Vendas)" value={conversionRate} highlight />
                     </div>
 
                     <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
+                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal ({groupBy === 'source' ? 'UTM Source' : 'UTM Medium'})</h2>
                         <div className="overflow-x-auto">
                             <table className="min-w-full">
                                 <thead className="bg-slate-50 hidden md:table-header-group">
@@ -128,11 +132,11 @@ export default function PosicaoFinalPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white">
-                                    {data?.tableData?.map((row, index) => {
+                                    {data.tableData?.map((row, index) => {
                                         const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
                                         return (
                                             <tr key={index} className="block md:table-row border rounded-lg shadow-sm mb-4 md:border-b md:border-slate-200 md:shadow-none md:rounded-none">
-                                                <td className="p-3 md:px-4 md:py-4 font-medium text-slate-800 max-w-full truncate" title={row.utm_content}><span className="md:hidden text-xs font-bold uppercase text-slate-500">Canal: </span>{row.utm_content}</td>
+                                                <td className="p-3 md:px-4 md:py-4 font-medium text-slate-800 max-w-full truncate" title={row.canal}><span className="md:hidden text-xs font-bold uppercase text-slate-500">Canal: </span>{row.canal}</td>
                                                 <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600"><span className="md:hidden font-bold">Inscrições: </span>{row.qtd_inscricoes}</td>
                                                 <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600"><span className="md:hidden font-bold">Check-ins: </span>{row.qtd_checkins}</td>
                                                 <td className="p-3 md:px-4 md:py-4 text-sm text-slate-600 font-bold"><span className="md:hidden font-bold">Compradores: </span>{row.qtd_compradores}</td>
@@ -147,7 +151,7 @@ export default function PosicaoFinalPage() {
                 </div>
             )}
             
-            {!isLoading && !kpis && (
+            {!isLoading && !data && (
                 <div className="text-center py-10 bg-white rounded-lg shadow-md"><p>Nenhum dado encontrado.</p></div>
             )}
         </div>

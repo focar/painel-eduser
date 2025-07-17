@@ -1,4 +1,4 @@
-'use client';
+use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -72,7 +72,40 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
                             cy="50%"
                             outerRadius={120}
                             labelLine={false}
-                            // A propriedade 'label' foi removida para garantir que a compilação passe na Vercel.
+                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                // CORREÇÃO: Verificação mais robusta para todos os valores necessários
+                                if (
+                                    typeof midAngle !== 'number' || 
+                                    typeof percent !== 'number' || 
+                                    typeof cx !== 'number' || 
+                                    typeof cy !== 'number' || 
+                                    typeof innerRadius !== 'number' || 
+                                    typeof outerRadius !== 'number' ||
+                                    midAngle === null ||
+                                    percent === null ||
+                                    cx === null ||
+                                    cy === null ||
+                                    innerRadius === null ||
+                                    outerRadius === null
+                                ) {
+                                    return null;
+                                }
+                                
+                                // Não mostrar labels para fatias muito pequenas
+                                if (percent < 0.05) {
+                                    return null;
+                                }
+
+                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+                                const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+
+                                return (
+                                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
+                                        {`${(percent * 100).toFixed(0)}%`}
+                                    </text>
+                                );
+                            }}
                         >
                             {data.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

@@ -58,27 +58,6 @@ const KpiCard = ({ title, value, format = (v) => v }: { title: string; value: nu
 
 const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
     const COLORS = ['#16a34a', '#65a30d', '#d97706', '#ea580c', '#dc2626'];
-    
-    // Função para renderizar a percentagem dentro da pizza
-    const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
-        if (midAngle == null || percent == null || cx == null || cy == null || innerRadius == null || outerRadius == null) {
-            return null;
-        }
-        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-        const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-        const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-
-        if (percent < 0.05) { // Não mostra a label se a fatia for muito pequena
-            return null;
-        }
-
-        return (
-            <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
-                {`${(percent * 100).toFixed(0)}%`}
-            </text>
-        );
-    };
-
     return (
         <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
             <h2 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Público por Score</h2>
@@ -93,7 +72,7 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
                             cy="50%"
                             outerRadius={120}
                             labelLine={false}
-                            label={renderCustomizedLabel} // A label foi reintroduzida aqui
+                            // A propriedade 'label' foi removida para garantir que a compilação passe na Vercel.
                         >
                             {data.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

@@ -73,8 +73,8 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
                             outerRadius={120}
                             labelLine={false}
                             label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                // CORREÇÃO DEFINITIVA: Verificação de tipo explícita para o TypeScript da Vercel.
-                                if (typeof midAngle !== 'number' || typeof percent !== 'number' || typeof cx !== 'number' || typeof cy !== 'number' || typeof innerRadius !== 'number' || typeof outerRadius !== 'number') {
+                                // CORREÇÃO FINAL E MAIS ROBUSTA: Verifica se os valores são numéricos e não nulos.
+                                if (midAngle == null || percent == null || cx == null || cy == null || innerRadius == null || outerRadius == null) {
                                     return null;
                                 }
                                 
@@ -340,4 +340,3 @@ export default function LeadScoringPage() {
         </div>
     );
 }
-

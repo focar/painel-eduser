@@ -35,10 +35,52 @@ type DashboardData = {
   byMediumChart: ChartRow[];
 };
 
-// --- Constantes e Componentes de UI ---
+// --- Constantes ---
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#4F4FFF', '#4FFF4F'];
 const TIME_ZONE = 'America/Sao_Paulo';
 
+
+// --- INÍCIO DA CORREÇÃO ---
+
+// 1. Definimos uma interface explícita para as propriedades do label do gráfico.
+interface CustomizedLabelProps {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+}
+
+// 2. Criamos uma função de renderização separada e com tipagem forte.
+const renderCustomizedLabel = (props: CustomizedLabelProps) => {
+  const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+
+  // 3. Adicionamos uma cláusula de guarda para garantir que os valores existem antes de usá-los.
+  if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
+    return null;
+  }
+
+  // Oculta a label se a fatia do gráfico for muito pequena.
+  if ((percent * 100) <= 5) {
+    return null;
+  }
+
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+  const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+
+  return (
+    <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="12px" fontWeight="bold">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+};
+
+// --- FIM DA CORREÇÃO ---
+
+
+// --- Componentes de UI ---
 const KpiCard = ({ title, value, highlight = false }: { title: string, value: string | number, highlight?: boolean }) => (
     <div className={`p-4 rounded-lg shadow-md border text-center transition-all duration-300 ${highlight ? "bg-blue-50 border-blue-200" : "bg-white"}`}>
         <p className={`text-sm font-medium ${highlight ? "text-blue-700" : "text-slate-500"}`}>{title}</p>
@@ -52,16 +94,17 @@ const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }
         <div style={{ width: '100%', height: 350 }}>
             <ResponsiveContainer>
                 <PieChart>
-                    <Pie data={data} dataKey="value" nameKey="name" cx="40%" cy="50%" outerRadius={100} fill="#8884d8" labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                        const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-                        const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-                        return (percent * 100) > 5 ? (
-                            <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
-                                {`${(percent * 100).toFixed(0)}%`}
-                            </text>
-                        ) : null;
-                    }}>
+                    <Pie 
+                      data={data} 
+                      dataKey="value" 
+                      nameKey="name" 
+                      cx="40%" 
+                      cy="50%" 
+                      outerRadius={100} 
+                      fill="#8884d8" 
+                      labelLine={false} 
+                      label={renderCustomizedLabel} // <-- Usando a função corrigida aqui
+                    >
                         {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
                     <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR')} />
@@ -268,9 +311,7 @@ export default function PerformanceControlePage() {
                         <KpiCard title="Total de Check-ins" value={kpis.total_checkins.toLocaleString('pt-BR')} />
                         <KpiCard title="Taxa de Check-in" value={`${totalConversionRate.toFixed(1)}%`} highlight />
                     </div>
-                    {/* --- MUDANÇA AQUI --- */}
-                    {/* A div agora usa grid-cols-1 para empilhar os gráficos em todas as telas. */}
-                    <div className="grid grid-cols-1 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {data.byContentChart && data.byContentChart.length > 0 &&
                             <PieChartWithLegend title={groupBy === 'content' ? "Inscrições por Conteúdo" : "Inscrições por Campanha"} data={data.byContentChart} />
                         }

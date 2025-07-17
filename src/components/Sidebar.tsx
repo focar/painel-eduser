@@ -25,7 +25,7 @@ const menuItems = [
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
             { name: "Acompanhamento Canais", href: "/acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/detalhamento-canais" },
-            { name: "Posição Final", href: "/dashboard-posicao-final" }, // Corrigido o D maiúsculo
+            { name: "Posição Final", href: "/dashboard-posicao-final" }, 
         ],
     },
     {

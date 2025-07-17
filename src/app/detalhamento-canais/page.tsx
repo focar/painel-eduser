@@ -188,7 +188,9 @@ export default function DetalhamentoCanaisPage() {
                             <table className="min-w-full">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarquia UTM (Source > Medium > Content)</th>
+                                        {/* --- INÍCIO DA CORREÇÃO --- */}
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hierarquia UTM (Source &gt; Medium &gt; Content)</th>
+                                        {/* --- FIM DA CORREÇÃO --- */}
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscritos</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tx Check in</th>

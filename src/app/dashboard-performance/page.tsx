@@ -40,9 +40,8 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919'
 const TIME_ZONE = 'America/Sao_Paulo';
 
 
-// --- INÍCIO DA CORREÇÃO ---
+// --- Funções de Renderização para Gráficos ---
 
-// 1. Definimos uma interface explícita para as propriedades do label do gráfico.
 interface CustomizedLabelProps {
   cx?: number;
   cy?: number;
@@ -52,16 +51,13 @@ interface CustomizedLabelProps {
   percent?: number;
 }
 
-// 2. Criamos uma função de renderização separada e com tipagem forte.
 const renderCustomizedLabel = (props: CustomizedLabelProps) => {
   const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
 
-  // 3. Adicionamos uma cláusula de guarda para garantir que os valores existem antes de usá-los.
   if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
     return null;
   }
 
-  // Oculta a label se a fatia do gráfico for muito pequena.
   if ((percent * 100) <= 5) {
     return null;
   }
@@ -77,8 +73,6 @@ const renderCustomizedLabel = (props: CustomizedLabelProps) => {
   );
 };
 
-// --- FIM DA CORREÇÃO ---
-
 
 // --- Componentes de UI ---
 const KpiCard = ({ title, value, highlight = false }: { title: string, value: string | number, highlight?: boolean }) => (
@@ -88,43 +82,60 @@ const KpiCard = ({ title, value, highlight = false }: { title: string, value: st
     </div>
 );
 
-const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }) => (
-    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
-        <div style={{ width: '100%', height: 350 }}>
-            <ResponsiveContainer>
-                <PieChart>
-                    <Pie 
-                      data={data} 
-                      dataKey="value" 
-                      nameKey="name" 
-                      cx="40%" 
-                      cy="50%" 
-                      outerRadius={100} 
-                      fill="#8884d8" 
-                      labelLine={false} 
-                      label={renderCustomizedLabel} // <-- Usando a função corrigida aqui
-                    >
-                        {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR')} />
-                    <Legend
-                        layout="vertical"
-                        verticalAlign="middle"
-                        align="right"
-                        iconSize={10}
-                        wrapperStyle={{
-                            fontSize: "12px",
-                            lineHeight: "1.7",
-                            overflowY: "auto",
-                            maxHeight: "300px"
-                        }}
-                    />
-                </PieChart>
-            </ResponsiveContainer>
+const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }) => {
+    // Função para formatar (encurtar) o texto da legenda se for muito longo
+    const formatLegendText = (value: string) => {
+        const maxLength = 35; // Define o comprimento máximo do texto
+        if (value.length > maxLength) {
+            return `${value.substring(0, maxLength)}...`;
+        }
+        return value;
+    };
+
+    return (
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
+            <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
+            {/* Aumenta a altura do container para dar mais espaço à legenda */}
+            <div style={{ width: '100%', height: 400 }}>
+                <ResponsiveContainer>
+                    <PieChart>
+                        <Pie
+                            data={data}
+                            dataKey="value"
+                            nameKey="name"
+                            // Reduz o cx para dar mais espaço horizontal à legenda
+                            cx="35%"
+                            cy="50%"
+                            outerRadius={120} // Aumenta um pouco o raio do gráfico
+                            fill="#8884d8"
+                            labelLine={false}
+                            label={renderCustomizedLabel}
+                        >
+                            {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR')} />
+                        <Legend
+                            layout="vertical"
+                            verticalAlign="middle"
+                            align="right"
+                            iconSize={10}
+                            // Aplica a função para encurtar o texto
+                            formatter={formatLegendText}
+                            // Define um estilo para a área da legenda
+                            wrapperStyle={{
+                                fontSize: "12px",
+                                lineHeight: "1.5",
+                                overflowY: "auto", // Permite scroll vertical se houver muitos itens
+                                maxHeight: "350px",
+                                paddingLeft: "10px"
+                            }}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const ScoringTable = ({ data, groupBy }: { data: TableRow[], groupBy: string }) => (
     <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
@@ -311,7 +322,9 @@ export default function PerformanceControlePage() {
                         <KpiCard title="Total de Check-ins" value={kpis.total_checkins.toLocaleString('pt-BR')} />
                         <KpiCard title="Taxa de Check-in" value={`${totalConversionRate.toFixed(1)}%`} highlight />
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* --- MUDANÇA AQUI --- */}
+                    {/* A div agora usa grid-cols-1 para empilhar os gráficos em todas as telas, conforme solicitado. */}
+                    <div className="grid grid-cols-1 gap-6">
                         {data.byContentChart && data.byContentChart.length > 0 &&
                             <PieChartWithLegend title={groupBy === 'content' ? "Inscrições por Conteúdo" : "Inscrições por Campanha"} data={data.byContentChart} />
                         }

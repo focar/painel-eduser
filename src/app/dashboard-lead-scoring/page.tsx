@@ -5,7 +5,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { FaSpinner, FaFileCsv } from 'react-icons/fa';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// --- Tipagens de Dados ---
+// --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
 
 type TableData = {
@@ -64,31 +64,42 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
             <div style={{ width: '100%', height: 350 }}>
                 <ResponsiveContainer>
                     <PieChart>
-                        {/* A pizza foi movida para a esquerda (cx="40%") para dar espaço à legenda */}
-                        <Pie data={data} dataKey="value" nameKey="name" cx="40%" cy="50%" outerRadius={120} labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                            const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                            const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-                            const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-                            return (
-                                <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
-                                    {`${(percent * 100).toFixed(0)}%`}
-                                </text>
-                            );
-                        }}>
-                            {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        <Pie
+                            data={data}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={120}
+                            labelLine={false}
+                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                // FIX: Add a guard clause to prevent crash if values are undefined during render
+                                if ([cx, cy, midAngle, innerRadius, outerRadius, percent].some(v => v === undefined)) {
+                                    return null;
+                                }
+                                
+                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+                                const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+                                
+                                // Only render label if the slice is large enough
+                                if (percent < 0.05) {
+                                    return null;
+                                }
+
+                                return (
+                                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
+                                        {`${(percent * 100).toFixed(0)}%`}
+                                    </text>
+                                );
+                            }}
+                        >
+                            {data.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
                         </Pie>
                         <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
-                        {/* A legenda agora está posicionada à direita, na vertical */}
-                        <Legend
-                            layout="vertical"
-                            verticalAlign="middle"
-                            align="right"
-                            iconType="circle"
-                            wrapperStyle={{
-                                lineHeight: '24px',
-                                paddingLeft: '20px'
-                            }}
-                        />
+                        <Legend iconType="circle" />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
@@ -204,7 +215,7 @@ const ScoringTable = ({ data, groupBy, launchName }: { data: TableData[], groupB
             </div>
         </div>
     );
-}
+};
 
 // --- Componente Principal da Página ---
 export default function LeadScoringPage() {
@@ -286,8 +297,7 @@ export default function LeadScoringPage() {
                     <KpiCard title="Taxa de Check-in" value={totalConversionRate} format={(v) => `${v.toFixed(1)}%`} />
                 </div>
                 
-                {/* A div agora usa grid-cols-1 para empilhar os gráficos em todas as telas */}
-                <div className="grid grid-cols-1 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {data.scoreDistributionChart && data.scoreDistributionChart.length > 0 && (
                         <ScoreDistributionChart data={data.scoreDistributionChart} />
                     )}

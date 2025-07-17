@@ -73,8 +73,8 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
                             outerRadius={120}
                             labelLine={false}
                             label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                // FIX: Add a guard clause to prevent crash if values are undefined during render
-                                if ([cx, cy, midAngle, innerRadius, outerRadius, percent].some(v => v === undefined)) {
+                                // CORREÇÃO DEFINITIVA: Verificação de tipo explícita para o TypeScript da Vercel.
+                                if (typeof midAngle !== 'number' || typeof percent !== 'number' || typeof cx !== 'number' || typeof cy !== 'number' || typeof innerRadius !== 'number' || typeof outerRadius !== 'number') {
                                     return null;
                                 }
                                 
@@ -82,7 +82,6 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
                                 const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
                                 const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
                                 
-                                // Only render label if the slice is large enough
                                 if (percent < 0.05) {
                                     return null;
                                 }

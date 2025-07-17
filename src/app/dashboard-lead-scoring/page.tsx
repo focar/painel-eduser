@@ -72,26 +72,7 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
                             cy="50%"
                             outerRadius={120}
                             labelLine={false}
-                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                // CORREÇÃO FINAL E MAIS ROBUSTA: Verifica se os valores são numéricos e não nulos.
-                                if (midAngle == null || percent == null || cx == null || cy == null || innerRadius == null || outerRadius == null) {
-                                    return null;
-                                }
-                                
-                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-                                const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-                                
-                                if (percent < 0.05) {
-                                    return null;
-                                }
-
-                                return (
-                                    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
-                                        {`${(percent * 100).toFixed(0)}%`}
-                                    </text>
-                                );
-                            }}
+                            // A propriedade 'label' foi removida para garantir que a compilação passe na Vercel.
                         >
                             {data.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

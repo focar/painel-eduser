@@ -56,57 +56,79 @@ const KpiCard = ({ title, value, format = (v) => v }: { title: string; value: nu
     </div>
 );
 
-const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
-    const COLORS = ['#16a34a', '#65a30d', '#d97706', '#ea580c', '#dc2626'];
-    
-    // Função para renderizar a percentagem dentro da pizza
-    const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
-        if (midAngle == null || percent == null || cx == null || cy == null || innerRadius == null || outerRadius == null) {
-            return null;
-        }
-        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-        const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-        const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+// --- INÍCIO DA CORREÇÃO ---
 
-        if (percent < 0.05) { // Não mostra a label se a fatia for muito pequena
-            return null;
-        }
+// 1. Definimos uma interface explícita para as propriedades do label, garantindo a tipagem correta.
+interface CustomizedLabelProps {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+  index?: number;
+}
 
-        return (
-            <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
-                {`${(percent * 100).toFixed(0)}%`}
-            </text>
-        );
-    };
+// 2. Criamos a função de renderização fora do componente principal para melhor organização.
+const renderCustomizedLabel = (props: CustomizedLabelProps) => {
+  const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
 
-    return (
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-            <h2 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Público por Score</h2>
-            <div style={{ width: '100%', height: 350 }}>
-                <ResponsiveContainer>
-                    <PieChart>
-                        <Pie
-                            data={data}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={120}
-                            labelLine={false}
-                            label={renderCustomizedLabel} // A label foi reintroduzida aqui
-                        >
-                            {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
-                        <Legend iconType="circle" />
-                    </PieChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-    );
+  // 3. Mantemos a cláusula de guarda, agora com tipos bem definidos, para evitar erros em tempo de execução.
+  if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
+    return null; // Não renderiza nada se alguma propriedade essencial estiver faltando.
+  }
+
+  // Não mostra a label se a fatia for muito pequena para evitar sobreposição.
+  if (percent < 0.05) {
+    return null;
+  }
+  
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+  const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
 };
+
+// 4. O componente do gráfico fica mais limpo, apenas referenciando a função de label.
+const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
+  const COLORS = ['#16a34a', '#65a30d', '#d97706', '#ea580c', '#dc2626'];
+
+  return (
+    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
+      <h2 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Público por Score</h2>
+      <div style={{ width: '100%', height: 350 }}>
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              outerRadius={120}
+              labelLine={false}
+              label={renderCustomizedLabel} // Usamos a função externa e bem tipada aqui.
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
+            <Legend iconType="circle" />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// --- FIM DA CORREÇÃO ---
+
 
 const DailyEvolutionChart = ({ data }: { data: DailyEvolutionData[] }) => (
     <div className="bg-white p-6 rounded-lg shadow-md">

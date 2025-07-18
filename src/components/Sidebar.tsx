@@ -23,7 +23,7 @@ const menuItems = [
             { name: "Resumo Diário", href: "/dashboard-resumo" },
             { name: "Performance e Controle", href: "/dashboard-performance" },
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
-            { name: "Acompanhamento Canais", href: "/acompanhamento-canais" },
+            { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/detalhamento-canais" },
             { name: "Posição Final", href: "/dashboard-posicao-final" }, 
         ],
@@ -42,7 +42,7 @@ const menuItems = [
         icon: "fa-tools",
         links: [
             { name: "Controle de Inscrições", href: "/ferramentas/controle-inscricoes" },
-            { name: "Importação", href: "/importacao" },
+            { name: "Ajustes de Arquivos", href: "/ferramentas/importacao" },
             { name: "Simulador de Inscrição", href: "/ferramentas/simulador-inscricao" },
             { name: "Conversão UTMs", href: "/ferramentas/conversao-utms" },
             { name: "Mapeamento de Colunas", href: "/ferramentas/mapeamento", icon: "fa-map-signs" },

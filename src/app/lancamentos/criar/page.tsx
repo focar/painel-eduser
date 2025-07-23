@@ -1,5 +1,3 @@
-// Conteúdo para: src/app/lancamentos/criar/page.tsx
-
 'use client';
 
 import { useState } from 'react';
@@ -19,8 +17,8 @@ type LaunchEvent = {
 
 // --- Configurações de Eventos ---
 const defaultEventNames = [
-    "Planejamento", "Pré-lançamento", "Início da Captação",
-    "Live 1", "Live 2", "Abertura do Carrinho", "Fechamento do Carrinho"
+    "Planejamento", "Pré-lançamento", "Início da Captação", "CPL 1",
+    "Live Aprofundamento CPL1", "CPL 2", "CPL 3", "Live Encerramento", "Carrinho Aberto"
 ];
 
 const initialEventsState: LaunchEvent[] = [
@@ -35,19 +33,22 @@ const initialEventsState: LaunchEvent[] = [
     { id: Date.now() + defaultEventNames.length + 1, nome: '', data_inicio: '', data_fim: '', is_custom: true },
 ];
 
-// Dicionário de cores atualizado com os seus valores hexadecimais
+// ATUALIZADO: Novo dicionário de cores
 const eventColorMap: { [key: string]: string } = {
     'padrão': 'bg-white text-slate-800',
-    'planejamento': 'bg-gray-500 text-white',
-    'pré-lançamento': 'bg-[#dabd62] text-white',
-    'início da captação': 'bg-blue-500 text-white',
-    'live 1': 'bg-[#d864c3] text-white',
-    'live 2': 'bg-[#b983b6] text-white',
-    'abertura do carrinho': 'bg-green-500 text-white',
-    'fechamento do carrinho': 'bg-[#e6567f] text-white',
+    'planejamento': 'bg-[#af6813] text-white',
+    'pré-lançamento': 'bg-[#fea43d] text-white',
+    'início da captação': 'bg-[#91258e] text-white',
+    'cpl 1': 'bg-[#c563dc] text-white',
+    'live aprofundamento cpl1': 'bg-[#5d77ab] text-white',
+    'cpl 2': 'bg-[#182777] text-white',
+    'cpl 3': 'bg-[#00aef1] text-white',
+    'live encerramento': 'bg-[#01aa9c] text-white',
+    'carrinho aberto': 'bg-[#01a550] text-white',
+    'custom_1': 'bg-[#ec98ca] text-white',
+    'custom_2': 'bg-[#ed008d] text-white',
 };
 
-// Função para obter a cor com base no nome exato do evento
 const getEventColorClasses = (eventName: string): string => {
     const lowerCaseName = eventName.toLowerCase();
     return eventColorMap[lowerCaseName] || eventColorMap['padrão'];
@@ -102,7 +103,6 @@ export default function CriarLancamentoPage() {
 
         setIsSubmitting(true);
         
-        // --- LÓGICA DE CÁLCULO AUTOMÁTICO ---
         const allDates = eventsWithDates.flatMap(e => [e.data_inicio, e.data_fim]).filter(Boolean);
         const minDate = allDates.reduce((min, p) => p < min ? p : min, allDates[0]);
         const maxDate = allDates.reduce((max, p) => p > max ? p : max, allDates[0]);
@@ -117,8 +117,8 @@ export default function CriarLancamentoPage() {
             const { error } = await supabase.from('lancamentos').insert([
                 {
                     ...launch,
-                    data_inicio: minDate, // Usa a data calculada
-                    data_fim: maxDate || minDate, // Usa a data calculada
+                    data_inicio: minDate,
+                    data_fim: maxDate || minDate,
                     eventos: formattedEvents,
                     cor: null
                 }
@@ -137,13 +137,14 @@ export default function CriarLancamentoPage() {
             setIsSubmitting(false);
         }
     };
+    
+    let customEventIndex = 0;
 
     return (
         <div className="max-w-4xl mx-auto p-4">
             <div className="bg-white p-8 rounded-lg shadow-md">
                 <h1 className="text-2xl font-bold text-slate-800 mb-6">Criar Novo Lançamento</h1>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Campos Principais */}
                     <div>
                         <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
                         <input type="text" id="nome" value={launch.nome} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" autoComplete="off" />
@@ -152,9 +153,6 @@ export default function CriarLancamentoPage() {
                         <label htmlFor="descricao" className="block text-sm font-medium text-slate-700">Descrição (Opcional)</label>
                         <textarea id="descricao" value={launch.descricao} onChange={handleChange} rows={4} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" autoComplete="off" />
                     </div>
-                    
-                    {/* Campos de Data Geral foram removidos da UI */}
-
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-slate-700">Status</label>
                         <select id="status" value={launch.status} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md bg-white">
@@ -164,17 +162,21 @@ export default function CriarLancamentoPage() {
                             <option>Cancelado</option>
                         </select>
                     </div>
-                    
-                    {/* Gestão de Eventos */}
                     <div className="space-y-4 pt-4 border-t">
                         <h3 className="text-lg font-medium text-slate-800">Marcos do Lançamento</h3>
                         {events.map((event, index) => {
-                            const colorClasses = getEventColorClasses(event.nome);
+                            let colorClasses;
+                            if (event.is_custom) {
+                                customEventIndex++;
+                                colorClasses = eventColorMap[`custom_${customEventIndex}` as keyof typeof eventColorMap] || eventColorMap['padrão'];
+                            } else {
+                                colorClasses = getEventColorClasses(event.nome);
+                            }
                             return (
                                 <div key={event.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-4 p-3 bg-slate-50 rounded-md border">
                                     <input 
                                         type="text" 
-                                        placeholder="Nome do Evento Personalizado" 
+                                        placeholder={`Evento Personalizado ${customEventIndex}`}
                                         value={event.nome}
                                         readOnly={!event.is_custom}
                                         onChange={(e) => handleEventChange(index, 'nome', e.target.value)}
@@ -206,8 +208,6 @@ export default function CriarLancamentoPage() {
                             );
                         })}
                     </div>
-
-                    {/* Botões de Ação */}
                     <div className="flex justify-end pt-4 gap-4 border-t border-slate-200 mt-6">
                         <button type="button" onClick={() => router.push('/lancamentos')} className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300">Cancelar</button>
                         <button type="submit" disabled={isSubmitting} className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg hover:bg-slate-700 disabled:opacity-50">

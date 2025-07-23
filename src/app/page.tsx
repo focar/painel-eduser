@@ -7,13 +7,13 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import { FaSpinner } from 'react-icons/fa';
-import { addDays } from 'date-fns'; // Para ajustar a data de fim
+import { addDays } from 'date-fns';
 
 // --- Tipos de Dados ---
 type CalendarEvent = {
     title: string;
     start: string;
-    end?: string; // A data de fim é opcional
+    end?: string;
     backgroundColor: string;
     borderColor: string;
     allDay: true;
@@ -31,19 +31,33 @@ type LaunchEventData = {
 
 // --- Dicionário de Cores ---
 const eventColorMap: { [key: string]: string } = {
-    'padrão': '#71717a', // cinza
-    'planejamento': '#6b7280', // cinza escuro
-    'pré-lançamento': '#dabd62',
-    'início da captação': '#3b82f6', // azul
-    'live 1': '#d864c3',
-    'live 2': '#b983b6',
-    'abertura do carrinho': '#22c55e', // verde
-    'fechamento do carrinho': '#e6567f',
+    'padrão': '#71717a',
+    'planejamento': '#af6813',
+    'pré-lançamento': '#fea43d',
+    'início da captação': '#91258e',
+    'cpl 1': '#c563dc',
+    'live aprofundamento cpl1': '#5d77ab',
+    'cpl 2': '#182777',
+    'cpl 3': '#00aef1',
+    'live encerramento': '#01aa9c',
+    'carrinho aberto': '#01a550',
+    'evento personalisado 1': '#ec98ca',
+    'evento personalisado 2': '#ed008d',
 };
 
 const getEventColor = (eventName: string): string => {
     const lowerCaseName = eventName.toLowerCase();
-    return eventColorMap[lowerCaseName] || eventColorMap['padrão'];
+    // Procura por correspondência exata primeiro
+    if (eventColorMap[lowerCaseName]) {
+        return eventColorMap[lowerCaseName];
+    }
+    // Procura por palavras-chave se não houver correspondência exata
+    for (const key in eventColorMap) {
+        if (lowerCaseName.includes(key)) {
+            return eventColorMap[key];
+        }
+    }
+    return eventColorMap['padrão'];
 };
 
 // --- Componente Principal ---
@@ -69,9 +83,6 @@ export default function HomePage() {
                         (launch.eventos as LaunchEventData[]).forEach(event => {
                             if (event.nome && event.data_inicio) {
                                 const eventColor = getEventColor(event.nome);
-                                
-                                // O FullCalendar trata a data de fim como exclusiva.
-                                // Se um evento termina no dia 20, temos de passar dia 21.
                                 const endDate = event.data_fim ? addDays(new Date(event.data_fim), 1).toISOString().split('T')[0] : undefined;
 
                                 formattedEvents.push({
@@ -83,9 +94,6 @@ export default function HomePage() {
                                     allDay: true,
                                     extendedProps: { launchName: launch.nome, eventName: event.nome }
                                 });
-                                
-                                // --- REMOVIDO ---
-                                // O bloco que adicionava o alerta de prazo foi retirado.
                             }
                         });
                     }
@@ -124,17 +132,15 @@ export default function HomePage() {
                         height="auto"
                         eventTimeFormat={{ hour: '2-digit', minute: '2-digit', meridiem: false }}
                     />
-                    {/* Legenda de Cores */}
                     <div className="mt-6 pt-4 border-t">
                         <h3 className="text-lg font-semibold text-slate-700 mb-3">Legenda</h3>
                         <div className="flex flex-wrap gap-x-6 gap-y-3">
                             {Object.entries(eventColorMap).filter(([name]) => name !== 'padrão').map(([name, color]) => (
                                 <div key={name} className="flex items-center gap-2">
                                     <span className="w-4 h-4 rounded-full" style={{ backgroundColor: color }}></span>
-                                    <span className="text-sm capitalize text-slate-600">{name}</span>
+                                    <span className="text-sm capitalize text-slate-600">{name.replace(/cpl (\d)/, 'CPL $1')}</span>
                                 </div>
                             ))}
-                             {/* --- REMOVIDO --- A legenda do prazo final foi retirada */}
                         </div>
                     </div>
                 </>

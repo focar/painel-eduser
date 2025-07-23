@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { FaSpinner, FaFileCsv } from 'react-icons/fa';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -22,6 +22,7 @@ type TableData = {
 type ChartData = {
     name: string;
     value: number;
+    fill: string; 
 };
 
 type DailyEvolutionData = {
@@ -32,7 +33,6 @@ type DailyEvolutionData = {
 
 type DashboardData = {
     tableData: TableData[];
-    scoreDistributionChart: ChartData[];
     dailyEvolutionChart: DailyEvolutionData[];
 };
 
@@ -56,9 +56,6 @@ const KpiCard = ({ title, value, format = (v) => v }: { title: string; value: nu
     </div>
 );
 
-// --- INÍCIO DA CORREÇÃO ---
-
-// 1. Definimos uma interface explícita para as propriedades do label, garantindo a tipagem correta.
 interface CustomizedLabelProps {
   cx?: number;
   cy?: number;
@@ -66,27 +63,15 @@ interface CustomizedLabelProps {
   innerRadius?: number;
   outerRadius?: number;
   percent?: number;
-  index?: number;
 }
 
-// 2. Criamos a função de renderização fora do componente principal para melhor organização.
 const renderCustomizedLabel = (props: CustomizedLabelProps) => {
   const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
-
-  // 3. Mantemos a cláusula de guarda, agora com tipos bem definidos, para evitar erros em tempo de execução.
-  if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
-    return null; // Não renderiza nada se alguma propriedade essencial estiver faltando.
-  }
-
-  // Não mostra a label se a fatia for muito pequena para evitar sobreposição.
-  if (percent < 0.05) {
-    return null;
-  }
-  
+  if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) return null;
+  if (percent < 0.05) return null;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
   const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-
   return (
     <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize="12px" fontWeight="bold">
       {`${(percent * 100).toFixed(0)}%`}
@@ -94,28 +79,16 @@ const renderCustomizedLabel = (props: CustomizedLabelProps) => {
   );
 };
 
-// 4. O componente do gráfico fica mais limpo, apenas referenciando a função de label.
 const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
-  const COLORS = ['#16a34a', '#65a30d', '#d97706', '#ea580c', '#dc2626'];
-
   return (
     <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
       <h2 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Público por Score</h2>
       <div style={{ width: '100%', height: 350 }}>
         <ResponsiveContainer>
           <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              outerRadius={120}
-              labelLine={false}
-              label={renderCustomizedLabel} // Usamos a função externa e bem tipada aqui.
-            >
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} labelLine={false} label={renderCustomizedLabel}>
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={entry.fill} />
               ))}
             </Pie>
             <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
@@ -127,19 +100,12 @@ const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
   );
 };
 
-// --- FIM DA CORREÇÃO ---
-
-
 const DailyEvolutionChart = ({ data }: { data: DailyEvolutionData[] }) => (
     <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-lg font-semibold text-slate-700 mb-4">Inscrições vs Check-ins por Dia</h2>
         <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="data" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
+                <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="data" /><YAxis /><Tooltip /><Legend />
                 <Line type="monotone" dataKey="inscricoes" stroke="#8884d8" strokeWidth={2} name="Inscrições" />
                 <Line type="monotone" dataKey="checkins" stroke="#82ca9d" strokeWidth={2} name="Check-ins" />
             </LineChart>
@@ -147,28 +113,18 @@ const DailyEvolutionChart = ({ data }: { data: DailyEvolutionData[] }) => (
     </div>
 );
 
+// --- INÍCIO DA CORREÇÃO: CÓDIGO DA TABELA RESTAURADO ---
 const ScoringTable = ({ data, groupBy, launchName }: { data: TableData[], groupBy: string, launchName: string }) => {
-    
     const exportToCSV = () => {
-        const headers = [
-            "Canal", "Inscrições", "Check-ins", "Quente (>80)", 
-            "Quente-Morno", "Morno", "Morno-Frio", "Frio (<35)"
-        ];
-        
+        const headers = ["Canal", "Inscrições", "Check-ins", "Quente (>80)", "Quente-Morno", "Morno", "Morno-Frio", "Frio (<35)"];
         const csvRows = [
             headers.join(','),
             ...data.map(row => [
                 `"${row.canal.replace(/"/g, '""')}"`,
-                row.inscricoes,
-                row.check_ins,
-                row.quente_mais_80,
-                row.quente_morno,
-                row.morno,
-                row.morno_frio,
-                row.frio_menos_35
+                row.inscricoes, row.check_ins, row.quente_mais_80,
+                row.quente_morno, row.morno, row.morno_frio, row.frio_menos_35
             ].join(','))
         ];
-
         const csvString = csvRows.join('\n');
         const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -186,8 +142,7 @@ const ScoringTable = ({ data, groupBy, launchName }: { data: TableData[], groupB
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold text-slate-700">Scoring por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
                 <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors">
-                    <FaFileCsv />
-                    Exportar
+                    <FaFileCsv /> Exportar
                 </button>
             </div>
             <div className="overflow-x-auto">
@@ -239,6 +194,7 @@ const ScoringTable = ({ data, groupBy, launchName }: { data: TableData[], groupB
         </div>
     );
 };
+// --- FIM DA CORREÇÃO ---
 
 // --- Componente Principal da Página ---
 export default function LeadScoringPage() {
@@ -277,9 +233,7 @@ export default function LeadScoringPage() {
                     const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
                     const sorted = [...launchesData].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
                     setLaunches(sorted);
-                    if (!selectedLaunch) {
-                        setSelectedLaunch(sorted[0].id);
-                    }
+                    setSelectedLaunch(sorted[0].id);
                 } else {
                     setNoLaunchesFound(true);
                     setIsLoading(false);
@@ -287,10 +241,11 @@ export default function LeadScoringPage() {
             } catch (error) {
                 console.error("Erro ao buscar lançamentos:", error as Error);
                 setNoLaunchesFound(true);
+                setIsLoading(false);
             }
         };
         fetchLaunches();
-    }, [supabase, selectedLaunch]);
+    }, [supabase]);
 
     useEffect(() => {
         if (selectedLaunch) {
@@ -298,13 +253,29 @@ export default function LeadScoringPage() {
         }
     }, [selectedLaunch, loadDashboardData]);
 
+    const scoreDistributionChartData = useMemo(() => {
+        if (!data?.tableData) return [];
+        const totals = data.tableData.reduce((acc, row) => {
+            acc.quente_mais_80 += row.quente_mais_80 || 0;
+            acc.quente_morno += row.quente_morno || 0;
+            acc.morno += row.morno || 0;
+            acc.morno_frio += row.morno_frio || 0;
+            acc.frio_menos_35 += row.frio_menos_35 || 0;
+            return acc;
+        }, { quente_mais_80: 0, quente_morno: 0, morno: 0, morno_frio: 0, frio_menos_35: 0 });
+        const chartData = [
+            { name: 'Quente (>80)', value: totals.quente_mais_80, fill: '#16a34a' },
+            { name: 'Quente-Morno (65-79)', value: totals.quente_morno, fill: '#65a30d' },
+            { name: 'Morno (50-64)', value: totals.morno, fill: '#d97706' },
+            { name: 'Morno-Frio (35-49)', value: totals.morno_frio, fill: '#ea580c' },
+            { name: 'Frio (<35)', value: totals.frio_menos_35, fill: '#dc2626' },
+        ];
+        return chartData.filter(item => item.value > 0);
+    }, [data?.tableData]);
+
     const renderContent = () => {
-        if (isLoading) {
-            return <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>;
-        }
-        if (!data || !data.tableData) {
-            return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum dado encontrado para este lançamento.</p></div>;
-        }
+        if (isLoading) return <div className="flex justify-center items-center h-screen"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>;
+        if (!data || !data.tableData) return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum dado encontrado.</p></div>;
 
         const totals = {
             inscricoes: data.tableData.reduce((acc, row) => acc + (row.inscricoes || 0), 0),
@@ -321,41 +292,27 @@ export default function LeadScoringPage() {
                 </div>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {data.scoreDistributionChart && data.scoreDistributionChart.length > 0 && (
-                        <ScoreDistributionChart data={data.scoreDistributionChart} />
+                    {scoreDistributionChartData.length > 0 && (
+                        <ScoreDistributionChart data={scoreDistributionChartData} />
                     )}
                     {data.dailyEvolutionChart && data.dailyEvolutionChart.length > 0 && (
                         <DailyEvolutionChart data={data.dailyEvolutionChart} />
                     )}
                 </div>
 
-                {data.tableData && data.tableData.length > 0 && 
-                    <ScoringTable 
-                        data={data.tableData} 
-                        groupBy={groupBy} 
-                        launchName={launches.find(l => l.id === selectedLaunch)?.nome || 'export'}
-                    />
-                }
+                {data.tableData && data.tableData.length > 0 && <ScoringTable data={data.tableData} groupBy={groupBy} launchName={launches.find(l => l.id === selectedLaunch)?.nome || 'export'} />}
             </div>
         );
     };
 
-    if (noLaunchesFound) {
-        return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum lançamento válido foi encontrado.</p></div>;
-    }
+    if (noLaunchesFound) return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum lançamento válido foi encontrado.</p></div>;
 
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             <PageHeader title="Dashboard de Lead Scoring" launches={launches} selectedLaunch={selectedLaunch} onLaunchChange={setSelectedLaunch} isLoading={isLoading} />
             <div className="bg-white p-4 rounded-lg shadow-sm">
                 <label htmlFor="group-by-select" className="block text-sm font-medium text-slate-700">Agrupar Tabela Por:</label>
-                <select
-                    id="group-by-select"
-                    value={groupBy}
-                    onChange={e => setGroupBy(e.target.value)}
-                    disabled={isLoading}
-                    className="mt-1 block w-full sm:w-1-3 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                >
+                <select id="group-by-select" value={groupBy} onChange={e => setGroupBy(e.target.value)} disabled={isLoading} className="mt-1 block w-full sm:w-1-3 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                     <option value="content">UTM Content</option>
                     <option value="campaign">UTM Campaign</option>
                 </select>

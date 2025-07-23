@@ -1,5 +1,3 @@
-// src/app/lancamentos/editar/[id]/EditForm.tsx
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -10,7 +8,7 @@ import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
 type LaunchEvent = {
-    id: number; // ID temporário
+    id: number;
     nome: string;
     data_inicio: string;
     data_fim: string;
@@ -27,15 +25,23 @@ type LaunchData = {
 
 // --- Configurações de Eventos ---
 const defaultEventNames = [
-    "Planejamento", "Pré-lançamento", "Início da Captação",
-    "Live 1", "Live 2", "Abertura do Carrinho", "Fechamento do Carrinho"
+    "Planejamento", "Pré-lançamento", "Início da Captação", "CPL 1",
+    "Live Aprofundamento CPL1", "CPL 2", "CPL 3", "Live Encerramento", "Carrinho Aberto"
 ];
 
 const eventColorMap: { [key: string]: string } = {
-    'padrão': 'bg-white text-slate-800', 'planejamento': 'bg-gray-500 text-white',
-    'pré-lançamento': 'bg-[#dabd62] text-white', 'início da captação': 'bg-blue-500 text-white',
-    'live 1': 'bg-[#d864c3] text-white', 'live 2': 'bg-[#b983b6] text-white',
-    'abertura do carrinho': 'bg-green-500 text-white', 'fechamento do carrinho': 'bg-[#e6567f] text-white',
+    'padrão': 'bg-white text-slate-800',
+    'planejamento': 'bg-[#af6813] text-white',
+    'pré-lançamento': 'bg-[#fea43d] text-white',
+    'início da captação': 'bg-[#91258e] text-white',
+    'cpl 1': 'bg-[#c563dc] text-white',
+    'live aprofundamento cpl1': 'bg-[#5d77ab] text-white',
+    'cpl 2': 'bg-[#182777] text-white',
+    'cpl 3': 'bg-[#00aef1] text-white',
+    'live encerramento': 'bg-[#01aa9c] text-white',
+    'carrinho aberto': 'bg-[#01a550] text-white',
+    'custom_1': 'bg-[#ec98ca] text-white',
+    'custom_2': 'bg-[#ed008d] text-white',
 };
 
 const getEventColorClasses = (eventName: string): string => {
@@ -58,14 +64,12 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
     const [events, setEvents] = useState<LaunchEvent[]>([]);
 
     useEffect(() => {
-        // Popula o formulário com os dados iniciais
         setFormData({
             nome: initialData.nome,
             descricao: initialData.descricao,
             status: initialData.status,
         });
 
-        // Combina os eventos salvos com a lista padrão
         const existingEvents = new Map(initialData.eventos.map(e => [e.nome, e]));
         const combinedEvents: LaunchEvent[] = defaultEventNames.map((name, index) => {
             const existing = existingEvents.get(name);
@@ -78,7 +82,6 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
             };
         });
 
-        // Adiciona os eventos personalizados que foram salvos
         initialData.eventos.forEach((event, index) => {
             if (!defaultEventNames.includes(event.nome)) {
                 combinedEvents.push({
@@ -91,7 +94,6 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
             }
         });
         
-        // Garante que haja sempre dois campos personalizados em branco
         let customEventCount = combinedEvents.filter(e => e.is_custom).length;
         while (customEventCount < 2) {
             combinedEvents.push({ id: Date.now() + combinedEvents.length, nome: '', data_inicio: '', data_fim: '', is_custom: true });
@@ -161,12 +163,13 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
         }
     };
 
+    let customEventIndex = 0;
+
     return (
         <div className="max-w-4xl mx-auto p-4">
             <div className="bg-white p-8 rounded-lg shadow-md">
                 <h1 className="text-2xl font-bold text-slate-800 mb-6">Editar Lançamento</h1>
                 <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
-                    {/* Campos Principais */}
                     <div>
                         <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome do Lançamento</label>
                         <input type="text" name="nome" id="nome" value={formData.nome} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md" />
@@ -181,15 +184,19 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
                             <option>Planejado</option><option>Em Andamento</option><option>Concluído</option><option>Cancelado</option>
                         </select>
                     </div>
-                    
-                    {/* Gestão de Eventos */}
                     <div className="space-y-4 pt-4 border-t">
                         <h3 className="text-lg font-medium text-slate-800">Marcos do Lançamento</h3>
                         {events.map((event, index) => {
-                            const colorClasses = getEventColorClasses(event.nome);
+                            let colorClasses;
+                            if (event.is_custom) {
+                                customEventIndex++;
+                                colorClasses = eventColorMap[`custom_${customEventIndex}` as keyof typeof eventColorMap] || eventColorMap['padrão'];
+                            } else {
+                                colorClasses = getEventColorClasses(event.nome);
+                            }
                             return (
                                 <div key={event.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-4 p-3 bg-slate-50 rounded-md border">
-                                    <input type="text" placeholder="Nome do Evento Personalizado" value={event.nome} readOnly={!event.is_custom} onChange={(e) => handleEventChange(index, 'nome', e.target.value)} className={`w-full px-3 py-2 border border-slate-300 rounded-md font-semibold ${colorClasses}`} />
+                                    <input type="text" placeholder={`Evento Personalizado ${customEventIndex}`} value={event.nome} readOnly={!event.is_custom} onChange={(e) => handleEventChange(index, 'nome', e.target.value)} className={`w-full px-3 py-2 border border-slate-300 rounded-md font-semibold ${colorClasses}`} />
                                     <div className="flex items-center gap-2">
                                          <label className="text-sm text-slate-600">Início:</label>
                                          <input type="date" value={event.data_inicio} onChange={(e) => handleEventChange(index, 'data_inicio', e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md" required={!!event.nome} />
@@ -202,8 +209,6 @@ export default function EditForm({ initialData }: { initialData: LaunchData }) {
                             );
                         })}
                     </div>
-
-                    {/* Botões de Ação */}
                     <div className="flex justify-end pt-4 gap-4 border-t border-slate-200 mt-6">
                         <button type="button" onClick={() => router.push('/lancamentos')} className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300">Cancelar</button>
                         <button type="submit" disabled={isSaving} className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg hover:bg-slate-700 disabled:opacity-50">

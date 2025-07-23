@@ -14,11 +14,13 @@ const iconMap = {
   "fa-map-signs": <FaMapSigns />,
 };
 
+
 const menuItems = [
     {
         title: "Dashboards",
         icon: "fa-chart-pie",
         links: [
+            { name: "Análise de Campanha", href: "/dashboard-analise-campanha" },
             { name: "Evolução de Canal ", href: "/dashboard-evolucao-por-hora" },
             { name: "Resumo Diário", href: "/dashboard-resumo" },
             { name: "Performance e Controle", href: "/dashboard-performance" },

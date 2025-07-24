@@ -1,14 +1,14 @@
+// Substitua o conteúdo do seu src/app/layout.tsx por este código
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-// Certifique-se de que estes componentes existem e seus pacotes estão instalados.
 import Sidebar from "@/components/Sidebar";
 import { Toaster } from "react-hot-toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
-// CORREÇÃO: Removidos caracteres invisíveis que causavam o erro de sintaxe.
 export const metadata: Metadata = {
   title: "Painel de Lançamentos",
   description: "Painel de controle Eduser",

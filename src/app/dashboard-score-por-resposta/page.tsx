@@ -1,5 +1,5 @@
-// VERSÃO FINAL LIMPA E PRONTA (sem o bloco de debug)
-// COPIE E COLE EM: src/app/dashboard-score-por-resposta/page.tsx
+// COPIA E COLA ESTE CÓDIGO COMPLETO
+// EM: src/app/dashboard-score-por-resposta/page.tsx
 
 'use client';
 
@@ -53,14 +53,16 @@ export default function ScorePorRespostaPage() {
     setError(null);
 
     try {
-      // Chamando a função final e simplificada
       const { data, error: rpcError } = await supabase.rpc('get_answer_counts_for_launch', {
         p_launch_id: launchId,
       });
 
       if (rpcError) throw rpcError;
       
-      setAnalysisData(data || []);
+      // ================== AQUI ESTÁ A CORREÇÃO ==================
+      // Nós garantimos ao TypeScript que 'data' tem o formato QuestionAnalysisData[]
+      setAnalysisData((data as QuestionAnalysisData[]) || []);
+      // ========================================================
 
     } catch (err: any) {
       console.error(err);

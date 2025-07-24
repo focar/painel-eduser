@@ -1,3 +1,5 @@
+// COPIE ESTE CÓDIGO INTEIRO E COLE NO SEU ARQUIVO
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -64,6 +66,17 @@ const ScorePieChartCard = ({ title, data, launchId, launchName, categoryKey }: {
 }) => {
     const supabase = createClientComponentClient();
     const [isExporting, setIsExporting] = useState(false);
+
+    // ================== INÍCIO DA CORREÇÃO ==================
+    // 1. Criamos uma função segura para renderizar a etiqueta do gráfico.
+    const renderCustomizedLabel = ({ percent }: { percent?: number }) => {
+        // Se a propriedade 'percent' não existir ou for 0, não exibe nada para evitar o erro.
+        if (!percent) {
+            return null;
+        }
+        return `${(percent * 100).toFixed(0)}%`;
+    };
+    // ================== FIM DA CORREÇÃO ==================
 
     const exportToCSV = async () => {
         if (!launchId) return;
@@ -146,7 +159,8 @@ const ScorePieChartCard = ({ title, data, launchId, launchName, categoryKey }: {
                 <div style={{ width: '100%', height: 300 }}>
                     <ResponsiveContainer>
                         <PieChart>
-                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                            {/* 2. Usamos a função segura na propriedade 'label' */}
+                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" labelLine={false} label={renderCustomizedLabel}>
                                 {/* Lógica de cor atualizada */}
                                 {data.map((entry, index) => (
                                     <Cell 

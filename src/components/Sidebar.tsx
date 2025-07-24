@@ -25,6 +25,9 @@ const menuItems = [
             { name: "Resumo Diário", href: "/dashboard-resumo" },
             { name: "Performance e Controle", href: "/dashboard-performance" },
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
+            { name: "Análise de Score", href: "/dashboard-analise-score" },
+            { name: "Análise de Respostas", href: "/dashboard-score-por-resposta" },
+            
             { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/detalhamento-canais" },
             { name: "Posição Final", href: "/dashboard-posicao-final" }, 

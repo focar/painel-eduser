@@ -1,5 +1,3 @@
-// COPIE ESTE CÓDIGO INTEIRO E COLE NO SEU ARQUIVO
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';

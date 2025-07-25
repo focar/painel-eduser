@@ -28,18 +28,48 @@ type LeadExportData = {
     utm_term: string;
 };
 
-// --- Mapa de Cores Consistentes para as Fontes de Tráfego ---
-const SOURCE_COLOR_MAP: { [key: string]: string } = {
-    'google': '#4285F4',
-    'meta': '#E1306C',
-    'facebook': '#1877F2',
-    'instagram': '#E1306C',
-    'organic': '#4CAF50',
-    'tiktok': '#000000',
-    'youtube': '#FF0000',
-    'N/A': '#BDBDBD'
+// ================== INÍCIO DA NOVA LÓGICA DE CORES ==================
+
+// Função que gera um número único (hash) a partir de um texto.
+const hashCode = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0; // Converte para um inteiro de 32bit
+    }
+    return hash;
 };
-const FALLBACK_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
+
+// Função que gera uma cor única e consistente a partir de qualquer texto.
+const getColorForString = (name: string): string => {
+    const lowerCaseName = (name || 'N/A').toLowerCase();
+
+    // Cores especiais para nomes comuns, para garantir que sejam sempre bonitas
+    const predefinedColors: { [key: string]: string } = {
+        'google': '#4285F4',
+        'meta': '#E1306C',
+        'facebook': '#1877F2',
+        'instagram': '#D82D7E',
+        'organic': '#4CAF50',
+        'indefinido': '#BDBDBD',
+        'n/a': '#BDBDBD'
+    };
+
+    if (predefinedColors[lowerCaseName]) {
+        return predefinedColors[lowerCaseName];
+    }
+    
+    // Para todos os outros nomes, calcula uma cor com base no texto
+    const hash = hashCode(lowerCaseName);
+    const hue = Math.abs(hash % 360); // Hue (cor) de 0 a 360
+    const saturation = 70; // Saturação fixa para cores vibrantes
+    const lightness = 55; // Luminosidade fixa para cores nem muito claras nem escuras
+
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
+
+// ================== FIM DA NOVA LÓGICA DE CORES ==================
 
 
 // --- Componentes ---
@@ -64,17 +94,6 @@ const ScorePieChartCard = ({ title, data, launchId, launchName, categoryKey }: {
 }) => {
     const supabase = createClientComponentClient();
     const [isExporting, setIsExporting] = useState(false);
-
-    // ================== INÍCIO DA CORREÇÃO ==================
-    // 1. Criamos uma função segura para renderizar a etiqueta do gráfico.
-    const renderCustomizedLabel = ({ percent }: { percent?: number }) => {
-        // Se a propriedade 'percent' não existir ou for 0, não exibe nada para evitar o erro.
-        if (!percent) {
-            return null;
-        }
-        return `${(percent * 100).toFixed(0)}%`;
-    };
-    // ================== FIM DA CORREÇÃO ==================
 
     const exportToCSV = async () => {
         if (!launchId) return;
@@ -157,18 +176,25 @@ const ScorePieChartCard = ({ title, data, launchId, launchName, categoryKey }: {
                 <div style={{ width: '100%', height: 300 }}>
                     <ResponsiveContainer>
                         <PieChart>
-                            {/* 2. Usamos a função segura na propriedade 'label' */}
-                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" labelLine={false} label={renderCustomizedLabel}>
-                                {/* Lógica de cor atualizada */}
+                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8">
                                 {data.map((entry, index) => (
                                     <Cell 
                                         key={`cell-${index}`} 
-                                        fill={SOURCE_COLOR_MAP[(entry.name || 'N/A').toLowerCase()] || FALLBACK_COLORS[index % FALLBACK_COLORS.length]} 
+                                        fill={getColorForString(entry.name)} 
                                     />
                                 ))}
                             </Pie>
                             <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
-                            <Legend iconType="circle" />
+                            <Legend
+                                iconType="circle"
+                                formatter={(value) => {
+                                    const MAX_LENGTH = 25;
+                                    if (value.length > MAX_LENGTH) {
+                                        return `${value.substring(0, MAX_LENGTH)}...`;
+                                    }
+                                    return value;
+                                }}
+                            />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
@@ -217,7 +243,12 @@ export default function AnaliseScorePage() {
                 const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
                 if (error) throw error;
                 if (launchesData && launchesData.length > 0) {
-                    const sorted = [...launchesData].sort((a, b) => a.nome.localeCompare(b.nome));
+                    const sorted = [...launchesData].sort((a, b) => {
+                        if (a.status !== b.status) {
+                            return a.status === 'Em Andamento' ? -1 : 1;
+                        }
+                        return a.nome.localeCompare(b.nome);
+                    });
                     setLaunches(sorted);
                     if (!selectedLaunch) setSelectedLaunch(sorted[0].id);
                 } else {

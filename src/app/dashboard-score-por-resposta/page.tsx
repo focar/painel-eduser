@@ -60,8 +60,8 @@ export default function ScorePorRespostaPage() {
       if (rpcError) throw rpcError;
       
       // ================== AQUI ESTÁ A CORREÇÃO ==================
-      // Nós garantimos ao TypeScript que 'data' tem o formato QuestionAnalysisData[]
-      setAnalysisData((data as QuestionAnalysisData[]) || []);
+      // Adicionamos 'as unknown' para a conversão de tipo segura.
+      setAnalysisData((data as unknown as QuestionAnalysisData[]) || []);
       // ========================================================
 
     } catch (err: any) {

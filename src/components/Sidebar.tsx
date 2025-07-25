@@ -27,6 +27,8 @@ const menuItems = [
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
             { name: "Análise de Score", href: "/dashboard-analise-score" },
             { name: "Análise de Respostas", href: "/dashboard-score-por-resposta" },
+            { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
+            { name: "Perfil de Score", href: "/dashboard-perfil-score" },
             { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/detalhamento-canais" },
             { name: "Posição Final", href: "/dashboard-posicao-final" }, 

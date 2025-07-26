@@ -5,9 +5,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Database } from "@/lib/database.types"; 
+import { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
 import { QuestionAnalysisData, Launch } from "@/lib/types"; 
-
 import QuestionAnalysisCard from "@/components/dashboard/QuestionAnalysisCard";
 
 const Spinner = () => (

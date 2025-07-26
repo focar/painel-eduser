@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
+import type { Database } from "@/lib/supabase-types"; 
 import { Launch, ScoreProfileQuestion } from "@/lib/types";
 import ScoreProfileCard from "@/components/dashboard/ScoreProfileCard";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
@@ -24,9 +24,6 @@ const Spinner = () => (
         <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" />
     </div>
 );
-
-// Este componente não é mais necessário, a lógica estará integrada na página.
-// const KpiCard = ...
 
 export default function PerfilDeScorePage() {
     const supabase = createClientComponentClient<Database>();
@@ -61,7 +58,10 @@ export default function PerfilDeScorePage() {
             console.error(kpiError);
             setKpiData(null);
         } else {
-            setKpiData(kpiResult);
+            // ================== INÍCIO DA CORREÇÃO ==================
+            // Adicionamos a conversão de tipo segura para o kpiData
+            setKpiData(kpiResult as unknown as KpiData);
+            // ================== FIM DA CORREÇÃO ==================
         }
 
         const { data: breakdownResult, error: breakdownError } = await supabase.rpc('get_score_profile_by_answers', { 
@@ -77,19 +77,19 @@ export default function PerfilDeScorePage() {
             setData((breakdownResult as unknown as ScoreProfileQuestion[]) || []);
         }
         setLoading(false);
-    }, [supabase, selectedScore]); // Adicionado selectedScore como dependência
+    }, [supabase, selectedScore]);
 
     useEffect(() => {
         if (selectedLaunch) {
             fetchData(selectedLaunch);
         }
     }, [selectedLaunch, fetchData]);
-
-    // Atualiza apenas os dados dos cards quando o score selecionado muda
+    
     useEffect(() => {
         const fetchBreakdownOnly = async () => {
-            if (!selectedLaunch) return;
-            // Mostra um loading mais subtil para a troca de tabs
+            if (!selectedLaunch || !kpiData) return; // Não roda se os KPIs ainda não carregaram
+            
+            // Reutiliza o estado de loading para feedback visual
             setLoading(true); 
             const { data: breakdownResult, error: breakdownError } = await supabase.rpc('get_score_profile_by_answers', { 
                 p_launch_id: selectedLaunch,
@@ -103,8 +103,11 @@ export default function PerfilDeScorePage() {
             }
             setLoading(false);
         };
-        fetchBreakdownOnly();
-    }, [selectedScore, selectedLaunch, supabase]);
+        // A busca inicial é feita pelo outro useEffect. Este só roda em mudanças.
+        if (kpiData) {
+            fetchBreakdownOnly();
+        }
+    }, [selectedScore, selectedLaunch, kpiData, supabase]);
 
 
     const handleExport = async () => {
@@ -121,11 +124,8 @@ export default function PerfilDeScorePage() {
                             {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                         </select>
                     </div>
-                    {/* O Dropdown de Score foi removido e substituído pelos KPIs interativos */}
                 </div>
             </header>
-
-            {/* ================== NOVA SEÇÃO DE KPIS INTERATIVOS ================== */}
             <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                     {!kpiData && loading ? (
@@ -158,7 +158,6 @@ export default function PerfilDeScorePage() {
                     </button>
                 </div>
             </div>
-            {/* =================================================================== */}
 
             <main>
                 {loading ? <Spinner /> : (

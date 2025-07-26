@@ -1,15 +1,14 @@
-// CAMINHO: src/app/dashboard-analise-respostas-score/page.tsx
+// CAMINHO: src/app/dashboard-respostas-por-score/page.tsx
 
 'use client';
 
 import { useState, useEffect, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Database } from "@/lib/database.types"; 
+import type { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
 import { Launch, QuestionBreakdownData } from "@/lib/types";
 import AnswerBreakdownCard from "@/components/dashboard/AnswerBreakdownCard";
-import { FaSpinner } from "react-icons/fa"; // Importa o ícone
+import { FaSpinner } from "react-icons/fa";
 
-// Componente Spinner completo
 const Spinner = () => (
     <div className="flex justify-center items-center h-40">
         <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" />

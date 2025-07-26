@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
+import type { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
 import { Launch, ScoreProfileQuestion } from "@/lib/types";
 import ScoreProfileCard from "@/components/dashboard/ScoreProfileCard";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";

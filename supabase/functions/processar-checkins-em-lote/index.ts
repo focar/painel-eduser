@@ -1,138 +1,96 @@
-// File: supabase/functions/processar-checkins-em-lote/index.ts
-// Versão Final: Ignora espaços em branco nos cabeçalhos e no texto das perguntas.
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-function parseSheetDate(dateString: string): Date | null {
-  if (!dateString || typeof dateString !== 'string') return null;
-  const parts = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{1,2})/);
-  if (!parts) return null;
-  const day = parseInt(parts[1], 10);
-  const month = parseInt(parts[2], 10) - 1;
-  const year = parseInt(parts[3], 10);
-  const hour = parseInt(parts[4], 10);
-  const minute = parseInt(parts[5], 10);
-  const date = new Date(year, month, day, hour, minute);
-  if (isNaN(date.getTime())) return null;
-  return date;
-}
-
+// Função principal
 serve(async (req) => {
+  // Tratamento de CORS para requisições OPTIONS (boa prática)
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: { 
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    } });
   }
 
+  // --- Bloco de Validação de Segurança ---
   try {
-    const secretKey = Deno.env.get('CUSTOM_API_KEY')
-    const authHeader = req.headers.get('Authorization')
-    if (!secretKey || authHeader !== `Bearer ${secretKey}`) {
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }})
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const authorizationHeader = req.headers.get('Authorization');
+    const expectedAuthHeader = `Bearer ${serviceKey}`;
+
+    if (!serviceKey || authorizationHeader !== expectedAuthHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Chave de autorização inválida ou ausente.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-    
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ error: `Erro de segurança: ${e.message}` }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // --- Bloco de Lógica Principal ---
+  try {
+    const checkins = await req.json();
+    console.log(`LÓGICA INICIADA: Recebido um lote com ${checkins.length} check-ins.`);
+
+    // Inicializa o cliente Supabase para se comunicar com o banco de dados
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
-    const { sheetName, checkins } = await req.json();
+    // Itera sobre cada check-in recebido no lote
+    for (const checkin of checkins) {
+      if (!checkin.email) {
+        console.error("REGISTRO IGNORADO por não conter e-mail:", checkin);
+        continue; // Pula para o próximo registro do lote
+      }
 
-    if (!checkins || !Array.isArray(checkins) || checkins.length === 0) {
-      return new Response(JSON.stringify({ error: 'Um array de "checkins" é obrigatório.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }})
-    }
+      // Passo 1: Encontrar o lead pelo e-mail
+      console.log(`[PASSO 1] Buscando lead com o e-mail: ${checkin.email}`);
+      const { data: lead, error: leadError } = await supabaseClient
+        .from('leads')
+        .select('id')
+        .eq('email', checkin.email)
+        .single(); // .single() espera encontrar exatamente 1 resultado
 
-    let launchId = null;
+      if (leadError || !lead) {
+        console.error(`[FALHA PASSO 1] LEAD NÃO ENCONTRADO ou ERRO ao buscar: ${checkin.email}. Erro:`, leadError);
+        continue; // Pula para o próximo registro
+      }
 
-    if (sheetName) {
-        const { data: launchByName } = await supabaseClient
-            .from('lancamentos').select('id').eq('nome', sheetName).eq('status', 'Em Andamento').single();
-        if (launchByName) launchId = launchByName.id;
-    }
+      console.log(`[SUCESSO PASSO 1] Lead encontrado. ID: ${lead.id}.`);
 
-    if (!launchId) {
-        const { data: activeLaunchData } = await supabaseClient.rpc('get_active_launch');
-        if (activeLaunchData && activeLaunchData.length > 0) {
-            launchId = activeLaunchData[0].launch_id;
-        }
-    }
+      // Passo 2: Inserir as respostas na tabela 'respostas_leads'
+      console.log(`[PASSO 2] Tentando inserir respostas para o lead ID ${lead.id}...`);
+      const { error: insertError } = await supabaseClient
+        .from('respostas_leads')
+        .insert({
+          lead_id: lead.id,
+          respostas: checkin // Salva o objeto inteiro do check-in na coluna JSONB
+        });
 
-    if (!launchId) {
-        return new Response(JSON.stringify({ error: "Nenhum lançamento ativo foi encontrado." }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }})
-    }
-
-    const { data: launch } = await supabaseClient.from('lancamentos').select('associated_survey_ids').eq('id', launchId).single();
-    if (!launch || !launch.associated_survey_ids || launch.associated_survey_ids.length === 0) {
-      return new Response(JSON.stringify({ error: `Lançamento encontrado, mas não tem pesquisas associadas.` }), { status: 404 })
-    }
-    const surveyIds = launch.associated_survey_ids;
-
-    const { data: surveyQuestions } = await supabaseClient.from('pesquisas_perguntas').select('perguntas!inner(*, opcoes)').in('pesquisa_id', surveyIds);
-    if (!surveyQuestions || surveyQuestions.length === 0) {
-      return new Response(JSON.stringify({ error: `Nenhuma pergunta foi encontrada para as pesquisas associadas.` }), { status: 404 })
-    }
-    
-    // --- CORREÇÃO CRUCIAL AQUI ---
-    // Limpa o texto das perguntas da base de dados para garantir a correspondência.
-    const questionsMap = new Map(surveyQuestions.map(p => [p.perguntas.texto.trim(), p.perguntas]));
-
-    const incomingEmails = checkins.map(c => (c.email || '').trim().toLowerCase()).filter(Boolean);
-    const { data: existingLeads } = await supabaseClient.from('leads').select('id, email, score').eq('launch_id', launchId).in('email', incomingEmails);
-    const leadsMap = new Map(existingLeads.map(l => [l.email, l]));
-
-    const respostasToUpsert = [];
-    const leadsToUpdate = [];
-    
-    for (const checkinRow of checkins) {
-      const email = (checkinRow.email || '').trim().toLowerCase();
-      const lead = leadsMap.get(email);
-
-      if (lead) {
-        let newPoints = 0;
-        const answersToSave = {};
-        for (const header in checkinRow) {
-          // --- CORREÇÃO CRUCIAL AQUI ---
-          // Limpa o cabeçalho da planilha antes de fazer a comparação.
-          if (questionsMap.has(header.trim())) {
-            const question = questionsMap.get(header.trim());
-            const givenAnswer = checkinRow[header];
-            answersToSave[question.id] = givenAnswer;
-            const chosenOption = question.opcoes.find(opt => opt.texto === givenAnswer);
-            if (chosenOption && chosenOption.peso) {
-              newPoints += chosenOption.peso;
-            }
-          }
-        }
-        if (Object.keys(answersToSave).length > 0) {
-          respostasToUpsert.push({ lead_id: lead.id, respostas: answersToSave });
-          
-          const dateFromSheet = parseSheetDate(checkinRow.data_checkin);
-          const checkinDate = dateFromSheet ? dateFromSheet.toISOString() : new Date().toISOString();
-
-          leadsToUpdate.push({ 
-            id: lead.id, 
-            score: (lead.score || 0) + newPoints, 
-            check_in_at: checkinDate
-          });
-        }
+      if (insertError) {
+        console.error(`[FALHA PASSO 2] ERRO ao inserir respostas para o lead ID ${lead.id}:`, insertError);
+      } else {
+        console.log(`[SUCESSO PASSO 2] Respostas inseridas com sucesso para o lead ID ${lead.id}.`);
+        // É AQUI que a sua lógica de CÁLCULO DE SCORE deve ser chamada
       }
     }
 
-    if (respostasToUpsert.length > 0) {
-      await supabaseClient.from('respostas_leads').upsert(respostasToUpsert, { onConflict: 'lead_id' });
-    }
-    if (leadsToUpdate.length > 0) {
-      await supabaseClient.from('leads').upsert(leadsToUpdate, { onConflict: 'id' });
-    }
-
-    return new Response(JSON.stringify({ message: `${leadsToUpdate.length} de ${checkins.length} check-ins processados com sucesso!` }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }})
+    // Retorna a mensagem de sucesso final após processar todo o lote
+    return new Response(
+      JSON.stringify({ message: 'Processamento do lote concluído com sucesso.' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
 
   } catch (e) {
-    console.error('Erro na execução da função de lote de check-ins:', e)
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }})
+    console.error("ERRO GERAL no bloco de lógica principal:", e);
+    return new Response(
+      JSON.stringify({ error: `Erro no processamento: ${e.message}` }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
-})
+});

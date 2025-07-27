@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -9,7 +9,20 @@ import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import { FaSpinner } from 'react-icons/fa';
 import { addDays } from 'date-fns';
 
-// --- Tipos de Dados ---
+// --- Tipos de Dados (Atualizados) ---
+type LaunchEvent = {
+    nome: string;
+    data_inicio: string;
+    data_fim: string;
+};
+
+type Launch = {
+    id: string;
+    nome: string;
+    status: string;
+    eventos: LaunchEvent[] | null;
+};
+
 type CalendarEvent = {
     title: string;
     start: string;
@@ -23,97 +36,138 @@ type CalendarEvent = {
     }
 };
 
-type LaunchEventData = {
-    nome: string;
-    data_inicio: string;
-    data_fim: string;
-};
-
-// --- Dicionário de Cores ---
+// --- Dicionário de Cores (Sem alterações) ---
 const eventColorMap: { [key: string]: string } = {
-    'padrão': '#71717a',
-    'planejamento': '#af6813',
-    'pré-lançamento': '#fea43d',
-    'início da captação': '#91258e',
-    'cpl 1': '#c563dc',
-    'live aprofundamento cpl1': '#5d77ab',
-    'cpl 2': '#182777',
-    'cpl 3': '#00aef1',
-    'live encerramento': '#01aa9c',
-    'carrinho aberto': '#01a550',
-    'evento personalisado 1': '#ec98ca',
-    'evento personalisado 2': '#ed008d',
+    'padrão': '#71717a', 'planejamento': '#af6813', 'pré-lançamento': '#fea43d',
+    'início da captação': '#91258e', 'cpl 1': '#c563dc', 'live aprofundamento cpl1': '#5d77ab',
+    'cpl 2': '#182777', 'cpl 3': '#00aef1', 'live encerramento': '#01aa9c',
+    'carrinho aberto': '#01a550', 'evento personalisado 1': '#ec98ca', 'evento personalisado 2': '#ed008d',
 };
 
 const getEventColor = (eventName: string): string => {
     const lowerCaseName = eventName.toLowerCase();
-    // Procura por correspondência exata primeiro
-    if (eventColorMap[lowerCaseName]) {
-        return eventColorMap[lowerCaseName];
-    }
-    // Procura por palavras-chave se não houver correspondência exata
+    if (eventColorMap[lowerCaseName]) return eventColorMap[lowerCaseName];
     for (const key in eventColorMap) {
-        if (lowerCaseName.includes(key)) {
-            return eventColorMap[key];
-        }
+        if (lowerCaseName.includes(key)) return eventColorMap[key];
     }
     return eventColorMap['padrão'];
 };
 
-// --- Componente Principal ---
+
+// --- Componente Principal (Modificado) ---
 export default function HomePage() {
     const supabase = createClientComponentClient();
-    const [events, setEvents] = useState<CalendarEvent[]>([]);
+    const [allLaunches, setAllLaunches] = useState<Launch[]>([]);
+    const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
 
-    const fetchCalendarEvents = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const { data: launches, error } = await supabase
-                .from('lancamentos')
-                .select('id, nome, eventos');
+    // Busca e ordena os lançamentos ao carregar a página
+    useEffect(() => {
+        const fetchLaunches = async () => {
+            setIsLoading(true);
+            try {
+                // 1. Busca os lançamentos, agora incluindo o 'status'
+                const { data: launches, error } = await supabase
+                    .from('lancamentos')
+                    .select('id, nome, status, eventos');
 
-            if (error) throw error;
+                if (error) throw error;
 
-            if (launches) {
-                const formattedEvents: CalendarEvent[] = [];
-                
-                launches.forEach(launch => {
-                    if (launch.eventos && Array.isArray(launch.eventos)) {
-                        (launch.eventos as LaunchEventData[]).forEach(event => {
-                            if (event.nome && event.data_inicio) {
-                                const eventColor = getEventColor(event.nome);
-                                const endDate = event.data_fim ? addDays(new Date(event.data_fim), 1).toISOString().split('T')[0] : undefined;
+                if (launches) {
+                    // 2. Define a ordem de prioridade dos status
+                    const statusOrder: { [key: string]: number } = {
+                        'Em Andamento': 1,
+                        'Planejado': 2,
+                        'Concluído': 3,
+                    };
 
-                                formattedEvents.push({
-                                    title: `${launch.nome}: ${event.nome}`,
-                                    start: event.data_inicio,
-                                    end: endDate,
-                                    backgroundColor: eventColor,
-                                    borderColor: eventColor,
-                                    allDay: true,
-                                    extendedProps: { launchName: launch.nome, eventName: event.nome }
-                                });
-                            }
-                        });
+                    // 3. Ordena a lista de lançamentos
+                    const sortedLaunches = [...launches].sort((a, b) => {
+                        const orderA = statusOrder[a.status] || 99;
+                        const orderB = statusOrder[b.status] || 99;
+                        return orderA - orderB;
+                    });
+                    
+                    setAllLaunches(sortedLaunches);
+
+                    // 4. Define o lançamento "Em Andamento" como padrão, se existir
+                    const inProgressLaunch = sortedLaunches.find(l => l.status === 'Em Andamento');
+                    if (inProgressLaunch) {
+                        setSelectedLaunchId(inProgressLaunch.id);
+                    } else if (sortedLaunches.length > 0) {
+                        // Se não, seleciona o primeiro da lista ordenada
+                        setSelectedLaunchId(sortedLaunches[0].id);
                     }
-                });
-                setEvents(formattedEvents);
+                }
+            } catch (err: any) {
+                console.error("Erro ao buscar lançamentos:", err);
+            } finally {
+                setIsLoading(false);
             }
-        } catch (err: any) {
-            console.error("Erro ao buscar eventos do calendário:", err);
-        } finally {
-            setIsLoading(false);
-        }
+        };
+
+        fetchLaunches();
     }, [supabase]);
 
-    useEffect(() => {
-        fetchCalendarEvents();
-    }, [fetchCalendarEvents]);
+    // Filtra os eventos a serem exibidos com base no lançamento selecionado
+    const filteredEvents = useMemo((): CalendarEvent[] => {
+        if (!selectedLaunchId || allLaunches.length === 0) {
+            return [];
+        }
+
+        const selectedLaunch = allLaunches.find(launch => launch.id === selectedLaunchId);
+        if (!selectedLaunch || !selectedLaunch.eventos) {
+            return [];
+        }
+        
+        const formattedEvents: CalendarEvent[] = [];
+        selectedLaunch.eventos.forEach(event => {
+            if (event.nome && event.data_inicio) {
+                const eventColor = getEventColor(event.nome);
+                const endDate = event.data_fim ? addDays(new Date(event.data_fim), 1).toISOString().split('T')[0] : undefined;
+
+                formattedEvents.push({
+                    title: event.nome, // O nome do lançamento já está no título da página
+                    start: event.data_inicio,
+                    end: endDate,
+                    backgroundColor: eventColor,
+                    borderColor: eventColor,
+                    allDay: true,
+                    extendedProps: { launchName: selectedLaunch.nome, eventName: event.nome }
+                });
+            }
+        });
+
+        return formattedEvents;
+    }, [selectedLaunchId, allLaunches]);
 
     return (
         <div className="p-4 md:p-6 bg-white rounded-lg shadow-md">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-6">Agenda de Lançamentos</h1>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Agenda de Lançamentos</h1>
+                
+                {/* --- NOVO DROPDOWN DE FILTRO --- */}
+                <div className="w-full sm:w-auto">
+                    <label htmlFor="launch-select" className="sr-only">Selecionar Lançamento</label>
+                    <select 
+                        id="launch-select"
+                        value={selectedLaunchId}
+                        onChange={e => setSelectedLaunchId(e.target.value)}
+                        disabled={isLoading}
+                        className="w-full sm:w-64 px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100"
+                    >
+                        {isLoading ? (
+                            <option>Carregando...</option>
+                        ) : (
+                            allLaunches.map(launch => (
+                                <option key={launch.id} value={launch.id}>
+                                    {launch.nome} ({launch.status})
+                                </option>
+                            ))
+                        )}
+                    </select>
+                </div>
+            </div>
             
             {isLoading ? (
                 <div className="flex justify-center items-center h-96"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>
@@ -123,7 +177,7 @@ export default function HomePage() {
                         plugins={[dayGridPlugin, interactionPlugin]}
                         initialView="dayGridMonth"
                         locale={ptBrLocale}
-                        events={events}
+                        events={filteredEvents} // <-- Usa os eventos já filtrados
                         headerToolbar={{
                             left: 'prev,next today',
                             center: 'title',

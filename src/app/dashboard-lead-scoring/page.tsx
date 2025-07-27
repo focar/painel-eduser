@@ -137,62 +137,63 @@ const ScoringTable = ({ data, groupBy, launchName }: { data: TableData[], groupB
         document.body.removeChild(link);
     };
 
+    
     return (
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-slate-700">Scoring por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
-                <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors">
-                    <FaFileCsv /> Exportar
-                </button>
-            </div>
-            <div className="overflow-x-auto">
-                <table className="min-w-full hidden md:table">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Canal</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Inscrições</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Check-ins</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-green-600 uppercase">Quente (&gt;80)</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-lime-600 uppercase">Quente-Morno</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-amber-600 uppercase">Morno</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-orange-600 uppercase">Morno-Frio</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-red-600 uppercase">Frio (&lt;35)</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
-                        {data.map((row, index) => (
-                            <tr key={row.canal + index}>
-                                <td className="p-3 md:px-4 md:py-4 font-medium text-slate-900 md:max-w-xs truncate" title={row.canal}>{row.canal}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600">{row.inscricoes}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600">{row.check_ins}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-green-600">{row.quente_mais_80}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-lime-600">{row.quente_morno}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-amber-600">{row.morno}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-orange-600">{row.morno_frio}</td>
-                                <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-red-600">{row.frio_menos_35}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                 <div className="md:hidden space-y-4 mt-4">
+    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
+        <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-slate-700">Scoring por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
+            <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors">
+                <FaFileCsv /> Exportar
+            </button>
+        </div>
+        <div className="overflow-x-auto">
+            <table className="min-w-full hidden md:table">
+                <thead className="bg-slate-50">
+                    <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Canal</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Inscrições</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Check-ins</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-blue-800 uppercase">Frio (&lt;35)</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-blue-400 uppercase">Morno-Frio</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-yellow-500 uppercase">Morno</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-orange-500 uppercase">Quente-Morno</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-red-600 uppercase">Quente (&gt;80)</th>
+                    </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-200">
                     {data.map((row, index) => (
-                        <div key={row.canal + index} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-                            <div className="font-bold text-slate-800 truncate" title={row.canal}>{row.canal}</div>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div><span className="font-medium text-slate-500">Inscrições:</span> <span className="font-semibold text-slate-700 float-right">{row.inscricoes}</span></div>
-                                <div><span className="font-medium text-slate-500">Check-ins:</span> <span className="font-semibold text-slate-700 float-right">{row.check_ins}</span></div>
-                                <div><span className="font-medium text-green-600">Quente:</span> <span className="font-semibold text-green-700 float-right">{row.quente_mais_80}</span></div>
-                                <div><span className="font-medium text-lime-600">Q-Morno:</span> <span className="font-semibold text-lime-700 float-right">{row.quente_morno}</span></div>
-                                <div><span className="font-medium text-amber-600">Morno:</span> <span className="font-semibold text-amber-700 float-right">{row.morno}</span></div>
-                                <div><span className="font-medium text-orange-600">M-Frio:</span> <span className="font-semibold text-orange-700 float-right">{row.morno_frio}</span></div>
-                                <div><span className="font-medium text-red-600">Frio:</span> <span className="font-semibold text-red-700 float-right">{row.frio_menos_35}</span></div>
-                            </div>
-                        </div>
+                        <tr key={row.canal + index}>
+                            <td className="p-3 md:px-4 md:py-4 font-medium text-slate-900 md:max-w-xs truncate" title={row.canal}>{row.canal}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600">{row.inscricoes}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600">{row.check_ins}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-blue-800">{row.frio_menos_35}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-blue-400">{row.morno_frio}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-yellow-500">{row.morno}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-orange-500">{row.quente_morno}</td>
+                            <td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-red-600">{row.quente_mais_80}</td>
+                        </tr>
                     ))}
-                </div>
+                </tbody>
+            </table>
+            <div className="md:hidden space-y-4 mt-4">
+                {data.map((row, index) => (
+                    <div key={row.canal + index} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+                        <div className="font-bold text-slate-800 truncate" title={row.canal}>{row.canal}</div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div><span className="font-medium text-slate-500">Inscrições:</span> <span className="font-semibold text-slate-700 float-right">{row.inscricoes}</span></div>
+                            <div><span className="font-medium text-slate-500">Check-ins:</span> <span className="font-semibold text-slate-700 float-right">{row.check_ins}</span></div>
+                            <div><span className="font-medium text-blue-800">Frio:</span> <span className="font-semibold text-blue-800 float-right">{row.frio_menos_35}</span></div>
+                            <div><span className="font-medium text-blue-400">M-Frio:</span> <span className="font-semibold text-blue-400 float-right">{row.morno_frio}</span></div>
+                            <div><span className="font-medium text-yellow-500">Morno:</span> <span className="font-semibold text-yellow-500 float-right">{row.morno}</span></div>
+                            <div><span className="font-medium text-orange-500">Q-Morno:</span> <span className="font-semibold text-orange-500 float-right">{row.quente_morno}</span></div>
+                            <div><span className="font-medium text-red-600">Quente:</span> <span className="font-semibold text-red-600 float-right">{row.quente_mais_80}</span></div>
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
-    );
+    </div>
+);
 };
 // --- FIM DA CORREÇÃO ---
 
@@ -264,11 +265,12 @@ export default function LeadScoringPage() {
             return acc;
         }, { quente_mais_80: 0, quente_morno: 0, morno: 0, morno_frio: 0, frio_menos_35: 0 });
         const chartData = [
-            { name: 'Quente (>80)', value: totals.quente_mais_80, fill: '#16a34a' },
-            { name: 'Quente-Morno (65-79)', value: totals.quente_morno, fill: '#65a30d' },
-            { name: 'Morno (50-64)', value: totals.morno, fill: '#d97706' },
-            { name: 'Morno-Frio (35-49)', value: totals.morno_frio, fill: '#ea580c' },
-            { name: 'Frio (<35)', value: totals.frio_menos_35, fill: '#dc2626' },
+           
+            { name: 'Quente (>80)', value: totals.quente_mais_80, fill: '#fa0606ff' },
+            { name: 'Quente-Morno (65-79)', value: totals.quente_morno, fill: '#c1a519ff' },
+            { name: 'Morno (50-64)', value: totals.morno, fill: '#45b615ff' },
+            { name: 'Morno-Frio (35-49)', value: totals.morno_frio, fill: '#32abd3ff' },
+            { name: 'Frio (<35)', value: totals.frio_menos_35, fill: '#4112e9ff' },
         ];
         return chartData.filter(item => item.value > 0);
     }, [data?.tableData]);

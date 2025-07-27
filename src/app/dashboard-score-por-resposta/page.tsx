@@ -1,11 +1,8 @@
-// COPIA E COLA ESTE CÓDIGO COMPLETO
-// EM: src/app/dashboard-score-por-resposta/page.tsx
-
 'use client';
 
 import { useState, useEffect, useCallback } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
+import type { Database } from "@/lib/supabase-types";
 import { QuestionAnalysisData, Launch } from "@/lib/types"; 
 import QuestionAnalysisCard from "@/components/dashboard/QuestionAnalysisCard";
 
@@ -34,9 +31,20 @@ export default function ScorePorRespostaPage() {
       if (error) {
         console.error("Erro ao buscar lançamentos:", error);
       } else if (data) {
-        setLaunches(data as Launch[]);
-        if (data.length > 0) {
-            setSelectedLaunch(data[0].id);
+        // ================== INÍCIO DA CORREÇÃO DE ORDENAÇÃO ==================
+        const sortedData = [...data].sort((a, b) => {
+            // Prioriza 'Em Andamento' para o topo da lista
+            if (a.status !== b.status) {
+                return a.status === 'Em Andamento' ? -1 : 1;
+            }
+            // Se o status for o mesmo, ordena por nome
+            return a.nome.localeCompare(b.nome);
+        });
+        // ================== FIM DA CORREÇÃO DE ORDENAÇÃO ==================
+        
+        setLaunches(sortedData as Launch[]);
+        if (sortedData.length > 0) {
+            setSelectedLaunch(sortedData[0].id);
         } else {
             setLoading(false);
         }
@@ -58,10 +66,7 @@ export default function ScorePorRespostaPage() {
 
       if (rpcError) throw rpcError;
       
-      // ================== AQUI ESTÁ A CORREÇÃO ==================
-      // Adicionamos 'as unknown' para a conversão de tipo segura.
       setAnalysisData((data as unknown as QuestionAnalysisData[]) || []);
-      // ========================================================
 
     } catch (err: any) {
       console.error(err);

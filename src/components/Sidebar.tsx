@@ -30,7 +30,7 @@ const menuItems = [
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Perfil de Score", href: "/dashboard-perfil-score" },
             { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
-            { name: "Detalhamento Canais", href: "/detalhamento-canais" },
+            { name: "Detalhamento Canais", href: "/dashboard-detalhamento-canais" },
             { name: "Posição Final", href: "/dashboard-posicao-final" }, 
         ],
     },
@@ -101,7 +101,7 @@ export default function Sidebar() {
                     </Link>
                     
                     <div className="flex justify-between items-center text-xs text-slate-400 mt-2 px-1">
-                        <span>v 2.00</span>
+                        <span>v 3.00</span>
                         <span>by FOCAR</span>
                     </div>
                 </div>

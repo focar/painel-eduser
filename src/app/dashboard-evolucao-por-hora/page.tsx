@@ -12,7 +12,7 @@ interface Kpis { total_geral_inscritos: number; total_geral_checkins: number; }
 interface DetailedData { day: string; hour: number; utm_content: string | null; inscricoes: number; checkins: number; }
 interface ApiResponse { kpis: Kpis; detailed_data: DetailedData[]; available_utm_contents: string[]; }
 type GroupedDataByDay = Record<string, DetailedData[]>;
-type GroupedDataByUtm = Record<string, DetailedDataByDay>;
+type GroupedDataByUtm = Record<string, GroupedDataByDay>;
 type Launch = { id: string; nome: string; status: string; };
 type ChartDataPoint = { name: string; Inscrições: number; 'Check-ins': number; originalDate?: Date };
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, ReactElement } from 'react';
 // CORREÇÃO: Importa o cliente recomendado e remove a importação antiga do 'db'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaSpinner } from 'react-icons/fa';
 
@@ -24,7 +24,7 @@ const ChartCard = ({ title, children }: { title: string, children: ReactElement 
 
 export default function ResumoDiarioPage() {
     // CORREÇÃO: Cria a instância do cliente da forma correta
-    const supabase = createClientComponentClient();
+  const supabase = createClient();
 
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');

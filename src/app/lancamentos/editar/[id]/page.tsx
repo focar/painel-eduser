@@ -1,7 +1,7 @@
 // CAMINHO: src/app/lancamentos/editar/[id]/page.tsx
 
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+// --- CORREÇÃO: Importa o novo cliente para o servidor ---
+import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import EditForm from './EditForm'; // Importa o formulário do ficheiro ao lado
 
@@ -20,7 +20,8 @@ type PageProps = { params: { id: string }; };
 
 // Função para buscar o lançamento por ID
 async function getLaunchById(id: string): Promise<LaunchData> {
-    const supabase = createServerComponentClient({ cookies });
+    // --- CORREÇÃO: Usa a nova forma de criar o cliente ---
+    const supabase = createClient();
     const { data, error } = await supabase
         .from('lancamentos')
         .select('id, nome, descricao, status, eventos, associated_survey_ids')
@@ -36,7 +37,8 @@ async function getLaunchById(id: string): Promise<LaunchData> {
 
 // Função para buscar TODAS as pesquisas disponíveis
 async function getAllSurveys(): Promise<Survey[]> {
-    const supabase = createServerComponentClient({ cookies });
+    // --- CORREÇÃO: Usa a nova forma de criar o cliente ---
+    const supabase = createClient();
     const { data, error } = await supabase.from('pesquisas').select('id, nome');
     if (error) {
         console.error("Erro ao buscar pesquisas:", error);

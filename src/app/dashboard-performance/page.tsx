@@ -1,46 +1,39 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { FaSyncAlt, FaSpinner } from 'react-icons/fa';
-import { subDays, startOfDay, endOfDay, format } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createClient } from '@/utils/supabase/client';
+import toast from 'react-hot-toast';
+import { FaSpinner, FaFilter, FaUsers, FaUserCheck, FaGlobe, FaBullseye } from 'react-icons/fa';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+
 // --- Tipagens de Dados ---
-type Launch = {
-  id: string;
-  nome: string;
-  status: string;
+type Launch = { id: string; nome: string; status: string; };
+
+type RawLead = {
+    check_in_at: string | null;
+    utm_source: string | null;
+    utm_medium: string | null;
+    utm_content: string | null;
 };
 
-type TableRow = {
-  canal: string;
-  inscricoes: number;
-  check_ins: number;
-};
-
+// Tipagem para os dados dos gráficos de pizza
 type ChartRow = {
   name: string;
   value: number;
 };
 
-type DashboardData = {
-  kpis: {
-    total_inscricoes: number;
-    total_checkins: number;
-  };
-  tableData: TableRow[];
-  byContentChart: ChartRow[];
-  byMediumChart: ChartRow[];
+type PerformanceData = {
+    name: string;
+    inscricoes: number;
+    checkins: number;
+    taxa_checkin: number;
 };
 
 // --- Constantes ---
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#4F4FFF', '#4FFF4F'];
-const TIME_ZONE = 'America/Sao_Paulo';
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#4F4FFF', '#4FFF4F', '#800080', '#A9A9A9'];
 
-
-// --- Funções de Renderização para Gráficos ---
+// --- Funções de Renderização e Componentes de UI ---
 
 interface CustomizedLabelProps {
   cx?: number;
@@ -53,15 +46,13 @@ interface CustomizedLabelProps {
 
 const renderCustomizedLabel = (props: CustomizedLabelProps) => {
   const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
-
   if (cx === undefined || cy === undefined || midAngle === undefined || innerRadius === undefined || outerRadius === undefined || percent === undefined) {
     return null;
   }
-
-  if ((percent * 100) <= 5) {
+  // Não renderiza o label se a fatia for muito pequena
+  if ((percent * 100) < 3) {
     return null;
   }
-
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
   const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
@@ -73,29 +64,28 @@ const renderCustomizedLabel = (props: CustomizedLabelProps) => {
   );
 };
 
-
-// --- Componentes de UI ---
-const KpiCard = ({ title, value, highlight = false }: { title: string, value: string | number, highlight?: boolean }) => (
-    <div className={`p-4 rounded-lg shadow-md border text-center transition-all duration-300 ${highlight ? "bg-blue-50 border-blue-200" : "bg-white"}`}>
-        <p className={`text-sm font-medium ${highlight ? "text-blue-700" : "text-slate-500"}`}>{title}</p>
-        <p className={`text-2xl md:text-3xl font-bold mt-1 ${highlight ? "text-blue-800" : "text-slate-800"}`}>{value}</p>
+const KpiCard = ({ title, value, icon: Icon, subTitle }: { title: string; value: string; icon: React.ElementType; subTitle?: string }) => (
+    <div className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
+        <div className="bg-blue-100 p-3 rounded-full">
+            <Icon className="text-blue-600 text-xl" />
+        </div>
+        <div>
+            <p className="text-sm text-slate-500">{title}</p>
+            <p className="text-2xl font-bold text-slate-800">{value}</p>
+            {subTitle && <p className="text-xs text-slate-400">{subTitle}</p>}
+        </div>
     </div>
 );
 
 const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }) => {
-    // Função para formatar (encurtar) o texto da legenda se for muito longo
     const formatLegendText = (value: string) => {
-        const maxLength = 35; // Define o comprimento máximo do texto
-        if (value.length > maxLength) {
-            return `${value.substring(0, maxLength)}...`;
-        }
-        return value;
+        const maxLength = 35;
+        return value.length > maxLength ? `${value.substring(0, maxLength)}...` : value;
     };
 
     return (
         <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
             <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
-            {/* Aumenta a altura do container para dar mais espaço à legenda */}
             <div style={{ width: '100%', height: 400 }}>
                 <ResponsiveContainer>
                     <PieChart>
@@ -103,10 +93,9 @@ const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }
                             data={data}
                             dataKey="value"
                             nameKey="name"
-                            // Reduz o cx para dar mais espaço horizontal à legenda
-                            cx="35%"
+                            cx="40%" // Ajustado para dar mais espaço para a legenda
                             cy="50%"
-                            outerRadius={120} // Aumenta um pouco o raio do gráfico
+                            outerRadius={120}
                             fill="#8884d8"
                             labelLine={false}
                             label={renderCustomizedLabel}
@@ -119,15 +108,12 @@ const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }
                             verticalAlign="middle"
                             align="right"
                             iconSize={10}
-                            // Aplica a função para encurtar o texto
                             formatter={formatLegendText}
-                            // Define um estilo para a área da legenda
                             wrapperStyle={{
                                 fontSize: "12px",
                                 lineHeight: "1.5",
-                                overflowY: "auto", // Permite scroll vertical se houver muitos itens
+                                overflowY: "auto",
                                 maxHeight: "350px",
-                                paddingLeft: "10px"
                             }}
                         />
                     </PieChart>
@@ -137,11 +123,11 @@ const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }
     );
 };
 
-const ScoringTable = ({ data, groupBy }: { data: TableRow[], groupBy: string }) => (
-    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-slate-700 mb-4">Detalhes por Canal ({groupBy === 'content' ? 'UTM Content' : 'UTM Campaign'})</h2>
+const PerformanceTable = ({ data }: { data: PerformanceData[] }) => (
+    <div className="bg-white rounded-lg shadow-md">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4 p-4">Detalhes por Canal</h2>
         <div className="overflow-x-auto">
-            <table className="min-w-full hidden md:table">
+            <table className="min-w-full">
                 <thead className="bg-slate-50">
                     <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
@@ -151,188 +137,220 @@ const ScoringTable = ({ data, groupBy }: { data: TableRow[], groupBy: string }) 
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-200">
-                    {data.map((row, index) => {
-                        const conversionRate = row.inscricoes > 0 ? (row.check_ins / row.inscricoes * 100) : 0;
-                        return (
-                            <tr key={row.canal + index}>
-                                <td className="px-4 py-4 whitespace-nowrap font-medium text-slate-800 max-w-xs truncate" title={row.canal}>{row.canal || 'N/A'}</td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{row.inscricoes.toLocaleString('pt-BR')}</td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{row.check_ins.toLocaleString('pt-BR')}</td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">{conversionRate.toFixed(1)}%</td>
+                    {data.length === 0 ? (
+                        <tr><td colSpan={4} className="text-center py-10 text-slate-500">Nenhum dado encontrado para esta seleção.</td></tr>
+                    ) : (
+                        data.map((item) => (
+                            <tr key={item.name}>
+                                <td className="px-4 py-4 font-medium text-slate-800 truncate" title={item.name}>{item.name}</td>
+                                <td className="px-4 py-4 text-sm text-slate-600">{item.inscricoes.toLocaleString('pt-BR')}</td>
+                                <td className="px-4 py-4 text-sm text-slate-600">{item.checkins.toLocaleString('pt-BR')}</td>
+                                <td className="px-4 py-4 text-sm text-slate-600">
+                                    {/* CORREÇÃO: Ícone de % removido */}
+                                    {item.taxa_checkin.toFixed(1)}%
+                                </td>
                             </tr>
-                        );
-                    })}
+                        ))
+                    )}
                 </tbody>
             </table>
-            <div className="md:hidden space-y-4">
-                {data.map((row, index) => {
-                    const conversionRate = row.inscricoes > 0 ? (row.check_ins / row.inscricoes * 100) : 0;
-                    return (
-                        <div key={row.canal + index} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-                            <div className="font-bold text-slate-800 truncate" title={row.canal}>{row.canal || 'N/A'}</div>
-                            <div className="flex justify-between text-sm"><span className="font-medium text-slate-500">Inscrições:</span> <span className="font-semibold text-slate-700">{row.inscricoes.toLocaleString('pt-BR')}</span></div>
-                            <div className="flex justify-between text-sm"><span className="font-medium text-slate-500">Check-ins:</span> <span className="font-semibold text-slate-700">{row.check_ins.toLocaleString('pt-BR')}</span></div>
-                            <div className="flex justify-between text-sm"><span className="font-medium text-slate-500">Taxa de Check-in:</span> <span className="font-bold text-blue-600">{conversionRate.toFixed(1)}%</span></div>
-                        </div>
-                    )
-                })}
-            </div>
         </div>
     </div>
 );
 
-export default function PerformanceControlePage() {
-    const supabase = createClientComponentClient();
+
+// --- Página Principal ---
+export default function PerformanceDashboardPage() {
+    const supabase = createClient();
+    
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
-    const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [groupBy, setGroupBy] = useState('content');
-    const [period, setPeriod] = useState<'today' | 'yesterday' | '7days' | 'custom'>('today');
-    const [customDate, setCustomDate] = useState({
-        start: format(new Date(), 'yyyy-MM-dd'),
-        end: format(new Date(), 'yyyy-MM-dd'),
-        startTime: '00:00',
-        endTime: '23:59'
-    });
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
-    const loadDashboardData = useCallback(async () => {
-        if (!selectedLaunch) return;
-        setIsLoading(true);
-        const now = toZonedTime(new Date(), TIME_ZONE);
-        let startDateTime, endDateTime;
-        switch (period) {
-            case 'yesterday':
-                const yesterday = subDays(now, 1);
-                startDateTime = startOfDay(yesterday);
-                endDateTime = endOfDay(yesterday);
-                break;
-            case '7days':
-                startDateTime = startOfDay(subDays(now, 6));
-                endDateTime = endOfDay(now);
-                break;
-            case 'custom':
-                startDateTime = toZonedTime(`${customDate.start}T${customDate.startTime}:00`, TIME_ZONE);
-                endDateTime = toZonedTime(`${customDate.end}T${customDate.endTime}:59`, TIME_ZONE);
-                break;
-            default:
-                startDateTime = startOfDay(now);
-                endDateTime = endOfDay(now);
-        }
-        try {
-            const { data: result, error } = await supabase.rpc('get_full_performance_dashboard', {
-                p_launch_id: selectedLaunch,
-                p_start_datetime: startDateTime.toISOString(),
-                p_end_datetime: endDateTime.toISOString(),
-                p_group_by: groupBy
-            });
-            if (error) throw error;
-            setData(result);
-        } catch (error) {
-            console.error("Erro ao carregar dados do dashboard:", error);
-            setData(null);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [selectedLaunch, period, customDate, groupBy, supabase]);
+    const [rawLeads, setRawLeads] = useState<RawLead[]>([]);
+    const [selectedSource, setSelectedSource] = useState('all');
+    const [selectedMedium, setSelectedMedium] = useState('all');
+    const [selectedContent, setSelectedContent] = useState('all');
 
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data: launchesData, error } = await supabase
-                .from('lancamentos')
-                .select('id, nome, status')
-                .in('status', ['Em Andamento', 'Concluído']);
-            if (error) {
-                console.error("Erro ao buscar lançamentos:", error);
-            } else if (launchesData) {
+            setIsLoading(true);
+            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            if (data) {
                 const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
-                const sorted = [...launchesData].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
+                const sorted = data.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
                 setLaunches(sorted);
-                if (sorted.length > 0 && !selectedLaunch) {
-                    setSelectedLaunch(sorted[0].id);
-                }
-            }
+                if (sorted.length > 0) setSelectedLaunch(sorted[0].id);
+            } else { toast.error("Erro ao buscar lançamentos."); }
+            setIsLoading(false);
         };
         fetchLaunches();
-    }, [supabase, selectedLaunch]);
+    }, [supabase]);
 
     useEffect(() => {
-        if (selectedLaunch) {
-            loadDashboardData();
+        const loadRawDataWithPagination = async () => {
+            if (!selectedLaunch) return;
+            setIsLoadingData(true);
+            setRawLeads([]);
+            let allLeads: RawLead[] = [];
+            let page = 0;
+            const pageSize = 1000;
+            let keepFetching = true;
+
+            while (keepFetching) {
+                const { data, error } = await supabase
+                    .from('leads')
+                    .select('check_in_at, utm_source, utm_medium, utm_content')
+                    .eq('launch_id', selectedLaunch)
+                    .range(page * pageSize, (page + 1) * pageSize - 1);
+
+                if (error) { toast.error("Erro ao carregar dados dos leads."); keepFetching = false; break; }
+                if (data) allLeads = [...allLeads, ...data];
+                if (!data || data.length < pageSize) keepFetching = false; else page++;
+            }
+            setRawLeads(allLeads);
+            setIsLoadingData(false);
+        };
+        loadRawDataWithPagination();
+    }, [selectedLaunch, supabase]);
+
+    const filterOptions = useMemo(() => {
+        let leads = rawLeads;
+        const sources = new Set<string>();
+        const mediums = new Set<string>();
+        const contents = new Set<string>();
+        rawLeads.forEach(lead => { if(lead.utm_source) sources.add(lead.utm_source) });
+        if (selectedSource !== 'all') leads = leads.filter(l => l.utm_source === selectedSource);
+        leads.forEach(lead => { if(lead.utm_medium) mediums.add(lead.utm_medium) });
+        if (selectedMedium !== 'all') leads = leads.filter(l => l.utm_medium === selectedMedium);
+        leads.forEach(lead => { if(lead.utm_content) contents.add(lead.utm_content) });
+        return {
+            sources: Array.from(sources).sort(),
+            mediums: Array.from(mediums).sort(),
+            contents: Array.from(contents).sort(),
+        };
+    }, [rawLeads, selectedSource, selectedMedium]);
+    
+    const filteredLeads = useMemo(() => {
+        return rawLeads.filter(lead => 
+            (selectedSource === 'all' || lead.utm_source === selectedSource) &&
+            (selectedMedium === 'all' || lead.utm_medium === selectedMedium) &&
+            (selectedContent === 'all' || lead.utm_content === selectedContent)
+        );
+    }, [rawLeads, selectedSource, selectedMedium, selectedContent]);
+
+    const grandTotalKpis = useMemo(() => ({
+        inscricoes: rawLeads.length,
+        checkins: rawLeads.filter(l => l.check_in_at).length,
+    }), [rawLeads]);
+
+    const filteredKpis = useMemo(() => ({
+        inscricoes: filteredLeads.length,
+        checkins: filteredLeads.filter(l => l.check_in_at).length,
+    }), [filteredLeads]);
+    
+    const processPieData = (data: RawLead[], key: keyof RawLead): ChartRow[] => {
+        const grouped = data.reduce((acc, lead) => {
+            const groupKey = lead[key] || 'N/A';
+            acc[groupKey] = (acc[groupKey] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const sortedData = Object.entries(grouped).sort(([, a], [, b]) => b - a);
+
+        if (sortedData.length <= 10) {
+            return sortedData.map(([name, value]) => ({ name, value }));
         }
-    }, [selectedLaunch, loadDashboardData]);
 
-    const handleCustomDateChange = (field: string, value: string) => {
-        setCustomDate(prev => ({ ...prev, [field]: value }));
-    };
+        const top9 = sortedData.slice(0, 9);
+        const othersValue = sortedData.slice(9).reduce((sum, [, value]) => sum + value, 0);
+        const result = top9.map(([name, value]) => ({ name, value }));
+        if (othersValue > 0) {
+            result.push({ name: 'Outros', value: othersValue });
+        }
+        return result;
+    }
 
-    const kpis = data?.kpis;
-    const totalConversionRate = kpis && kpis.total_inscricoes > 0 ? (kpis.total_checkins / kpis.total_inscricoes) * 100 : 0;
+    const pieDataByMedium = useMemo(() => processPieData(filteredLeads, 'utm_medium'), [filteredLeads]);
+    const pieDataByContent = useMemo(() => processPieData(filteredLeads, 'utm_content'), [filteredLeads]);
+
+    const tableData = useMemo((): PerformanceData[] => {
+        let groupingKey: keyof RawLead = 'utm_source';
+        if (selectedSource !== 'all') groupingKey = 'utm_medium';
+        if (selectedMedium !== 'all') groupingKey = 'utm_content';
+
+        const grouped = filteredLeads.reduce((acc, lead) => {
+            const key = lead[groupingKey] || 'N/A';
+            if (!acc[key]) acc[key] = { inscricoes: 0, checkins: 0 };
+            acc[key].inscricoes++;
+            if (lead.check_in_at) acc[key].checkins++;
+            return acc;
+        }, {} as Record<string, { inscricoes: number, checkins: number }>);
+
+        return Object.entries(grouped).map(([name, data]) => ({
+            name, ...data, taxa_checkin: data.inscricoes > 0 ? (data.checkins / data.inscricoes) * 100 : 0,
+        })).sort((a, b) => b.inscricoes - a.inscricoes);
+    }, [filteredLeads, selectedSource, selectedMedium]);
 
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Dashboard de Performance</h1>
                 <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
-                    <select
-                        value={selectedLaunch}
-                        onChange={(e) => setSelectedLaunch(e.target.value)}
-                        className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium"
-                        disabled={isLoading}
-                    >
+                    <select value={selectedLaunch} onChange={e => setSelectedLaunch(e.target.value)} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent" disabled={isLoading}>
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                     </select>
                 </div>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow-md flex flex-col gap-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <label className="font-medium text-slate-700 shrink-0">Período:</label>
-                    {['today', 'yesterday', '7days', 'custom'].map(p => (
-                        <button key={p} onClick={() => setPeriod(p as any)} disabled={isLoading} className={`py-2 px-4 rounded-md text-sm font-semibold transition-colors duration-200 disabled:opacity-50 ${period === p ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
-                            {p === 'today' ? 'Hoje' : p === 'yesterday' ? 'Ontem' : p === '7days' ? '7 dias' : 'Personalizado'}
-                        </button>
-                    ))}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <KpiCard title="Total Geral Inscrições" value={grandTotalKpis.inscricoes.toLocaleString('pt-BR')} icon={FaGlobe} subTitle="Total do Lançamento" />
+                <KpiCard title="Total Geral Check-ins" value={grandTotalKpis.checkins.toLocaleString('pt-BR')} icon={FaBullseye} subTitle="Total do Lançamento" />
+                <KpiCard title="Inscrições (Filtro)" value={filteredKpis.inscricoes.toLocaleString('pt-BR')} icon={FaUsers} subTitle="Resultado do filtro atual" />
+                <KpiCard title="Check-ins (Filtro)" value={filteredKpis.checkins.toLocaleString('pt-BR')} icon={FaUserCheck} subTitle="Resultado do filtro atual" />
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <div className="flex items-center gap-2 mb-4">
+                    <FaFilter className="text-blue-600"/>
+                    <h2 className="text-lg font-semibold text-slate-700">Filtros de Performance</h2>
                 </div>
-                {period === 'custom' && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-4 border-t border-slate-200">
-                        <label className="text-sm font-medium text-slate-700">De:</label>
-                        <input type="date" value={customDate.start} onChange={e => handleCustomDateChange('start', e.target.value)} disabled={isLoading} className="border-slate-300 rounded-md px-2 py-1 text-sm disabled:opacity-50" />
-                        <input type="time" value={customDate.startTime} onChange={e => handleCustomDateChange('startTime', e.target.value)} disabled={isLoading} className="border-slate-300 rounded-md px-2 py-1 text-sm disabled:opacity-50" />
-                        <label className="text-sm font-medium text-slate-700">Até:</label>
-                        <input type="date" value={customDate.end} onChange={e => handleCustomDateChange('end', e.target.value)} disabled={isLoading} className="border-slate-300 rounded-md px-2 py-1 text-sm disabled:opacity-50" />
-                        <input type="time" value={customDate.endTime} onChange={e => handleCustomDateChange('endTime', e.target.value)} disabled={isLoading} className="border-slate-300 rounded-md px-2 py-1 text-sm disabled:opacity-50" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">UTM Source</label>
+                        <select value={selectedSource} onChange={e => { setSelectedSource(e.target.value); setSelectedMedium('all'); setSelectedContent('all'); }} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                            <option value="all">Todos</option>
+                            {filterOptions.sources.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
                     </div>
-                )}
-                <div className="pt-4 border-t border-slate-200">
-                    <label htmlFor="group-by-select" className="block text-sm font-medium text-slate-700">Agrupar Tabela Por:</label>
-                    <select id="group-by-select" value={groupBy} onChange={e => setGroupBy(e.target.value)} disabled={isLoading} className="mt-1 block w-full sm:w-1/3 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md disabled:opacity-50">
-                        <option value="content">UTM Content</option>
-                        <option value="campaign">UTM Campaign</option>
-                    </select>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">UTM Medium</label>
+                        <select value={selectedMedium} onChange={e => { setSelectedMedium(e.target.value); setSelectedContent('all'); }} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                            <option value="all">Todos</option>
+                            {filterOptions.mediums.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">UTM Content</label>
+                        <select value={selectedContent} onChange={e => setSelectedContent(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                            <option value="all">Todos</option>
+                            {filterOptions.contents.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    </div>
                 </div>
             </div>
-            {isLoading ? (
+
+            {isLoadingData ? (
                 <div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>
-            ) : !data || !kpis || !data.tableData || data.tableData.length === 0 ? (
-                <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum dado de performance encontrado para a seleção.</p></div>
             ) : (
                 <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <KpiCard title="Total de Inscrições" value={kpis.total_inscricoes.toLocaleString('pt-BR')} />
-                        <KpiCard title="Total de Check-ins" value={kpis.total_checkins.toLocaleString('pt-BR')} />
-                        <KpiCard title="Taxa de Check-in" value={`${totalConversionRate.toFixed(1)}%`} highlight />
-                    </div>
-                    {/* --- MUDANÇA AQUI --- */}
-                    {/* A div agora usa grid-cols-1 para empilhar os gráficos em todas as telas, conforme solicitado. */}
+                    {/* CORREÇÃO: Layout alterado para empilhar os gráficos */}
                     <div className="grid grid-cols-1 gap-6">
-                        {data.byContentChart && data.byContentChart.length > 0 &&
-                            <PieChartWithLegend title={groupBy === 'content' ? "Inscrições por Conteúdo" : "Inscrições por Campanha"} data={data.byContentChart} />
-                        }
-                        {data.byMediumChart && data.byMediumChart.length > 0 &&
-                            <PieChartWithLegend title="Inscrições por Mídia" data={data.byMediumChart} />
-                        }
+                        <PieChartWithLegend title="Inscrições por Mídia" data={pieDataByMedium} />
+                        <PieChartWithLegend title="Inscrições por Conteúdo" data={pieDataByContent} />
                     </div>
-                    <ScoringTable data={data.tableData} groupBy={groupBy} />
+                    <PerformanceTable data={tableData} />
                 </div>
             )}
         </div>

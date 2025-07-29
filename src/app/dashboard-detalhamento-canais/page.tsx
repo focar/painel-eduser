@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { FaSpinner, FaChevronDown } from 'react-icons/fa';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -49,7 +49,7 @@ const DailyBarChart = ({ data }: { data: DailyChartData[] }) => (
 
 // --- Componente Principal da Página ---
 export default function DetalhamentoCanaisPage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [data, setData] = useState<DashboardData | null>(null);

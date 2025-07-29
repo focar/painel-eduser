@@ -1,19 +1,17 @@
-// Conteúdo FINAL e CORRIGIDO para: src/app/perguntas/editar/[id]/page.tsx
-
 "use client";
 
 import { useState, useEffect } from "react";
-import QuestionForm from "@/components/question/QuestionForm";
-// CORREÇÃO: Importa o cliente recomendado
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import QuestionForm from "@/components/Question/QuestionForm";
+// --- CORREÇÃO 1: Importa o novo cliente para o navegador ---
+import { createClient } from '@/utils/supabase/client';
 
 export default function EditarPerguntaPage({
   params,
 }: {
   params: { id: string };
 }) {
-  // CORREÇÃO: Cria a instância do cliente da forma correta
-  const supabase = createClientComponentClient();
+  // --- CORREÇÃO 2: Usa a nova forma de criar o cliente ---
+  const supabase = createClient();
   const [initialData, setInitialData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +20,6 @@ export default function EditarPerguntaPage({
     const fetchQuestion = async () => {
       if (!params.id) return;
       try {
-        // CORREÇÃO: Usa a variável 'supabase' local
         const { data, error: dbError } = await supabase
           .from("perguntas")
           .select("*")
@@ -41,7 +38,6 @@ export default function EditarPerguntaPage({
     };
 
     fetchQuestion();
-    // CORREÇÃO: Adicionado 'supabase' ao array de dependências do useEffect
   }, [params.id, supabase]);
 
   if (isLoading) {

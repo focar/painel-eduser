@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { showAlertModal } from "@/lib/modals";
+import { createClient } from "@/utils/supabase/client";
+import toast from "react-hot-toast";
+// --- CORREÇÃO: A linha abaixo estava faltando ---
+import { FaSpinner } from 'react-icons/fa';
 
 // Tipos de Dados
 type Option = {
@@ -23,7 +25,7 @@ type QuestionFormProps = {
 };
 
 export default function QuestionForm({ initialData }: QuestionFormProps) {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const router = useRouter();
 
   const [question, setQuestion] = useState({
@@ -40,19 +42,15 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Efeito para configurar as opções iniciais para "Sim / Não" ao carregar
   useEffect(() => {
     if (initialData?.tipo === "Sim / Não" && initialData.opcoes) {
       setOptions(initialData.opcoes);
     }
   }, [initialData]);
 
-  // Função para lidar com a mudança do tipo da pergunta
   const handleTypeChange = (newType: string) => {
     setQuestion({ ...question, tipo: newType });
-
     if (newType === "Sim / Não") {
-      // Apenas altera se as opções não forem já "Sim" e "Não" para não sobrescrever
       if (
         options.length !== 2 ||
         options[0].texto !== "Sim" ||
@@ -87,6 +85,8 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
+    const toastId = toast.loading(initialData ? "Atualizando..." : "Criando...");
+
     try {
       const questionToSave = {
         id: initialData?.id,
@@ -102,20 +102,20 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
 
       if (error) throw error;
 
-      showAlertModal("Sucesso!", "Pergunta salva com sucesso!");
+      toast.success("Pergunta salva com sucesso!", { id: toastId });
       router.push("/perguntas");
       router.refresh();
     } catch (err: any) {
-      showAlertModal("Erro ao Salvar", err.message);
+      toast.error(`Erro ao salvar: ${err.message}`, { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto p-4 md:p-0">
       <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6">
+        <h1 className="text-2xl font-bold mb-6 text-slate-800">
           {initialData ? "Editar Pergunta" : "Criar Nova Pergunta"}
         </h1>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -138,14 +138,14 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
             />
           </div>
           <div>
-            <label htmlFor="tipo" className="block text-sm font-medium">
+            <label htmlFor="tipo" className="block text-sm font-medium text-slate-700">
               Tipo de Resposta
             </label>
             <select
               id="tipo"
               value={question.tipo}
               onChange={(e) => handleTypeChange(e.target.value)}
-              className="mt-1 w-full border-slate-300 rounded-md"
+              className="mt-1 w-full p-2 border border-slate-300 rounded-md bg-white"
             >
               <option>Texto Aberto</option>
               <option>Múltipla Escolha</option>
@@ -156,7 +156,7 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
             question.tipo === "Sim / Não") && (
             <div className="pt-4 border-t">
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium">
+                <label className="block text-sm font-medium text-slate-700">
                   Opções de Resposta
                 </label>
                 <label className="block text-sm font-medium text-slate-500 pr-12">
@@ -212,7 +212,7 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
               )}
             </div>
           )}
-          <div className="flex justify-end pt-4 gap-4">
+          <div className="flex justify-end pt-4 gap-4 border-t mt-6">
             <button
               type="button"
               onClick={() => router.push("/perguntas")}
@@ -225,7 +225,7 @@ export default function QuestionForm({ initialData }: QuestionFormProps) {
               disabled={isSubmitting}
               className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50 hover:bg-slate-700"
             >
-              {isSubmitting ? "Salvando..." : "Salvar"}
+              {isSubmitting ? <FaSpinner className="animate-spin mx-auto"/> : "Salvar"}
             </button>
           </div>
         </form>

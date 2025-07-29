@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { showAlertModal } from '@/lib/modals';
 import { FaSpinner } from 'react-icons/fa';
 
@@ -11,7 +11,7 @@ type PageVariant = { id: string; name: string; slug: string; status: string; };
 type FlowSetting = { utm_content: string; flow_type: string; };
 
 export default function ControleInscricoesPage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [pageVariants, setPageVariants] = useState<PageVariant[]>([]);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, ChangeEvent, FormEvent, Dispatch, SetStateAction } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaPlus, FaTasks } from 'react-icons/fa';
 
@@ -157,7 +157,7 @@ function FormularioInscricao({ setIsLoading, isLoading, activeLaunches }: FormPr
 
 // --- COMPONENTE DO FORMULÁRIO DE CHECK-IN ---
 function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProps) {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
     const [answers, setAnswers] = useState<Answers>({});
@@ -260,7 +260,7 @@ function FormularioCheckin({ setIsLoading, isLoading, activeLaunches }: FormProp
 
 // --- PÁGINA PRINCIPAL ---
 export default function SimuladorPage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [mode, setMode] = useState<'inscricao' | 'checkin' | null>('inscricao');
     const [isLoading, setIsLoading] = useState(false);
     const [activeLaunches, setActiveLaunches] = useState<Launch[]>([]);

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -56,7 +56,7 @@ const getEventColor = (eventName: string): string => {
 
 // --- Componente Principal (Modificado) ---
 export default function HomePage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [allLaunches, setAllLaunches] = useState<Launch[]>([]);
     const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);

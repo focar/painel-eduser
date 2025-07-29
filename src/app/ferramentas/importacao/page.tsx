@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import Papa from 'papaparse';
 import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck, FaMagic, FaSave } from 'react-icons/fa';
 
@@ -53,7 +53,7 @@ const LaunchSelector = ({ id, label, launches, selectedValue, onChange, disabled
 );
 
 export default function ImportacaoPage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient()
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
 

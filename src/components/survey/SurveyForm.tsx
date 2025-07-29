@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 // CORREÇÃO: Importa o cliente recomendado
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 
 // --- Tipos de Dados ---
@@ -13,7 +13,7 @@ type SurveyFormProps = { initialData?: SurveyData & { associated_question_ids: s
 
 export default function SurveyForm({ initialData }: SurveyFormProps) {
     // CORREÇÃO: Cria a instância do cliente da forma correta
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const router = useRouter();
     
     const [survey, setSurvey] = useState({

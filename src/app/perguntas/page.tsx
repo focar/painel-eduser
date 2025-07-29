@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 // CORREÇÃO: Importa o novo cliente e remove a importação antiga do 'db'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { showAlertModal } from '@/lib/modals';
 
 type Question = {
@@ -15,7 +15,7 @@ type Question = {
 
 export default function PerguntasPage() {
   // CORREÇÃO: Cria a instância do cliente da forma correta
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

@@ -1,17 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown } from 'react-icons/fa';
+import { usePathname, useRouter } from 'next/navigation';
+import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
+import { createClient } from '@/utils/supabase/client';
 
-// O iconMap não estava sendo usado, mas a ideia é boa.
-// A implementação atual usa classes do Font Awesome, que vou manter.
+// --- NOVOS TIPOS: Para nos ajudar com os dados do usuário ---
+type User = {
+  id: string;
+  email?: string;
+};
+type Profile = {
+  role: 'admin' | 'viewer';
+  full_name?: string;
+};
 
+// Seus menuItems continuam os mesmos
 const menuItems = [
     {
         title: "Dashboards",
-        icon: "fa-chart-pie", // Classe do Font Awesome
+        icon: "fa-chart-pie",
         links: [
             { name: "Análise de Campanha", href: "/dashboard-analise-campanha" },
             { name: "Evolução de Canal ", href: "/dashboard-evolucao-por-hora" },
@@ -45,28 +54,58 @@ const menuItems = [
             { name: "Simulador de Inscrição", href: "/ferramentas/simulador-inscricao" },
             { name: "Conversão UTMs", href: "/ferramentas/conversao-utms" },
             { name: "Mapeamento de Colunas", href: "/ferramentas/mapeamento" },
+            { name: "Gerenciar Usuários", href: "/ferramentas/gerenciar-usuarios" },
         ],
     },
 ];
 
 export default function Sidebar() {
     const pathname = usePathname();
-    // Esta lógica continua útil para definir o estado inicial dos menus retráteis
-    const activeGroup = menuItems.find(group => group.links.some(link => link.href === pathname));
-    
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const router = useRouter();
+    const supabase = createClient();
 
-    // --- MUDANÇA PRINCIPAL NO ESTADO ---
-    // Removemos o estado único 'openMenu'.
-    // Criamos estados individuais para cada seção que deve ser retrátil.
-    // O estado inicial ainda abre a seção se uma de suas páginas estiver ativa.
+    // --- NOVOS ESTADOS: Para guardar o usuário, seu perfil e o estado de carregamento ---
+    const [user, setUser] = useState<User | null>(null);
+    const [profile, setProfile] = useState<Profile | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    const activeGroup = menuItems.find(group => group.links.some(link => link.href === pathname));
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isOperacionalOpen, setIsOperacionalOpen] = useState(activeGroup?.title === 'Operacional');
     const [isFerramentasOpen, setIsFerramentasOpen] = useState(activeGroup?.title === 'Ferramentas');
 
+    // --- NOVO useEffect: Para buscar os dados do usuário ao carregar o componente ---
+    useEffect(() => {
+        const fetchUserData = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUser(user);
+                const { data: userProfile, error } = await supabase
+                    .from('profiles')
+                    .select('role, full_name')
+                    .eq('id', user.id)
+                    .single();
+                if (userProfile) {
+                    setProfile(userProfile);
+                }
+                if(error) {
+                    console.error("Erro ao buscar perfil:", error);
+                }
+            }
+            setLoading(false);
+        };
+        fetchUserData();
+    }, [supabase]);
+
+    // --- NOVA FUNÇÃO: Para fazer o logout ---
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.refresh(); // Garante que a página recarregue e o middleware redirecione
+        router.push('/login');
+    };
 
     return (
         <>
-            {/* Botão Hamburger para abrir o menu no mobile */}
             <button 
                 className="md:hidden p-4 text-slate-800 fixed top-0 left-0 z-10"
                 onClick={() => setIsMobileMenuOpen(true)}
@@ -81,6 +120,7 @@ export default function Sidebar() {
                     fixed inset-y-0 left-0 z-30 transform 
                     transition-transform duration-300 ease-in-out
                     md:relative md:translate-x-0
+                    flex flex-col
                     ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
                 `}
             >
@@ -105,75 +145,101 @@ export default function Sidebar() {
                     </div>
                 </div>
 
-                {/* --- LÓGICA DE RENDERIZAÇÃO ALTERADA --- */}
-                <nav>
-                    {menuItems.map((group) => {
-                        // Lógica para o grupo DASHBOARDS (sempre aberto)
-                        if (group.title === 'Dashboards') {
+                {/* Container da Navegação que cresce e empurra o logout para baixo */}
+                <nav className="flex-1 flex flex-col justify-between">
+                    {/* Lista principal de menus */}
+                    <ul className="space-y-2">
+                        {loading ? (
+                            <li className="text-center p-4">
+                                <FaSpinner className="animate-spin mx-auto text-xl" />
+                            </li>
+                        ) : menuItems.map((group) => {
+                            // --- LÓGICA DE ACESSO: Mostra os menus restritos apenas se o perfil for 'admin' ---
+                            if ((group.title === 'Operacional' || group.title === 'Ferramentas') && profile?.role !== 'admin') {
+                                return null; // Se não for admin, não renderiza estes menus
+                            }
+
+                            // Lógica para o grupo DASHBOARDS (sempre aberto)
+                            if (group.title === 'Dashboards') {
+                                return (
+                                    <div key={group.title} className="mb-4">
+                                        <h2 className="w-full flex items-center text-left text-xs font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
+                                            <i className={`fas ${group.icon} mr-3`}></i>
+                                            {group.title}
+                                        </h2>
+                                        <ul className="mt-2 space-y-1">
+                                            {group.links.map((link) => (
+                                                <li key={link.name}>
+                                                    <Link 
+                                                        href={link.href} 
+                                                        onClick={() => setIsMobileMenuOpen(false)}
+                                                        className={`block text-sm rounded-md px-3 py-2 transition-colors ${
+                                                            pathname === link.href 
+                                                                ? 'bg-blue-600 text-white font-semibold' 
+                                                                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        {link.name}
+                                                    </Link>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                );
+                            }
+
+                            // Lógica para os outros grupos (retráteis)
+                            const isOpen = group.title === 'Operacional' ? isOperacionalOpen : isFerramentasOpen;
+                            const setIsOpen = group.title === 'Operacional' ? setIsOperacionalOpen : setIsFerramentasOpen;
+
                             return (
                                 <div key={group.title} className="mb-4">
-                                    <h2 className="w-full flex items-center text-left text-xs font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
-                                        <i className={`fas ${group.icon} mr-3`}></i>
-                                        {group.title}
-                                    </h2>
-                                    <ul className="mt-2 space-y-1">
-                                        {group.links.map((link) => (
-                                            <li key={link.name}>
-                                                <Link 
-                                                    href={link.href} 
-                                                    onClick={() => setIsMobileMenuOpen(false)}
-                                                    className={`block text-sm rounded-md px-3 py-2 transition-colors ${
-                                                        pathname === link.href 
-                                                            ? 'bg-blue-600 text-white font-semibold' 
-                                                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                                                    }`}
-                                                >
-                                                    {link.name}
-                                                </Link>
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    <button 
+                                        onClick={() => setIsOpen(!isOpen)}
+                                        className="w-full flex justify-between items-center text-left text-xs font-bold text-slate-400 uppercase tracking-wider px-2 py-1 hover:bg-slate-700 rounded-md"
+                                    >
+                                        <span><i className={`fas ${group.icon} mr-3`}></i>{group.title}</span>
+                                        <FaChevronDown className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {isOpen && (
+                                        <ul className="mt-2 space-y-1">
+                                            {group.links.map((link) => (
+                                                <li key={link.name}>
+                                                    <Link 
+                                                        href={link.href} 
+                                                        onClick={() => setIsMobileMenuOpen(false)}
+                                                        className={`block text-sm rounded-md px-3 py-2 transition-colors ${
+                                                            pathname === link.href 
+                                                                ? 'bg-blue-600 text-white font-semibold' 
+                                                                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        {link.name}
+                                                    </Link>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </div>
                             );
-                        }
+                        })}
+                    </ul>
 
-                        // Lógica para os outros grupos (retráteis)
-                        const isOpen = group.title === 'Operacional' ? isOperacionalOpen : isFerramentasOpen;
-                        const setIsOpen = group.title === 'Operacional' ? setIsOperacionalOpen : setIsFerramentasOpen;
-
-                        return (
-                            <div key={group.title} className="mb-4">
-                                <button 
-                                    onClick={() => setIsOpen(!isOpen)}
-                                    className="w-full flex justify-between items-center text-left text-xs font-bold text-slate-400 uppercase tracking-wider px-2 py-1 hover:bg-slate-700 rounded-md"
-                                >
-                                    <span><i className={`fas ${group.icon} mr-3`}></i>{group.title}</span>
-                                    {/* Usando o componente de ícone para consistência */}
-                                    <FaChevronDown className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                                </button>
-
-                                {isOpen && (
-                                    <ul className="mt-2 space-y-1">
-                                        {group.links.map((link) => (
-                                            <li key={link.name}>
-                                                <Link 
-                                                    href={link.href} 
-                                                    onClick={() => setIsMobileMenuOpen(false)}
-                                                    className={`block text-sm rounded-md px-3 py-2 transition-colors ${
-                                                        pathname === link.href 
-                                                            ? 'bg-blue-600 text-white font-semibold' 
-                                                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                                                    }`}
-                                                >
-                                                    {link.name}
-                                                </Link>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        );
-                    })}
+                    {/* --- NOVO ELEMENTO: Seção do Usuário e Botão de Logout --- */}
+                    {user && (
+                        <div className="border-t border-slate-700 pt-4 mt-4">
+                            <p className="text-sm text-white px-2 truncate" title={user.email}>{profile?.full_name || user.email}</p>
+                            <p className="text-xs text-slate-400 px-2 mb-2 capitalize">{profile?.role}</p>
+                            <button
+                                onClick={handleLogout}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-red-600 hover:text-white rounded-md transition-colors"
+                            >
+                                <FaSignOutAlt />
+                                <span>Sair</span>
+                            </button>
+                        </div>
+                    )}
                 </nav>
             </aside>
             

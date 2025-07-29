@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-// CORREÇÃO: Importa o novo cliente
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { showAlertModal, showConfirmationModal } from '@/lib/modals';
+import { createClient } from '@/utils/supabase/client';
+import toast from 'react-hot-toast';
+import { FaSpinner, FaEye, FaEyeSlash } from 'react-icons/fa';
 
 type Survey = {
     id: string;
@@ -16,25 +16,24 @@ type Survey = {
 };
 
 export default function PesquisasPage() {
-    // CORREÇÃO: Cria a instância do cliente da forma correta
-    const supabase = createClientComponentClient();
-    const [surveys, setSurveys] = useState<Survey[]>([]);
+    const supabase = createClient();
+    const [allSurveys, setAllSurveys] = useState<Survey[]>([]); // Armazena TODAS as pesquisas
     const [isLoading, setIsLoading] = useState(true);
+    const [showInactive, setShowInactive] = useState(false); // Novo estado para controlar a visibilidade
     const router = useRouter();
 
     const fetchSurveys = async () => {
         setIsLoading(true);
-        // CORREÇÃO: Usa a variável 'supabase'
+        // Agora busca TODAS as pesquisas, incluindo as inativas
         const { data, error } = await supabase
             .from('pesquisas')
             .select(`id, nome, categoria_pesquisa, status, pesquisas_perguntas(count)`)
-            .order('status', { ascending: true })
             .order('created_at', { ascending: false });
 
         if (error) {
-            showAlertModal('Erro ao carregar pesquisas', error.message);
+            toast.error('Erro ao carregar pesquisas: ' + error.message);
         } else {
-            setSurveys(data?.filter(s => s.status !== 'Inativo') || []);
+            setAllSurveys(data || []);
         }
         setIsLoading(false);
     };
@@ -44,31 +43,61 @@ export default function PesquisasPage() {
     }, []);
     
     const handleInactivate = async (surveyId: string, surveyName: string) => {
-        showConfirmationModal(`Tem certeza que deseja inativar a pesquisa "${surveyName}"?`, async () => {
+        const confirmed = confirm(`Tem certeza que deseja inativar a pesquisa "${surveyName}"?`);
+        
+        if (confirmed) {
+            const toastId = toast.loading('Inativando pesquisa...');
             try {
-                // CORREÇÃO: Usa a variável 'supabase'
                 const { error } = await supabase
                     .from('pesquisas')
                     .update({ status: 'Inativo' })
                     .eq('id', surveyId);
 
                 if (error) throw error;
-                showAlertModal('Sucesso', 'Pesquisa inativada com sucesso.');
-                fetchSurveys();
+                
+                toast.success('Pesquisa inativada com sucesso.', { id: toastId });
+                
+                // --- ATUALIZAÇÃO CORRIGIDA ---
+                // Simplesmente busca os dados novamente para garantir consistência
+                fetchSurveys(); 
+
             } catch (err: any) {
-                showAlertModal('Erro ao inativar', err.message);
+                toast.error('Erro ao inativar: ' + err.message, { id: toastId });
             }
-        });
+        }
     };
 
-    // O resto do seu JSX não muda...
+    // --- NOVA LÓGICA DE EXIBIÇÃO ---
+    // Filtra e ordena a lista de pesquisas para exibição com base no estado 'showInactive'
+    const surveysToDisplay = useMemo(() => {
+        const filtered = showInactive ? allSurveys : allSurveys.filter(s => s.status !== 'Inativo');
+        
+        // Ordena para que 'Ativo' sempre venha primeiro
+        return filtered.sort((a, b) => {
+            if (a.status === 'Ativo' && b.status !== 'Ativo') return -1;
+            if (a.status !== 'Ativo' && b.status === 'Ativo') return 1;
+            return 0; // Mantém a ordem original para status iguais
+        });
+    }, [allSurveys, showInactive]);
+
+
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
+        <div className="p-4 md:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Gerenciador de Pesquisas</h1>
-                <Link href="/pesquisas/criar" className="bg-slate-800 text-white font-bold py-2 px-4 rounded-lg">
-                    <i className="fas fa-plus mr-2"></i>Criar Nova Pesquisa
-                </Link>
+                <div className="flex items-center gap-3">
+                    {/* --- NOVO BOTÃO --- */}
+                    <button 
+                        onClick={() => setShowInactive(!showInactive)}
+                        className="bg-white border border-slate-300 text-slate-600 font-bold py-2 px-4 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center gap-2"
+                    >
+                        {showInactive ? <FaEyeSlash /> : <FaEye />}
+                        <span>{showInactive ? 'Ocultar Inativos' : 'Mostrar Inativos'}</span>
+                    </button>
+                    <Link href="/pesquisas/criar" className="bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-900 transition-colors inline-flex items-center">
+                        <span className="mr-2">+</span>Criar Nova Pesquisa
+                    </Link>
+                </div>
             </div>
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="overflow-x-auto">
@@ -77,30 +106,36 @@ export default function PesquisasPage() {
                             <tr>
                                 <th className="p-4 text-left text-xs font-semibold text-slate-500 uppercase">Nome da Pesquisa</th>
                                 <th className="p-4 text-left text-xs font-semibold text-slate-500 uppercase">Nº de Perguntas</th>
-                                <th className="p-4 text-left text-xs font-semibold text-slate-500 uppercase">Categoria</th>
+                                <th className="p-4 text-left text-slate-500 uppercase">Categoria</th>
                                 <th className="p-4 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
                                 <th className="p-4 text-left text-xs font-semibold text-slate-500 uppercase">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="p-4 text-center"><i className="fas fa-spinner fa-spin"></i> Carregando...</td></tr>
-                            ) : surveys.length === 0 ? (
-                                <tr><td colSpan={5} className="p-4 text-center">Nenhuma pesquisa ativa encontrada.</td></tr>
+                                <tr><td colSpan={5} className="p-4 text-center text-slate-500"><FaSpinner className="animate-spin inline-block mr-2" /> Carregando...</td></tr>
+                            ) : surveysToDisplay.length === 0 ? (
+                                <tr><td colSpan={5} className="p-4 text-center text-slate-500">Nenhuma pesquisa encontrada.</td></tr>
                             ) : (
-                                surveys.map(survey => {
+                                // --- ALTERADO para usar a nova lista filtrada e ordenada ---
+                                surveysToDisplay.map(survey => {
                                     const questionCount = (survey.pesquisas_perguntas && survey.pesquisas_perguntas[0]?.count) || 0;
-                                    const statusColor = survey.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
+                                    const statusColor = survey.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
 
                                     return (
-                                        <tr key={survey.id}>
-                                            <td className="p-4 font-medium">{survey.nome}</td>
-                                            <td className="p-4">{questionCount}</td>
-                                            <td className="p-4">{survey.categoria_pesquisa}</td>
+                                        <tr key={survey.id} className={`hover:bg-slate-50 ${survey.status === 'Inativo' ? 'opacity-60' : ''}`}>
+                                            <td className="p-4 font-medium text-slate-800">{survey.nome}</td>
+                                            <td className="p-4 text-slate-600">{questionCount}</td>
+                                            <td className="p-4 text-slate-600">{survey.categoria_pesquisa}</td>
                                             <td className="p-4"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor}`}>{survey.status}</span></td>
                                             <td className="p-4 space-x-4">
                                                 <Link href={`/pesquisas/editar/${survey.id}`} className="text-blue-600 hover:text-blue-800 font-medium">Editar</Link>
-                                                <button onClick={() => handleInactivate(survey.id, survey.nome)} className="text-orange-600 hover:text-orange-800 font-medium">Inativar</button>
+                                                {/* O botão agora só aparece para pesquisas ativas */}
+                                                {survey.status === 'Ativo' && (
+                                                    <button onClick={() => handleInactivate(survey.id, survey.nome)} className="text-red-600 hover:text-red-800 font-medium">
+                                                        Inativar
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     )

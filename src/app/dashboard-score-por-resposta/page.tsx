@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from '@/utils/supabase/client';
 import type { Database } from "@/lib/supabase-types";
 import { QuestionAnalysisData, Launch } from "@/lib/types"; 
 import QuestionAnalysisCard from "@/components/dashboard/QuestionAnalysisCard";
@@ -13,7 +13,7 @@ const Spinner = () => (
 );
 
 export default function ScorePorRespostaPage() {
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClient();
   
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [selectedLaunch, setSelectedLaunch] = useState<string>('');

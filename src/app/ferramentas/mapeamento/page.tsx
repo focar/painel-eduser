@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 // CORREÇÃO: Importa o cliente recomendado
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { FaPlus, FaTrash, FaSpinner, FaSave } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -13,7 +13,7 @@ type MappingRule = { id: number; questionId: string; sheetColumnName: string; };
 
 export default function MappingPage() {
     // CORREÇÃO: Usa o cliente correto
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
     const [supabaseQuestions, setSupabaseQuestions] = useState<SupabaseQuestion[]>([]);

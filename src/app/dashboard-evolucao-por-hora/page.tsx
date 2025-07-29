@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { subDays, startOfDay, endOfDay, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -18,7 +18,7 @@ type ChartDataPoint = { name: string; Inscrições: number; 'Check-ins': number;
 
 // --- Componente Principal ---
 export default function EvolucaoCanalPage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [selectedLaunchId, setSelectedLaunchId] = useState<string | null>(null);
     const [period, setPeriod] = useState<'Hoje' | 'Ontem' | '7 Dias' | '14 Dias' | '30 Dias' | '45 Dias' | 'Todos'>('Hoje');
     const [selectedUtm, setSelectedUtm] = useState<string>('Todos');

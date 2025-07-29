@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 // CORREÇÃO: Importa o cliente recomendado
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { FaSpinner } from 'react-icons/fa';
 
@@ -16,7 +16,7 @@ type Launch = {
 
 export default function LancamentosPage() {
   // CORREÇÃO: Usa o cliente correto
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

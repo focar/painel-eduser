@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from '@/utils/supabase/client';
 import type { Database } from "@/lib/supabase-types"; 
 import { Launch, ScoreProfileQuestion } from "@/lib/types";
 import ScoreProfileCard from "@/components/dashboard/ScoreProfileCard";
@@ -26,7 +26,7 @@ const Spinner = () => (
 );
 
 export default function PerfilDeScorePage() {
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [selectedScore, setSelectedScore] = useState<ScoreCategoryKey>('quente');

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 // CORREÇÃO: Importa o cliente recomendado
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaEdit } from 'react-icons/fa';
 
@@ -15,7 +15,7 @@ type UtmAlias = {
 
 export default function ConversaoUtmsPage() {
     // CORREÇÃO: Usa o cliente correto
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     
     const [aliases, setAliases] = useState<UtmAlias[]>([]);
     const [isLoading, setIsLoading] = useState(true);

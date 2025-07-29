@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { FaFilter, FaSpinner, FaChartBar, FaUsers, FaCheckCircle } from 'react-icons/fa';
 
 // --- Tipagens de Dados ---
@@ -23,7 +23,7 @@ type ChannelData = {
 
 // --- Componente Principal ---
 export default function AcompanhamentoCanaisPage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
 
     // --- Estados ---
     const [launches, setLaunches] = useState<Launch[]>([]);

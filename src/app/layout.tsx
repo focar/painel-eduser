@@ -1,4 +1,4 @@
-// Substitua o conteúdo do seu src/app/layout.tsx por este código
+// Caminho do arquivo: src/app/layout.tsx
 
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -26,7 +26,7 @@ export default function RootLayout({
           
           <Sidebar />
           
-          <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+          <main className="flex-1">
             {/* O Toaster é usado para mostrar notificações */}
             <Toaster position="top-right" />
             {children}

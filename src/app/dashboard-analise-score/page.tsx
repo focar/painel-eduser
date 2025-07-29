@@ -1,137 +1,85 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { FaSpinner, FaFileCsv } from 'react-icons/fa';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createClient } from '@/utils/supabase/client';
+import { FaSpinner } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+import dynamic from 'next/dynamic';
+import { Pie, Cell, Tooltip, Legend } from 'recharts';
+
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
 type ChartData = { name: string; value: number; };
-type DashboardData = {
-    quente: ChartData[]; quente_morno: ChartData[]; morno: ChartData[];
-    morno_frio: ChartData[]; frio: ChartData[];
-};
-type LeadExportData = {
-    email: string; nome: string; telefone: string; score: number;
-    utm_source: string; utm_medium: string; utm_campaign: string;
-    utm_content: string; utm_term: string;
-};
+type DashboardData = { quente: ChartData[]; quente_morno: ChartData[]; morno: ChartData[]; morno_frio: ChartData[]; frio: ChartData[]; };
+type RawLeadData = { score: number | null; utm_source: string | null; utm_medium: string | null; utm_campaign: string | null; utm_content: string | null; };
 
-// --- Lógica de Cores Consistente ---
-const hashCode = (str: string): number => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash |= 0;
-    }
-    return hash;
-};
+// --- Funções de Cor ---
+const COLOR_PALETTE = [
+  '#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f', '#edc949', 
+  '#af7aa1', '#ff9da7', '#9c755f', '#bab0ab', '#d37295', '#fcbf49', 
+  '#8cb369', '#17becf', '#9467bd', '#8c564b', '#bcbd22', '#d62728'
+];
 
-const getColorForString = (name: string): string => {
-    const lowerCaseName = (name || 'N/A').toLowerCase();
-    const predefinedColors: { [key: string]: string } = {
-        'google': '#4285F4', 'meta': '#E1306C', 'facebook': '#1877F2',
-        'instagram': '#D82D7E', 'organic': '#4CAF50', 'indefinido': '#BDBDBD',
-        'n/a': '#BDBDBD', 'outros': '#757575'
-    };
-    if (predefinedColors[lowerCaseName]) return predefinedColors[lowerCaseName];
-    const hash = hashCode(lowerCaseName);
-    const hue = Math.abs(hash % 360);
-    return `hsl(${hue}, 70%, 55%)`;
-};
+const hashCode = (str: string): number => { let hash = 0; if (!str || str.length === 0) return hash; for (let i = 0; i < str.length; i++) { const char = str.charCodeAt(i); hash = ((hash << 5) - hash) + char; hash = hash & hash; } return Math.abs(hash); };
+const getColorForString = (name: string): string => { const lowerCaseName = (name || 'N/A').toLowerCase(); const predefinedColors: { [key: string]: string } = { 'indefinido': '#BDBDBD', 'outros': '#757575', 'paid': '#d62728' }; if (predefinedColors[lowerCaseName]) return predefinedColors[lowerCaseName]; const index = hashCode(lowerCaseName) % COLOR_PALETTE.length; return COLOR_PALETTE[index]; };
 
-
-// --- Componentes ---
-const PageHeader = ({ title, launches, selectedLaunch, onLaunchChange, isLoading }: { 
-    title: string; launches: Launch[]; selectedLaunch: string; 
-    onLaunchChange: (id: string) => void; isLoading: boolean; 
-}) => (
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">{title}</h1>
-        <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
-            <select value={selectedLaunch} onChange={(e) => onLaunchChange(e.target.value)} disabled={isLoading} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium">
-                {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
-            </select>
-        </div>
-    </div>
-);
-
-const ScorePieChartCard = ({ title, data, launchId, launchName, categoryKey }: { 
-    title: string; data: ChartData[]; launchId: string;
-    launchName: string; categoryKey: keyof DashboardData;
+// --- Componente do Gráfico ---
+const ScorePieChartCard = ({ title, data, totalLeads }: {
+    title: string; data: ChartData[]; totalLeads: number;
 }) => {
-    const supabase = createClientComponentClient();
-    const [isExporting, setIsExporting] = useState(false);
+    const TOP_N_ITEMS = 7;
 
-    // ================== LÓGICA "TOP N + OUTROS" ==================
-    // ================== AQUI ESTÁ O AJUSTE ==================
-    const TOP_N_ITEMS = 6; // Mostra os 5 principais + 1 fatia de "Outros"
-    // ========================================================
-    
-    let processedData = data;
-    // Garante que 'data' é um array antes de processar
-    if (Array.isArray(data) && data.length > TOP_N_ITEMS) {
+    const processedData = useMemo(() => {
+        if (!Array.isArray(data) || data.length <= TOP_N_ITEMS) {
+            return data;
+        }
         const sortedData = [...data].sort((a, b) => b.value - a.value);
-        
         const topItems = sortedData.slice(0, TOP_N_ITEMS - 1);
         const otherItems = sortedData.slice(TOP_N_ITEMS - 1);
-        
         const otherSum = otherItems.reduce((acc, item) => acc + item.value, 0);
 
-        if (otherSum > 0) {
-            processedData = [
-                ...topItems,
-                { name: 'Outros', value: otherSum }
-            ];
-        } else {
-            processedData = topItems;
-        }
-    }
-    // ==============================================================
-
-    const exportToCSV = async () => { /* ... seu código de exportação ... */ };
-    const total = Array.isArray(data) ? data.reduce((acc, entry) => acc + entry.value, 0) : 0;
+        return otherSum > 0
+            ? [...topItems, { name: 'Outros', value: otherSum }]
+            : topItems;
+    }, [data]);
 
     return (
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-start mb-2">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md flex flex-col items-center">
+            <div className="w-full flex justify-between items-start mb-2">
                 <div>
                     <h2 className="text-lg font-semibold text-slate-700">{title}</h2>
-                    <p className="text-sm text-slate-500">Total: {total.toLocaleString('pt-BR')} leads</p>
+                    <p className="text-sm text-slate-500">Total: {totalLeads.toLocaleString('pt-BR')} leads</p>
                 </div>
-                <button onClick={exportToCSV} disabled={isExporting} className="flex items-center gap-2 px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-300 transition-colors disabled:opacity-50">
-                    {isExporting ? <FaSpinner className="animate-spin" /> : <FaFileCsv />}
-                    Exportar
-                </button>
             </div>
             {processedData && processedData.length > 0 ? (
-                <div style={{ width: '100%', height: 300 }}>
-                    <ResponsiveContainer>
-                        <PieChart>
-                            <Pie data={processedData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8">
-                                {processedData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={getColorForString(entry.name)} />
-                                ))}
-                            </Pie>
-                            <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
-                            <Legend
-                                iconType="circle"
-                                formatter={(value) => {
-                                    const MAX_LENGTH = 25;
-                                    if (value.length > MAX_LENGTH) {
-                                        return `${value.substring(0, MAX_LENGTH)}...`;
-                                    }
-                                    return value;
-                                }}
-                            />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
+                // AJUSTE: Aumentei a altura para corrigir o corte
+                <PieChart width={350} height={320}>
+                    <Pie
+                        data={processedData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="45%" // AJUSTE: Movi o centro para baixo para corrigir o corte
+                        outerRadius={80}
+                        innerRadius={45} // AJUSTE: Diminuí para deixar a rosca mais grossa
+                        labelLine={false}
+                    >
+                        {processedData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={getColorForString(entry.name)} />
+                        ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
+                    <Legend
+                        iconType="circle"
+                        verticalAlign="bottom"
+                        wrapperStyle={{ paddingTop: '15px' }}
+                        formatter={(value) => value.length > 25 ? `${value.substring(0, 25)}...` : value}
+                    />
+                </PieChart>
             ) : (
-                <div className="flex items-center justify-center h-72 text-slate-500">Nenhum dado para esta categoria.</div>
+                <div className="flex items-center justify-center h-[320px] text-slate-500">Nenhum dado para exibir.</div>
             )}
         </div>
     );
@@ -139,92 +87,168 @@ const ScorePieChartCard = ({ title, data, launchId, launchName, categoryKey }: {
 
 // --- Página Principal ---
 export default function AnaliseScorePage() {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
-    const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [noLaunchesFound, setNoLaunchesFound] = useState(false);
+    const [rawLeads, setRawLeads] = useState<RawLeadData[]>([]);
+    const [selectedSource, setSelectedSource] = useState('all');
+    const [selectedMedium, setSelectedMedium] = useState('all');
+    const [selectedContent, setSelectedContent] = useState('all');
 
-    const scoreCategories = [
+    useEffect(() => {
+        const fetchLaunches = async () => {
+            const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            if (error) { toast.error("Erro ao buscar lançamentos"); setIsLoading(false); }
+            else if (launchesData && launchesData.length > 0) {
+                const sorted = [...launchesData].sort((a, b) => a.status === 'Em Andamento' ? -1 : 1);
+                setLaunches(sorted);
+                setSelectedLaunch(sorted[0].id);
+            } else { setIsLoading(false); }
+        };
+        fetchLaunches();
+    }, [supabase]);
+
+    useEffect(() => {
+        const loadRawLeadData = async () => {
+            if (!selectedLaunch) { setIsLoading(launches.length === 0 ? false : true); return; }
+            setIsLoading(true);
+            setRawLeads([]);
+            const { data, error } = await supabase.rpc('get_leads_for_score_analysis', { p_launch_id: selectedLaunch });
+            if (error) { toast.error("Erro ao carregar dados dos leads."); console.error(error); }
+            else { setRawLeads(data || []); }
+            setIsLoading(false);
+        };
+        loadRawLeadData();
+    }, [selectedLaunch, supabase, launches.length]);
+
+    const filteredLeads = useMemo(() => {
+        return rawLeads.filter(lead =>
+            (selectedSource === 'all' || lead.utm_source === selectedSource) &&
+            (selectedMedium === 'all' || lead.utm_medium === selectedMedium) &&
+            (selectedContent === 'all' || lead.utm_content === selectedContent)
+        );
+    }, [rawLeads, selectedSource, selectedMedium, selectedContent]);
+
+    const utmOptions = useMemo(() => {
+        const sources = new Set<string>();
+        const mediums = new Set<string>();
+        const contents = new Set<string>();
+        
+        let sourceFiltered = rawLeads;
+        if (selectedSource !== 'all') {
+            sourceFiltered = rawLeads.filter(l => l.utm_source === selectedSource);
+        }
+
+        let mediumFiltered = sourceFiltered;
+        if (selectedMedium !== 'all') {
+            mediumFiltered = sourceFiltered.filter(l => l.utm_medium === selectedMedium);
+        }
+
+        rawLeads.forEach(l => l.utm_source && sources.add(l.utm_source));
+        sourceFiltered.forEach(l => l.utm_medium && mediums.add(l.utm_medium));
+        mediumFiltered.forEach(l => l.utm_content && contents.add(l.utm_content));
+        
+        return {
+            sources: Array.from(sources).sort(),
+            mediums: Array.from(mediums).sort(),
+            contents: Array.from(contents).sort()
+        };
+    }, [rawLeads, selectedSource, selectedMedium]);
+
+    const dashboardData = useMemo((): DashboardData => {
+        const scoreCategories = {
+            quente: (s: number | null) => s !== null && s > 80,
+            quente_morno: (s: number | null) => s !== null && s >= 65 && s <= 79,
+            morno: (s: number | null) => s !== null && s >= 50 && s <= 64,
+            morno_frio: (s: number | null) => s !== null && s >= 35 && s <= 49,
+            frio: (s: number | null) => s !== null && s > 0 && s < 35,
+        };
+
+        const result: DashboardData = { quente: [], quente_morno: [], morno: [], morno_frio: [], frio: [] };
+
+        Object.keys(scoreCategories).forEach(key => {
+            const categoryKey = key as keyof typeof scoreCategories;
+            const leadsInCategory = filteredLeads.filter(l => scoreCategories[categoryKey](l.score));
+            
+            const contentCounts = leadsInCategory.reduce((acc, lead) => {
+                const content = lead.utm_content || 'Indefinido';
+                acc[content] = (acc[content] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>);
+
+            result[categoryKey] = Object.entries(contentCounts)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value);
+        });
+        return result;
+    }, [filteredLeads]);
+
+    const scoreCategories = useMemo(() => [
         { key: 'quente', title: 'Quente (>80)' },
         { key: 'quente_morno', title: 'Quente-Morno (65-79)' },
         { key: 'morno', title: 'Morno (50-64)' },
         { key: 'morno_frio', title: 'Morno-Frio (35-49)' },
-        { key: 'frio', title: 'Frio (<35)' },
-    ] as const;
-
-    const loadDashboardData = useCallback(async (launchId: string) => {
-        if (!launchId) return;
-        setIsLoading(true);
-        try {
-            const { data, error } = await supabase.rpc('get_score_composition_dashboard', { p_launch_id: launchId });
-            if (error) throw error;
-            setData(data);
-        } catch (error) {
-            console.error("Erro ao buscar dados do dashboard:", error as Error);
-            setData(null);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [supabase]);
-
-    useEffect(() => {
-        const fetchLaunches = async () => {
-            try {
-                const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
-                if (error) throw error;
-                if (launchesData && launchesData.length > 0) {
-                    const sorted = [...launchesData].sort((a, b) => {
-                        if (a.status !== b.status) {
-                            return a.status === 'Em Andamento' ? -1 : 1;
-                        }
-                        return a.nome.localeCompare(b.nome);
-                    });
-                    setLaunches(sorted);
-                    if (!selectedLaunch) setSelectedLaunch(sorted[0].id);
-                } else {
-                    setNoLaunchesFound(true);
-                    setIsLoading(false);
-                }
-            } catch (error) {
-                console.error("Erro ao buscar lançamentos:", error as Error);
-                setNoLaunchesFound(true);
-            }
-        };
-        fetchLaunches();
-    }, [supabase, selectedLaunch]);
-
-    useEffect(() => {
-        if (selectedLaunch) loadDashboardData(selectedLaunch);
-    }, [selectedLaunch, loadDashboardData]);
-
-    const renderContent = () => {
-        if (isLoading) return <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>;
-        if (!data) return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum dado encontrado para este lançamento.</p></div>;
-        
-        return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {scoreCategories.map(category => (
-                    <ScorePieChartCard
-                        key={category.key}
-                        title={category.title}
-                        data={data[category.key]}
-                        launchId={selectedLaunch}
-                        launchName={launches.find(l => l.id === selectedLaunch)?.nome || 'export'}
-                        categoryKey={category.key}
-                    />
-                ))}
-            </div>
-        );
-    };
-
-    if (noLaunchesFound) return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum lançamento válido foi encontrado.</p></div>;
+        { key: 'frio', title: 'Frio (1-34)' },
+    ], []);
 
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
-            <PageHeader title="Análise de Score por Canal" launches={launches} selectedLaunch={selectedLaunch} onLaunchChange={setSelectedLaunch} isLoading={isLoading} />
-            {renderContent()}
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Score por Canal</h1>
+            <div className="bg-white p-4 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label className="text-sm font-medium text-slate-600">Lançamento</label>
+                    <select value={selectedLaunch} onChange={e => setSelectedLaunch(e.target.value)} disabled={!launches.length} className="mt-1 w-full p-2 border-gray-300 rounded-md bg-white">
+                        {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-slate-600">UTM Source</label>
+                    <select value={selectedSource} onChange={e => { setSelectedSource(e.target.value); setSelectedMedium('all'); setSelectedContent('all'); }} className="mt-1 w-full p-2 border-gray-300 rounded-md bg-white">
+                        <option value="all">Todos</option>
+                        {utmOptions.sources.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-slate-600">UTM Medium</label>
+                    <select value={selectedMedium} onChange={e => { setSelectedMedium(e.target.value); setSelectedContent('all'); }} className="mt-1 w-full p-2 border-gray-300 rounded-md bg-white">
+                        <option value="all">Todos</option>
+                        {utmOptions.mediums.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-slate-600">UTM Content</label>
+                    <select value={selectedContent} onChange={e => setSelectedContent(e.target.value)} className="mt-1 w-full p-2 border-gray-300 rounded-md bg-white">
+                        <option value="all">Todos</option>
+                        {utmOptions.contents.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            {isLoading ? (
+                <div className="text-center py-10">
+                    <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" />
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {scoreCategories.map((category, index) => {
+                        const dataForChart = dashboardData[category.key as keyof DashboardData] || [];
+                        const totalLeads = dataForChart.reduce((acc, item) => acc + item.value, 0);
+                        const isLastItem = index === scoreCategories.length - 1;
+                        const shouldSpanFull = isLastItem && scoreCategories.length % 2 !== 0;
+                        
+                        return (
+                            <div key={category.key} className={`${shouldSpanFull ? 'md:col-span-2' : ''}`}>
+                                <ScorePieChartCard
+                                    title={category.title}
+                                    data={dataForChart}
+                                    totalLeads={totalLeads}
+                                />
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
         </div>
     );
 }

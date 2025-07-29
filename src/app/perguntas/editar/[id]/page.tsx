@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import QuestionForm from "@/components/Question/QuestionForm";
+import QuestionForm from "@/components/question/QuestionForm";
 // --- CORREÇÃO 1: Importa o novo cliente para o navegador ---
 import { createClient } from '@/utils/supabase/client';
 

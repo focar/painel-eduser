@@ -114,7 +114,7 @@ export default function AnaliseScorePage() {
             if (!selectedLaunch) { setIsLoading(launches.length === 0 ? false : true); return; }
             setIsLoading(true);
             setRawLeads([]);
-            const { data, error } = await supabase.rpc('get_leads_for_score_analysis', { p_launch_id: selectedLaunch });
+            const { data, error } = await supabase.rpc('get_lead_scoring_data', { p_launch_id: selectedLaunch });
             if (error) { toast.error("Erro ao carregar dados dos leads."); console.error(error); }
             else { setRawLeads(data || []); }
             setIsLoading(false);

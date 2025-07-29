@@ -9,7 +9,7 @@ import { FaSpinner, FaFilter, FaClock, FaChevronDown, FaChevronRight, FaUsers, F
 type Launch = { id: string; nome: string; status: string; };
 
 type RawLead = {
-    created_at: string;
+    created_at: string | null;
     check_in_at: string | null;
     utm_source: string | null;
     utm_medium: string | null;

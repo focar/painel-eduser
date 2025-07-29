@@ -55,7 +55,6 @@ export default function AnaliseCampanhaPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
-    // Estados para os filtros
     const [rawLeads, setRawLeads] = useState<RawLead[]>([]);
     const [selectedSource, setSelectedSource] = useState('all');
     const [selectedMedium, setSelectedMedium] = useState('all');
@@ -69,7 +68,6 @@ export default function AnaliseCampanhaPage() {
         setExpandedRows(prev => ({ ...prev, [hora]: !prev[hora] }));
     };
 
-    // Carrega os lançamentos
     useEffect(() => {
         const fetchLaunches = async () => {
             setIsLoading(true);
@@ -87,16 +85,13 @@ export default function AnaliseCampanhaPage() {
         };
         fetchLaunches();
     }, [supabase]);
-
-    // Carrega os dados brutos dos leads quando o lançamento muda
+    
     useEffect(() => {
         const loadRawDataWithPagination = async () => {
             if (!selectedLaunch) return;
             setIsLoadingData(true);
             setRawLeads([]);
-
-            // SOLUÇÃO DEFINITIVA: Implementa paginação para buscar todos os dados
-            // O servidor tem um limite de 1000, então buscamos de 1000 em 1000.
+            
             let allLeads: RawLead[] = [];
             let page = 0;
             const pageSize = 1000;
@@ -112,7 +107,7 @@ export default function AnaliseCampanhaPage() {
                 if (error) {
                     toast.error("Erro ao carregar página de dados dos leads.");
                     console.error(error);
-                    keepFetching = false; // Interrompe o loop em caso de erro
+                    keepFetching = false;
                     break;
                 }
 
@@ -120,11 +115,10 @@ export default function AnaliseCampanhaPage() {
                     allLeads = [...allLeads, ...data];
                 }
 
-                // Se a página retornou menos dados que o tamanho da página, é a última.
                 if (!data || data.length < pageSize) {
                     keepFetching = false;
                 } else {
-                    page++; // Prepara para buscar a próxima página
+                    page++;
                 }
             }
             
@@ -135,7 +129,6 @@ export default function AnaliseCampanhaPage() {
         loadRawDataWithPagination();
     }, [selectedLaunch, supabase]);
 
-    // Filtros em cascata
     const filterOptions = useMemo(() => {
         let leads = rawLeads;
         const sources = new Set<string>();
@@ -167,7 +160,6 @@ export default function AnaliseCampanhaPage() {
         };
     }, [rawLeads, selectedSource, selectedMedium, selectedCampaign, selectedContent]);
 
-    // Filtra os leads com base nas seleções
     const filteredLeads = useMemo(() => {
         return rawLeads.filter(lead => 
             (selectedSource === 'all' || lead.utm_source === selectedSource) &&
@@ -178,26 +170,25 @@ export default function AnaliseCampanhaPage() {
         );
     }, [rawLeads, selectedSource, selectedMedium, selectedCampaign, selectedContent, selectedTerm]);
 
-    // Calcula os KPIs TOTAIS (não mudam com os filtros)
     const grandTotalKpis = useMemo(() => {
         const totalInscricoes = rawLeads.length;
         const totalCheckins = rawLeads.filter(l => l.check_in_at).length;
         return { totalInscricoes, totalCheckins };
     }, [rawLeads]);
 
-    // Calcula os KPIs FILTRADOS
     const filteredKpis = useMemo(() => {
         const totalInscricoes = filteredLeads.length;
         const totalCheckins = filteredLeads.filter(l => l.check_in_at).length;
         return { totalInscricoes, totalCheckins };
     }, [filteredLeads]);
 
-    // Processa os dados para a tabela
     const hourlyData = useMemo((): HourlyRow[] => {
         const groupedByHour: Record<string, { inscricoes: RawLead[], checkins: RawLead[] }> = {};
 
-        filteredLeads.forEach(lead => {
-            const hour = new Date(lead.created_at).toISOString().slice(0, 13) + ":00:00";
+        // CORREÇÃO: Filtra leads que possam ter 'created_at' nulo antes de processar
+        filteredLeads.filter(lead => lead.created_at).forEach(lead => {
+            // Agora é seguro usar lead.created_at, pois os nulos foram removidos
+            const hour = new Date(lead.created_at as string).toISOString().slice(0, 13) + ":00:00";
             if (!groupedByHour[hour]) {
                 groupedByHour[hour] = { inscricoes: [], checkins: [] };
             }
@@ -249,7 +240,6 @@ export default function AnaliseCampanhaPage() {
                 </div>
             </div>
 
-            {/* --- KPIs --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <KpiCard title="Total Geral Inscrições" value={grandTotalKpis.totalInscricoes.toLocaleString('pt-BR')} icon={FaGlobe} subTitle="Total do Lançamento" />
                 <KpiCard title="Total Geral Check-ins" value={grandTotalKpis.totalCheckins.toLocaleString('pt-BR')} icon={FaBullseye} subTitle="Total do Lançamento" />
@@ -257,14 +247,12 @@ export default function AnaliseCampanhaPage() {
                 <KpiCard title="Check-ins (Filtro)" value={filteredKpis.totalCheckins.toLocaleString('pt-BR')} icon={FaUserCheck} subTitle="Resultado do filtro atual" />
             </div>
 
-            {/* --- Filtros --- */}
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center gap-2 mb-4">
                     <FaFilter className="text-blue-600"/>
                     <h2 className="text-lg font-semibold text-slate-700">Filtros de Análise</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    {/* Source */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">UTM Source</label>
                         <select value={selectedSource} onChange={e => setSelectedSource(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
@@ -272,7 +260,6 @@ export default function AnaliseCampanhaPage() {
                             {filterOptions.sources.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
-                    {/* Medium */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">UTM Medium</label>
                         <select value={selectedMedium} onChange={e => setSelectedMedium(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
@@ -280,7 +267,6 @@ export default function AnaliseCampanhaPage() {
                             {filterOptions.mediums.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
-                     {/* Campaign */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">UTM Campaign</label>
                         <select value={selectedCampaign} onChange={e => setSelectedCampaign(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
@@ -288,7 +274,6 @@ export default function AnaliseCampanhaPage() {
                             {filterOptions.campaigns.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
-                     {/* Content */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">UTM Content</label>
                         <select value={selectedContent} onChange={e => setSelectedContent(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
@@ -296,7 +281,6 @@ export default function AnaliseCampanhaPage() {
                             {filterOptions.contents.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
-                    {/* Term */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">UTM Term</label>
                         <select value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">

@@ -79,7 +79,7 @@ export default function EvolucaoCanalPage() {
                 console.error('Erro ao buscar dados completos:', error);
                 setFullLaunchData(null);
             } else {
-                setFullLaunchData(data);
+                setFullLaunchData(data as ApiResponse);
             }
             setIsLoading(prev => ({ ...prev, full: false }));
         };

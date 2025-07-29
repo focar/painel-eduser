@@ -16,12 +16,7 @@ type DashboardData = { quente: ChartData[]; quente_morno: ChartData[]; morno: Ch
 type RawLeadData = { score: number | null; utm_source: string | null; utm_medium: string | null; utm_campaign: string | null; utm_content: string | null; };
 
 // --- Funções de Cor ---
-const COLOR_PALETTE = [
-  '#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f', '#edc949', 
-  '#af7aa1', '#ff9da7', '#9c755f', '#bab0ab', '#d37295', '#fcbf49', 
-  '#8cb369', '#17becf', '#9467bd', '#8c564b', '#bcbd22', '#d62728'
-];
-
+const COLOR_PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78'];
 const hashCode = (str: string): number => { let hash = 0; if (!str || str.length === 0) return hash; for (let i = 0; i < str.length; i++) { const char = str.charCodeAt(i); hash = ((hash << 5) - hash) + char; hash = hash & hash; } return Math.abs(hash); };
 const getColorForString = (name: string): string => { const lowerCaseName = (name || 'N/A').toLowerCase(); const predefinedColors: { [key: string]: string } = { 'indefinido': '#BDBDBD', 'outros': '#757575', 'paid': '#d62728' }; if (predefinedColors[lowerCaseName]) return predefinedColors[lowerCaseName]; const index = hashCode(lowerCaseName) % COLOR_PALETTE.length; return COLOR_PALETTE[index]; };
 
@@ -30,7 +25,6 @@ const ScorePieChartCard = ({ title, data, totalLeads }: {
     title: string; data: ChartData[]; totalLeads: number;
 }) => {
     const TOP_N_ITEMS = 7;
-
     const processedData = useMemo(() => {
         if (!Array.isArray(data) || data.length <= TOP_N_ITEMS) {
             return data;
@@ -40,9 +34,7 @@ const ScorePieChartCard = ({ title, data, totalLeads }: {
         const otherItems = sortedData.slice(TOP_N_ITEMS - 1);
         const otherSum = otherItems.reduce((acc, item) => acc + item.value, 0);
 
-        return otherSum > 0
-            ? [...topItems, { name: 'Outros', value: otherSum }]
-            : topItems;
+        return otherSum > 0 ? [...topItems, { name: 'Outros', value: otherSum }] : topItems;
     }, [data]);
 
     return (
@@ -54,16 +46,15 @@ const ScorePieChartCard = ({ title, data, totalLeads }: {
                 </div>
             </div>
             {processedData && processedData.length > 0 ? (
-                // AJUSTE: Aumentei a altura para corrigir o corte
                 <PieChart width={350} height={320}>
                     <Pie
                         data={processedData}
                         dataKey="value"
                         nameKey="name"
                         cx="50%"
-                        cy="45%" // AJUSTE: Movi o centro para baixo para corrigir o corte
+                        cy="45%"
                         outerRadius={80}
-                        innerRadius={45} // AJUSTE: Diminuí para deixar a rosca mais grossa
+                        innerRadius={45}
                         labelLine={false}
                     >
                         {processedData.map((entry, index) => (
@@ -115,15 +106,18 @@ export default function AnaliseScorePage() {
             setIsLoading(true);
             setRawLeads([]);
             const { data, error } = await supabase.rpc('get_lead_scoring_data', { p_launch_id: selectedLaunch });
-            if (error) { toast.error("Erro ao carregar dados dos leads."); console.error(error); }
-            else { setRawLeads(data || []); }
+            if (error) { toast.error("Erro ao carregar dados dos leads."); console.error(error); } 
+            else {
+                // CORREÇÃO: Afirmando o tipo de 'data' para corresponder ao estado 'rawLeads'
+                setRawLeads((data as RawLeadData[]) || []);
+            }
             setIsLoading(false);
         };
         loadRawLeadData();
     }, [selectedLaunch, supabase, launches.length]);
 
     const filteredLeads = useMemo(() => {
-        return rawLeads.filter(lead =>
+        return rawLeads.filter(lead => 
             (selectedSource === 'all' || lead.utm_source === selectedSource) &&
             (selectedMedium === 'all' || lead.utm_medium === selectedMedium) &&
             (selectedContent === 'all' || lead.utm_content === selectedContent)
@@ -131,29 +125,15 @@ export default function AnaliseScorePage() {
     }, [rawLeads, selectedSource, selectedMedium, selectedContent]);
 
     const utmOptions = useMemo(() => {
-        const sources = new Set<string>();
-        const mediums = new Set<string>();
-        const contents = new Set<string>();
-        
+        const sources = new Set<string>(); const mediums = new Set<string>(); const contents = new Set<string>();
         let sourceFiltered = rawLeads;
-        if (selectedSource !== 'all') {
-            sourceFiltered = rawLeads.filter(l => l.utm_source === selectedSource);
-        }
-
+        if (selectedSource !== 'all') sourceFiltered = rawLeads.filter(l => l.utm_source === selectedSource);
         let mediumFiltered = sourceFiltered;
-        if (selectedMedium !== 'all') {
-            mediumFiltered = sourceFiltered.filter(l => l.utm_medium === selectedMedium);
-        }
-
-        rawLeads.forEach(l => l.utm_source && sources.add(l.utm_source));
-        sourceFiltered.forEach(l => l.utm_medium && mediums.add(l.utm_medium));
-        mediumFiltered.forEach(l => l.utm_content && contents.add(l.utm_content));
-        
-        return {
-            sources: Array.from(sources).sort(),
-            mediums: Array.from(mediums).sort(),
-            contents: Array.from(contents).sort()
-        };
+        if (selectedMedium !== 'all') mediumFiltered = sourceFiltered.filter(l => l.utm_medium === selectedMedium);
+        rawLeads.forEach(l => { if (l.utm_source) sources.add(l.utm_source) });
+        sourceFiltered.forEach(l => { if (l.utm_medium) mediums.add(l.utm_medium) });
+        mediumFiltered.forEach(l => { if (l.utm_content) contents.add(l.utm_content) });
+        return { sources: Array.from(sources).sort(), mediums: Array.from(mediums).sort(), contents: Array.from(contents).sort() };
     }, [rawLeads, selectedSource, selectedMedium]);
 
     const dashboardData = useMemo((): DashboardData => {
@@ -164,31 +144,23 @@ export default function AnaliseScorePage() {
             morno_frio: (s: number | null) => s !== null && s >= 35 && s <= 49,
             frio: (s: number | null) => s !== null && s > 0 && s < 35,
         };
-
         const result: DashboardData = { quente: [], quente_morno: [], morno: [], morno_frio: [], frio: [] };
-
         Object.keys(scoreCategories).forEach(key => {
             const categoryKey = key as keyof typeof scoreCategories;
             const leadsInCategory = filteredLeads.filter(l => scoreCategories[categoryKey](l.score));
-            
             const contentCounts = leadsInCategory.reduce((acc, lead) => {
                 const content = lead.utm_content || 'Indefinido';
                 acc[content] = (acc[content] || 0) + 1;
                 return acc;
             }, {} as Record<string, number>);
-
-            result[categoryKey] = Object.entries(contentCounts)
-                .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value);
+            result[categoryKey] = Object.entries(contentCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
         });
         return result;
     }, [filteredLeads]);
-
+    
     const scoreCategories = useMemo(() => [
-        { key: 'quente', title: 'Quente (>80)' },
-        { key: 'quente_morno', title: 'Quente-Morno (65-79)' },
-        { key: 'morno', title: 'Morno (50-64)' },
-        { key: 'morno_frio', title: 'Morno-Frio (35-49)' },
+        { key: 'quente', title: 'Quente (>80)' }, { key: 'quente_morno', title: 'Quente-Morno (65-79)' },
+        { key: 'morno', title: 'Morno (50-64)' }, { key: 'morno_frio', title: 'Morno-Frio (35-49)' },
         { key: 'frio', title: 'Frio (1-34)' },
     ], []);
 
@@ -224,26 +196,17 @@ export default function AnaliseScorePage() {
                     </select>
                 </div>
             </div>
-
-            {isLoading ? (
-                <div className="text-center py-10">
-                    <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" />
-                </div>
-            ) : (
+            
+            {isLoading ? <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {scoreCategories.map((category, index) => {
                         const dataForChart = dashboardData[category.key as keyof DashboardData] || [];
                         const totalLeads = dataForChart.reduce((acc, item) => acc + item.value, 0);
                         const isLastItem = index === scoreCategories.length - 1;
                         const shouldSpanFull = isLastItem && scoreCategories.length % 2 !== 0;
-                        
                         return (
                             <div key={category.key} className={`${shouldSpanFull ? 'md:col-span-2' : ''}`}>
-                                <ScorePieChartCard
-                                    title={category.title}
-                                    data={dataForChart}
-                                    totalLeads={totalLeads}
-                                />
+                                <ScorePieChartCard title={category.title} data={dataForChart} totalLeads={totalLeads} />
                             </div>
                         )
                     })}

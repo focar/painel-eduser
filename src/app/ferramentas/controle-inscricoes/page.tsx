@@ -7,7 +7,7 @@ import { FaSpinner } from 'react-icons/fa';
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; }; // Adicionado 'status' ao tipo
-type PageVariant = { id: string; name: string; slug: string; status: string; };
+type PageVariant = { id: string; name: string; slug: string | null; status: string | null; };
 type FlowSetting = { utm_content: string; flow_type: string; };
 
 export default function ControleInscricoesPage() {
@@ -70,10 +70,13 @@ export default function ControleInscricoesPage() {
             const uniqueChannels = [...new Set(leads.map(l => l.utm_content))];
             const settingsMap = new Map(settings.map(s => [s.utm_content, s.flow_type]));
             
-            const channelFlows = uniqueChannels.map(channel => ({
-                utm_content: channel,
+        const channelFlows = uniqueChannels
+            .filter((channel): channel is string => channel !== null && channel !== undefined) // <-- Adiciona este filtro
+            .map(channel => ({
+                utm_content: channel, // Agora 'channel' é garantidamente uma string
                 flow_type: settingsMap.get(channel) || 'composto'
-            }));
+        }));
+
             setFlowSettings(channelFlows);
         } catch (err) {
             showAlertModal('Erro', 'Não foi possível carregar os fluxos de canal.');

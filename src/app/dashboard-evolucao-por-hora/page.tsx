@@ -79,7 +79,7 @@ export default function EvolucaoCanalPage() {
                 console.error('Erro ao buscar dados completos:', error);
                 setFullLaunchData(null);
             } else {
-                setFullLaunchData(data as ApiResponse);
+                setPeriodData(data as unknown as ApiResponse);
             }
             setIsLoading(prev => ({ ...prev, full: false }));
         };
@@ -142,7 +142,7 @@ export default function EvolucaoCanalPage() {
                 console.error('Erro ao buscar dados do período:', error);
                 setPeriodData(null);
             } else {
-                setPeriodData(data);
+                setPeriodData(data as unknown as ApiResponse);
             }
             setIsLoading(prev => ({ ...prev, period: false }));
         };

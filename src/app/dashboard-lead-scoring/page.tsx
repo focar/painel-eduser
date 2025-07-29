@@ -12,7 +12,7 @@ type Launch = { id: string; nome: string; status: string; };
 type RawLead = {
     score: number | null;
     check_in_at: string | null;
-    created_at: string;
+    created_at: string | null;
     utm_source: string | null;
     utm_medium: string | null;
     utm_content: string | null;
@@ -47,7 +47,6 @@ const KpiCard = ({ title, value, icon: Icon, subTitle }: { title: string; value:
 );
 
 const ScoreDistributionChart = ({ data }: { data: ChartData[] }) => {
-    // ... (código do componente mantido, sem alterações)
     return (
         <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
             <h2 className="text-lg font-semibold text-slate-700 mb-4">Distribuição por Score (Filtro)</h2>
@@ -80,7 +79,6 @@ const DailyEvolutionChart = ({ data }: { data: DailyEvolutionData[] }) => (
 );
 
 const ScoringTable = ({ data, launchName }: { data: TableData[], launchName: string }) => {
-    // ... (código do componente mantido, apenas o título foi simplificado)
     const exportToCSV = () => {
         const headers = ["Canal", "Inscrições", "Check-ins", "Quente (>80)", "Quente-Morno", "Morno", "Morno-Frio", "Frio (<35)"];
         const csvRows = [headers.join(','), ...data.map(row => [`"${row.canal.replace(/"/g, '""')}"`, row.inscricoes, row.check_ins, row.quente_mais_80, row.quente_morno, row.morno, row.morno_frio, row.frio_menos_35].join(','))];
@@ -103,7 +101,6 @@ const ScoringTable = ({ data, launchName }: { data: TableData[], launchName: str
             </div>
             <div className="overflow-x-auto">
                 <table className="min-w-full">
-                    {/* ... O resto da tabela (thead, tbody) permanece igual ... */}
                     <thead className="bg-slate-50"><tr><th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Canal</th><th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Inscrições</th><th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Check-ins</th><th className="px-4 py-3 text-center text-xs font-medium text-blue-800 uppercase">Frio (&lt;35)</th><th className="px-4 py-3 text-center text-xs font-medium text-blue-400 uppercase">Morno-Frio</th><th className="px-4 py-3 text-center text-xs font-medium text-yellow-500 uppercase">Morno</th><th className="px-4 py-3 text-center text-xs font-medium text-orange-500 uppercase">Quente-Morno</th><th className="px-4 py-3 text-center text-xs font-medium text-red-600 uppercase">Quente (&gt;80)</th></tr></thead><tbody className="bg-white divide-y divide-slate-200">{data.map((row, index) => (<tr key={row.canal + index}><td className="p-3 md:px-4 md:py-4 font-medium text-slate-900 md:max-w-xs truncate" title={row.canal}>{row.canal}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600">{row.inscricoes}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-slate-600">{row.check_ins}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-blue-800">{row.frio_menos_35}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-blue-400">{row.morno_frio}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-yellow-500">{row.morno}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-orange-500">{row.quente_morno}</td><td className="p-3 md:px-4 md:py-4 md:text-center text-sm text-red-600">{row.quente_mais_80}</td></tr>))}</tbody>
                 </table>
             </div>
@@ -217,14 +214,16 @@ export default function LeadScoringPage() {
     }, [filteredLeads]);
     
     const dailyEvolutionChartData = useMemo(() => {
-        const grouped = filteredLeads.reduce((acc, lead) => {
-            const date = new Date(lead.created_at).toLocaleDateString('pt-BR');
-            if (!acc[date]) acc[date] = { inscricoes: 0, checkins: 0 };
-            acc[date].inscricoes++;
-            if (lead.check_in_at) acc[date].checkins++;
-            return acc;
-        }, {} as Record<string, { inscricoes: number, checkins: number }>);
-        return Object.entries(grouped).map(([data, values]) => ({ data, ...values })).sort((a,b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+        const grouped = filteredLeads
+            .filter(lead => lead.created_at) // <-- CORREÇÃO APLICADA AQUI
+            .reduce((acc, lead) => {
+                const date = new Date(lead.created_at as string).toLocaleDateString('pt-BR');
+                if (!acc[date]) acc[date] = { inscricoes: 0, checkins: 0 };
+                acc[date].inscricoes++;
+                if (lead.check_in_at) acc[date].checkins++;
+                return acc;
+            }, {} as Record<string, { inscricoes: number, checkins: number }>);
+        return Object.entries(grouped).map(([data, values]) => ({ data, ...values })).sort((a,b) => new Date(a.data.split('/').reverse().join('-')).getTime() - new Date(b.data.split('/').reverse().join('-')).getTime());
     }, [filteredLeads]);
 
     const scoringTableData = useMemo(() => {
@@ -249,9 +248,9 @@ export default function LeadScoringPage() {
             acc[key].inscricoes++;
             if (lead.check_in_at) acc[key].check_ins++;
             const scoreCategory = getScoreCategory(lead.score);
-            acc[key][scoreCategory]++;
+            (acc[key] as any)[scoreCategory]++;
             return acc;
-        }, {} as Record<string, TableData>);
+        }, {} as Record<string, Omit<TableData, 'canal'>>);
 
         return Object.entries(grouped).map(([canal, data]) => ({ canal, ...data })).sort((a,b) => b.inscricoes - a.inscricoes);
     }, [filteredLeads, selectedSource, selectedMedium]);

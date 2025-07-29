@@ -70,7 +70,7 @@ export default function DetalhamentoCanaisPage() {
                 p_traffic_type: trafficType
             });
             if (error) throw error;
-            setData(data);
+            setData(data as DashboardData);
         } catch (error: unknown) {
             const err = error as Error;
             console.error("Error loading channel details:", err.message);

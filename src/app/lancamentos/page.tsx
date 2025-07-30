@@ -10,10 +10,9 @@ type Launch = {
   id: string;
   nome: string;
   status: string;
-  // ================== INÍCIO DA CORREÇÃO ==================
-  // Permitimos que data_inicio seja nulo para corresponder ao banco de dados
   data_inicio: string | null;
-  // ================== FIM DA CORREÇÃO ==================
+  // Adicionamos created_at para a ordenação secundária
+  created_at: string | null; 
 };
 
 export default function LancamentosPage() {
@@ -27,8 +26,40 @@ export default function LancamentosPage() {
       try {
         const { data, error } = await supabase.from('lancamentos').select('*').order('created_at', { ascending: false });
         if (error) throw error;
-        // O TypeScript agora aceitará 'data' porque o tipo Launch foi corrigido
-        setLaunches(data || []);
+
+        // ================== INÍCIO DA CORREÇÃO DE ORDENAÇÃO ==================
+        if (data) {
+          // 1. Define a ordem de prioridade dos status
+          const statusOrder: { [key: string]: number } = {
+            'Em Andamento': 1,
+            'Planejado': 2,
+            'Concluído': 3,
+            'Concluido': 3, // Garante que ambos os nomes funcionem
+            'Cancelado': 4,
+          };
+
+          // 2. Ordena os dados com a lógica personalizada
+          const sortedData = [...data].sort((a, b) => {
+            const orderA = statusOrder[a.status] || 99; // Status desconhecidos vão para o fim
+            const orderB = statusOrder[b.status] || 99;
+
+            // Se o status for diferente, ordena pelo status
+            if (orderA !== orderB) {
+              return orderA - orderB;
+            }
+
+            // Se o status for o mesmo, ordena pela data de criação (mais recente primeiro)
+            if (a.created_at && b.created_at) {
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }
+            return 0;
+          });
+
+          setLaunches(sortedData);
+        } else {
+            setLaunches([]);
+        }
+        // ================== FIM DA CORREÇÃO DE ORDENAÇÃO ====================
       } catch (err) {
         console.error("Erro ao buscar lançamentos:", err);
       } finally {

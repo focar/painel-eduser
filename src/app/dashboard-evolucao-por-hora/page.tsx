@@ -5,13 +5,11 @@ import { createClient } from '@/utils/supabase/client';
 import { subDays, startOfDay, endOfDay, format, parseISO, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FaSpinner, FaFilter, FaUsers, FaUserCheck } from 'react-icons/fa';
+import { FaSpinner, FaFilter, FaUsers, FaUserCheck, FaChevronDown } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
-// ================== INÍCIO DA CORREÇÃO ==================
-// 1. Corrigido o tipo para permitir que 'created_at' seja nulo
 type RawLead = {
     created_at: string | null;
     check_in_at: string | null;
@@ -19,9 +17,11 @@ type RawLead = {
     utm_medium: string | null;
     utm_content: string | null;
 };
-// ================== FIM DA CORREÇÃO ==================
 type ChartDataPoint = { name: string; Inscrições: number; 'Check-ins': number; originalDate?: Date };
 type Period = 'Hoje' | 'Ontem' | '7 Dias' | '14 Dias' | '30 Dias' | '45 Dias' | 'Todos';
+type HourlyData = { hour: number; inscricoes: number; checkins: number; };
+type DailyData = Record<string, HourlyData[]>;
+type GroupedDataForTable = Record<string, DailyData>;
 
 // --- Componentes ---
 const KpiCard = ({ title, value, description }: { title: string; value: number; description: string; }) => (
@@ -45,7 +45,18 @@ export default function EvolucaoCanalPage() {
     const [selectedContent, setSelectedContent] = useState('Todos');
 
     const [isLoading, setIsLoading] = useState({ launches: true, data: true });
-    
+    // RESTAURADO: Estado para controlar as linhas expansíveis da tabela
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+    // RESTAURADO: Função para abrir/fechar as linhas da tabela
+    const toggleRow = (key: string) => {
+        setExpandedRows(prev => {
+            const newSet = new Set(prev);
+            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
+            return newSet;
+        });
+    };
+
     useEffect(() => {
         const fetchLaunches = async () => {
             setIsLoading(prev => ({ ...prev, launches: true }));
@@ -77,12 +88,7 @@ export default function EvolucaoCanalPage() {
                     .eq('launch_id', selectedLaunchId)
                     .range(page * pageSize, (page + 1) * pageSize - 1);
 
-                if (error) {
-                    toast.error("Erro ao carregar dados dos leads.");
-                    keepFetching = false;
-                    break;
-                }
-                
+                if (error) { toast.error("Erro ao carregar dados dos leads."); keepFetching = false; break; }
                 if (data) allLeads = [...allLeads, ...data];
                 if (!data || data.length < pageSize) keepFetching = false;
                 else page++;
@@ -90,14 +96,12 @@ export default function EvolucaoCanalPage() {
             setRawLeads(allLeads);
             setIsLoading(prev => ({ ...prev, data: false }));
         };
-        
         loadAllLeadsForLaunch();
     }, [selectedLaunchId, supabase]);
 
     const leadsInPeriod = useMemo(() => {
         if (period === 'Todos') return rawLeads;
         if (!Array.isArray(rawLeads)) return [];
-
         const now = new Date();
         let interval;
         switch (period) {
@@ -109,7 +113,6 @@ export default function EvolucaoCanalPage() {
             case '45 Dias': interval = { start: startOfDay(subDays(now, 44)), end: endOfDay(now) }; break;
             default: return [];
         }
-        // 2. Adicionada verificação de segurança para evitar erro se 'created_at' for nulo
         return rawLeads.filter(lead => lead.created_at && isWithinInterval(parseISO(lead.created_at), interval));
     }, [rawLeads, period]);
     
@@ -117,21 +120,11 @@ export default function EvolucaoCanalPage() {
         const sources = new Set<string>();
         const mediums = new Set<string>();
         const contents = new Set<string>();
-
-        let leadsForMediums = leadsInPeriod;
         leadsInPeriod.forEach(l => l.utm_source && sources.add(l.utm_source));
-        
-        if (selectedSource !== 'Todos') {
-            leadsForMediums = leadsInPeriod.filter(l => l.utm_source === selectedSource);
-        }
+        const leadsForMediums = selectedSource === 'Todos' ? leadsInPeriod : leadsInPeriod.filter(l => l.utm_source === selectedSource);
         leadsForMediums.forEach(l => l.utm_medium && mediums.add(l.utm_medium));
-
-        let leadsForContents = leadsForMediums;
-        if (selectedMedium !== 'Todos') {
-            leadsForContents = leadsForMediums.filter(l => l.utm_medium === selectedMedium);
-        }
+        const leadsForContents = selectedMedium === 'Todos' ? leadsForMediums : leadsForMediums.filter(l => l.utm_medium === selectedMedium);
         leadsForContents.forEach(l => l.utm_content && contents.add(l.utm_content));
-
         return {
             sources: Array.from(sources).sort(),
             mediums: Array.from(mediums).sort(),
@@ -147,20 +140,17 @@ export default function EvolucaoCanalPage() {
         );
     }, [leadsInPeriod, selectedSource, selectedMedium, selectedContent]);
 
-    const kpis = useMemo(() => {
-        return {
-            totalGeralInscritos: rawLeads.length,
-            totalGeralCheckins: rawLeads.filter(l => l.check_in_at !== null).length,
-            periodoInscritos: filteredLeadsInPeriod.length,
-            periodoCheckins: filteredLeadsInPeriod.filter(l => l.check_in_at !== null).length,
-        };
-    }, [rawLeads, filteredLeadsInPeriod]);
+    const kpis = useMemo(() => ({
+        totalGeralInscritos: rawLeads.length,
+        totalGeralCheckins: rawLeads.filter(l => l.check_in_at !== null).length,
+        periodoInscritos: filteredLeadsInPeriod.length,
+        periodoCheckins: filteredLeadsInPeriod.filter(l => l.check_in_at !== null).length,
+    }), [rawLeads, filteredLeadsInPeriod]);
 
     const fullLaunchChartData = useMemo((): ChartDataPoint[] => {
         if (!rawLeads || rawLeads.length === 0) return [];
         const dailyTotals: Record<string, { inscricoes: number; checkins: number }> = {};
         rawLeads.forEach(item => {
-            // 3. Adicionada verificação de segurança aqui também
             if (item.created_at) {
                 const day = format(parseISO(item.created_at), 'yyyy-MM-dd');
                 if (!dailyTotals[day]) dailyTotals[day] = { inscricoes: 0, checkins: 0 };
@@ -168,15 +158,43 @@ export default function EvolucaoCanalPage() {
                 if (item.check_in_at) dailyTotals[day].checkins++;
             }
         });
-        return Object.entries(dailyTotals)
-            .map(([day, totals]) => ({ 
-                name: format(parseISO(day), 'dd/MM', { locale: ptBR }), 
-                Inscrições: totals.inscricoes, 
-                'Check-ins': totals.checkins, 
-                originalDate: parseISO(day) 
-            }))
-            .sort((a, b) => a.originalDate.getTime() - b.originalDate.getTime());
+        return Object.entries(dailyTotals).map(([day, totals]) => ({ name: format(parseISO(day), 'dd/MM', { locale: ptBR }), Inscrições: totals.inscricoes, 'Check-ins': totals.checkins, originalDate: parseISO(day) })).sort((a, b) => a.originalDate.getTime() - b.originalDate.getTime());
     }, [rawLeads]);
+
+    // RESTAURADO: Memo para o gráfico de linha por hora
+    const periodHourlyChartData = useMemo((): ChartDataPoint[] => {
+        if (!filteredLeadsInPeriod || filteredLeadsInPeriod.length === 0) return [];
+        const hourlyTotals: Record<number, { inscricoes: number; checkins: number }> = {};
+        filteredLeadsInPeriod.forEach(item => {
+            if (item.created_at) {
+                const hour = parseISO(item.created_at).getHours();
+                if (!hourlyTotals[hour]) hourlyTotals[hour] = { inscricoes: 0, checkins: 0 };
+                hourlyTotals[hour].inscricoes++;
+                if (item.check_in_at) hourlyTotals[hour].checkins++;
+            }
+        });
+        return Array.from({ length: 24 }, (_, i) => ({ name: `${i.toString().padStart(2, '0')}:00`, Inscrições: hourlyTotals[i]?.inscricoes || 0, 'Check-ins': hourlyTotals[i]?.checkins || 0 }));
+    }, [filteredLeadsInPeriod]);
+
+    // RESTAURADO: Memo para a tabela detalhada
+    const groupedDataForTable = useMemo(() => {
+        return filteredLeadsInPeriod.reduce((acc: GroupedDataForTable, item) => {
+            if (!item.created_at) return acc;
+            const utm = item.utm_content || 'Sem UTM';
+            const day = format(parseISO(item.created_at), 'yyyy-MM-dd');
+            const hour = parseISO(item.created_at).getHours();
+            if (!acc[utm]) acc[utm] = {};
+            if (!acc[utm][day]) acc[utm][day] = [];
+            const hourEntry = acc[utm][day].find(h => h.hour === hour);
+            if (hourEntry) {
+                hourEntry.inscricoes++;
+                if (item.check_in_at) hourEntry.checkins++;
+            } else {
+                acc[utm][day].push({ hour, inscricoes: 1, checkins: item.check_in_at ? 1 : 0 });
+            }
+            return acc;
+        }, {});
+    }, [filteredLeadsInPeriod]);
 
     return (
         <div className="p-4 md:p-6 space-y-6 bg-slate-50 min-h-screen">
@@ -242,7 +260,10 @@ export default function EvolucaoCanalPage() {
                 <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>
             ) : (
                 <div className="space-y-6">
+                    {/* RESTAURADO: Gráficos e Tabelas */}
                     <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-lg font-semibold text-gray-700 mb-4">Visão Geral do Lançamento (por Dia)</h3><div style={{height: '400px'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={fullLaunchChartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Bar dataKey="Inscrições" fill="#4e79a7" /><Bar dataKey="Check-ins" fill="#59a14f" /></BarChart></ResponsiveContainer></div></div>
+                    <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-lg font-semibold text-gray-700 mb-4">Evolução no Período por Hora ({period})</h3><div style={{height: '400px'}}><ResponsiveContainer width="100%" height="100%"><LineChart data={periodHourlyChartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Line type="monotone" dataKey="Inscrições" stroke="#4e79a7" strokeWidth={2} /><Line type="monotone" dataKey="Check-ins" stroke="#59a14f" strokeWidth={2} /></LineChart></ResponsiveContainer></div></div>
+                    <div className="bg-white p-4 rounded-lg shadow overflow-x-auto"><h3 className="text-lg font-semibold text-gray-700 mb-4">Detalhes por Dia e Hora</h3>{filteredLeadsInPeriod.length === 0 ? (<p className="text-center text-gray-500 py-4">Nenhum dado encontrado para o filtro selecionado.</p>) : (<div className="space-y-4">{Object.entries(groupedDataForTable).map(([utm, days]) => {const utmTotal = Object.values(days).flat().reduce((acc, curr) => ({inscricoes: acc.inscricoes + curr.inscricoes, checkins: acc.checkins + curr.checkins}), {inscricoes: 0, checkins: 0});return (<div key={utm} className="border rounded-lg"><h4 className="flex justify-between items-center font-bold bg-gray-200 p-2 text-slate-800 rounded-t-lg"><span>{utm}</span><span className="font-normal text-sm">Total: <strong>{utmTotal.inscricoes}</strong> Inscrições / <strong>{utmTotal.checkins}</strong> Check-ins</span></h4><table className="min-w-full"><tbody>{Object.entries(days).sort(([dayA], [dayB]) => new Date(dayB).getTime() - new Date(dayA).getTime()).map(([day, hours]) => {const dailyTotal = hours.reduce((acc, curr) => ({inscricoes: acc.inscricoes + curr.inscricoes, checkins: acc.checkins + curr.checkins}), {inscricoes: 0, checkins: 0});const key = `${utm}-${day}`;const isExpanded = expandedRows.has(key);return (<React.Fragment key={key}><tr onClick={() => toggleRow(key)} className="cursor-pointer hover:bg-gray-50 border-t"><td className="px-4 py-3 font-medium flex items-center gap-2 w-1/3"><FaChevronDown className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} size={12} />{format(parseISO(day), 'dd/MM/yyyy', { locale: ptBR })}</td><td className="px-4 py-3 text-center w-1/3">{dailyTotal.inscricoes}</td><td className="px-4 py-3 text-center w-1/3">{dailyTotal.checkins}</td></tr>{isExpanded && (<tr><td colSpan={3} className="p-0"><div className="pl-10 pr-4 py-2 bg-gray-50"><table className="min-w-full text-sm"><thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium text-gray-600 w-1/3">Hora</th><th className="p-2 text-center font-medium text-gray-600 w-1/3">Inscrições</th><th className="p-2 text-center font-medium text-gray-600 w-1/3">Check-ins</th></tr></thead><tbody className="divide-y divide-gray-200">{hours.sort((a,b) => b.hour - a.hour).map((item, index) => (<tr key={index}><td className="p-2">{`${item.hour.toString().padStart(2, '0')}:00`}</td><td className="p-2 text-center">{item.inscricoes}</td><td className="p-2 text-center">{item.checkins}</td></tr>))}</tbody></table></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>);})}</div>)}</div>
                 </div>
             )}
         </div>

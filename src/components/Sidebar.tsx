@@ -13,7 +13,6 @@ type User = {
   email?: string;
 };
 
-// ... (a variável 'menuItems' continua a mesma)
 const menuItems = [
     {
         title: "Dashboards",
@@ -73,30 +72,25 @@ export default function Sidebar() {
 
     useEffect(() => {
         const fetchUserData = async () => {
-            // ================== LOGIN FICTÍCIO PARA DESENVOLVIMENTO ==================
             const isDevelopmentBypass = process.env.NODE_ENV === 'development';
 
             if (isDevelopmentBypass) {
                 // **COLE AQUI O ID (UUID) DO SEU USUÁRIO ADMIN DE TESTE**
-                const DEV_ADMIN_ID = '0d985e22-ee07-4899-845a-2aa9ef30ece4'; // SUBSTITUA ESTE VALOR
+                const DEV_ADMIN_ID = '0d985e22-ee07-4899-845a-2aa9ef30ece4'; // Use o ID do seu admin de teste
 
                 setUser({ id: DEV_ADMIN_ID, email: 'admin@test.com' });
+                // ================== INÍCIO DA CORREÇÃO ==================
+                // Removemos as propriedades que não existem na sua tabela 'profiles'
                 setProfile({
                     id: DEV_ADMIN_ID,
-                    role: 'admin',
                     full_name: 'Admin de Desenvolvimento',
-                    // Preencha outras propriedades do tipo Profile com null ou valores padrão
-                    avatar_url: null,
-                    updated_at: null,
-                    username: null,
-                    website: null,
+                    role: 'admin',
                 });
+                // ================== FIM DA CORREÇÃO ==================
                 setLoading(false);
-                return; // Pula a busca real de dados
+                return; 
             }
-            // ================== FIM DO LOGIN FICTÍCIO ==================
-
-            // Lógica original para produção
+            
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setUser(user);
@@ -118,7 +112,6 @@ export default function Sidebar() {
     }, [supabase]);
 
     const handleLogout = async () => {
-        // Em modo de bypass, o logout apenas redireciona
         if (process.env.NODE_ENV === 'development') {
             alert("Logout desativado em modo de desenvolvimento.");
             return;
@@ -128,7 +121,6 @@ export default function Sidebar() {
         router.push('/login');
     };
     
-    // O resto do seu componente continua igual...
     return (
         <>
             <button 

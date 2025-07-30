@@ -12,12 +12,8 @@ export default function LoginPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        // ================== INÍCIO DA CORREÇÃO ==================
-        // 1. Força a atualização do servidor para que o middleware reconheça a sessão
         router.refresh();
-        // 2. Redireciona para a página principal (Agenda)
         router.push('/');
-        // ================== FIM DA CORREÇÃO ====================
       }
     });
 
@@ -30,7 +26,7 @@ export default function LoginPage() {
         <Auth
           supabaseClient={supabase}
           appearance={{ theme: ThemeSupa }}
-          providers={[]} // Deixado vazio para usar apenas email/senha
+          providers={[]}
           localization={{
             variables: {
               sign_in: { email_label: 'Seu e-mail', password_label: 'Sua senha', button_label: 'Entrar' },

@@ -55,7 +55,6 @@ const menuItems = [
     },
 ];
 
-
 export default function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
@@ -72,25 +71,7 @@ export default function Sidebar() {
 
     useEffect(() => {
         const fetchUserData = async () => {
-            const isDevelopmentBypass = process.env.NODE_ENV === 'development';
-
-            if (isDevelopmentBypass) {
-                // **COLE AQUI O ID (UUID) DO SEU USUÁRIO ADMIN DE TESTE**
-                const DEV_ADMIN_ID = '0d985e22-ee07-4899-845a-2aa9ef30ece4'; // Use o ID do seu admin de teste
-
-                setUser({ id: DEV_ADMIN_ID, email: 'admin@test.com' });
-                // ================== INÍCIO DA CORREÇÃO ==================
-                // Removemos as propriedades que não existem na sua tabela 'profiles'
-                setProfile({
-                    id: DEV_ADMIN_ID,
-                    full_name: 'Admin de Desenvolvimento',
-                    role: 'admin',
-                });
-                // ================== FIM DA CORREÇÃO ==================
-                setLoading(false);
-                return; 
-            }
-            
+            // Lógica de produção para buscar o usuário real que está logado
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setUser(user);
@@ -112,15 +93,12 @@ export default function Sidebar() {
     }, [supabase]);
 
     const handleLogout = async () => {
-        if (process.env.NODE_ENV === 'development') {
-            alert("Logout desativado em modo de desenvolvimento.");
-            return;
-        }
         await supabase.auth.signOut();
         router.refresh();
         router.push('/login');
     };
     
+    // O JSX (parte visual) continua o mesmo
     return (
         <>
             <button 
@@ -130,7 +108,6 @@ export default function Sidebar() {
             >
                 <FaBars size={24} />
             </button>
-
             <aside 
                 className={`
                     bg-slate-800 text-slate-300 w-64 p-4 min-h-screen 
@@ -161,7 +138,6 @@ export default function Sidebar() {
                         <span>by FOCAR</span>
                     </div>
                 </div>
-
                 <nav className="flex-1 flex flex-col justify-between overflow-y-auto">
                     <ul className="space-y-2">
                         {loading ? (
@@ -172,7 +148,6 @@ export default function Sidebar() {
                             if ((group.title === 'Operacional' || group.title === 'Ferramentas') && profile?.role !== 'admin') {
                                 return null;
                             }
-
                             const Icon = group.icon;
                             if (group.title === 'Dashboards') {
                                 return (
@@ -201,10 +176,8 @@ export default function Sidebar() {
                                     </li>
                                 );
                             }
-
                             const isOpen = group.title === 'Operacional' ? isOperacionalOpen : isFerramentasOpen;
                             const setIsOpen = group.title === 'Operacional' ? setIsOperacionalOpen : setIsFerramentasOpen;
-
                             return (
                                 <li key={group.title} className="mb-4">
                                     <button 
@@ -214,7 +187,6 @@ export default function Sidebar() {
                                         <span className="flex items-center"><Icon className="mr-3" />{group.title}</span>
                                         <FaChevronDown className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                                     </button>
-
                                     {isOpen && (
                                         <ul className="mt-2 space-y-1">
                                             {group.links.map((link) => (
@@ -238,7 +210,6 @@ export default function Sidebar() {
                             );
                         })}
                     </ul>
-
                     {user && (
                         <div className="border-t border-slate-700 pt-4 mt-4">
                             <p className="text-sm text-white px-2 truncate" title={user.email || ''}>{profile?.full_name || user.email}</p>
@@ -254,7 +225,6 @@ export default function Sidebar() {
                     )}
                 </nav>
             </aside>
-            
             {isMobileMenuOpen && (
                 <div 
                     className="fixed inset-0 bg-black/50 z-20 md:hidden"

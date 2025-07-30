@@ -1,8 +1,28 @@
-// Caminho do arquivo: src/middleware.ts
 import { NextResponse, type NextRequest } from 'next/server';
+import { createClient } from '@/utils/supabase/middleware';
 
-export function middleware(request: NextRequest) {
-  return NextResponse.next();
+export async function middleware(request: NextRequest) {
+  try {
+    const { supabase, response } = createClient(request);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { pathname } = request.nextUrl;
+
+    if (!session && pathname !== '/login') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    if (session && pathname === '/login') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    return response;
+  } catch (e) {
+    return NextResponse.next({
+      request: {
+        headers: request.headers,
+      },
+    });
+  }
 }
 
 export const config = {

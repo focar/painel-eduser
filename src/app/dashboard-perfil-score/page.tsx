@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from '@/utils/supabase/client';
-import type { Database } from "@/lib/supabase-types"; 
+//import type { Database } from '@/types/database';
 import { Launch, ScoreProfileQuestion } from "@/lib/types";
 import ScoreProfileCard from "@/components/dashboard/ScoreProfileCard";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";

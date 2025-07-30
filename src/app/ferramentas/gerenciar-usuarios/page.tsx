@@ -44,7 +44,7 @@ export default function GerenciarUsuariosPage() {
         if (usersError) {
           setError('Falha ao buscar usuários: ' + usersError.message);
         } else {
-          setUsers(usersData);
+          setUsers(usersData as unknown as UserProfile[]);
         }
       }
       setLoading(false);

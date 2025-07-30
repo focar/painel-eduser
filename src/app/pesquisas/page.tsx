@@ -6,25 +6,23 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaEye, FaEyeSlash } from 'react-icons/fa';
+// 1. Importamos o tipo 'Tables' do arquivo gerado pelo Supabase.
+import type { Tables } from '@/types/database';
 
-type Survey = {
-    id: string;
-    nome: string;
-    categoria_pesquisa: string;
-    status: string;
+// 2. Inferimos o tipo diretamente e adicionamos a propriedade 'count' que vem da query.
+type Survey = Tables<'pesquisas'> & {
     pesquisas_perguntas: { count: number }[];
 };
 
 export default function PesquisasPage() {
     const supabase = createClient();
-    const [allSurveys, setAllSurveys] = useState<Survey[]>([]); // Armazena TODAS as pesquisas
+    const [allSurveys, setAllSurveys] = useState<Survey[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [showInactive, setShowInactive] = useState(false); // Novo estado para controlar a visibilidade
+    const [showInactive, setShowInactive] = useState(false);
     const router = useRouter();
 
     const fetchSurveys = async () => {
         setIsLoading(true);
-        // Agora busca TODAS as pesquisas, incluindo as inativas
         const { data, error } = await supabase
             .from('pesquisas')
             .select(`id, nome, categoria_pesquisa, status, pesquisas_perguntas(count)`)
@@ -33,7 +31,8 @@ export default function PesquisasPage() {
         if (error) {
             toast.error('Erro ao carregar pesquisas: ' + error.message);
         } else {
-            setAllSurveys(data || []);
+            // Com o tipo correto, o TypeScript aceita 'data' sem problemas.
+            setAllSurveys(data as Survey[] || []);
         }
         setIsLoading(false);
     };
@@ -56,9 +55,6 @@ export default function PesquisasPage() {
                 if (error) throw error;
                 
                 toast.success('Pesquisa inativada com sucesso.', { id: toastId });
-                
-                // --- ATUALIZAÇÃO CORRIGIDA ---
-                // Simplesmente busca os dados novamente para garantir consistência
                 fetchSurveys(); 
 
             } catch (err: any) {
@@ -67,16 +63,13 @@ export default function PesquisasPage() {
         }
     };
 
-    // --- NOVA LÓGICA DE EXIBIÇÃO ---
-    // Filtra e ordena a lista de pesquisas para exibição com base no estado 'showInactive'
     const surveysToDisplay = useMemo(() => {
         const filtered = showInactive ? allSurveys : allSurveys.filter(s => s.status !== 'Inativo');
         
-        // Ordena para que 'Ativo' sempre venha primeiro
         return filtered.sort((a, b) => {
             if (a.status === 'Ativo' && b.status !== 'Ativo') return -1;
             if (a.status !== 'Ativo' && b.status === 'Ativo') return 1;
-            return 0; // Mantém a ordem original para status iguais
+            return 0;
         });
     }, [allSurveys, showInactive]);
 
@@ -86,7 +79,6 @@ export default function PesquisasPage() {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Gerenciador de Pesquisas</h1>
                 <div className="flex items-center gap-3">
-                    {/* --- NOVO BOTÃO --- */}
                     <button 
                         onClick={() => setShowInactive(!showInactive)}
                         className="bg-white border border-slate-300 text-slate-600 font-bold py-2 px-4 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center gap-2"
@@ -117,7 +109,6 @@ export default function PesquisasPage() {
                             ) : surveysToDisplay.length === 0 ? (
                                 <tr><td colSpan={5} className="p-4 text-center text-slate-500">Nenhuma pesquisa encontrada.</td></tr>
                             ) : (
-                                // --- ALTERADO para usar a nova lista filtrada e ordenada ---
                                 surveysToDisplay.map(survey => {
                                     const questionCount = (survey.pesquisas_perguntas && survey.pesquisas_perguntas[0]?.count) || 0;
                                     const statusColor = survey.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
@@ -130,7 +121,6 @@ export default function PesquisasPage() {
                                             <td className="p-4"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor}`}>{survey.status}</span></td>
                                             <td className="p-4 space-x-4">
                                                 <Link href={`/pesquisas/editar/${survey.id}`} className="text-blue-600 hover:text-blue-800 font-medium">Editar</Link>
-                                                {/* O botão agora só aparece para pesquisas ativas */}
                                                 {survey.status === 'Ativo' && (
                                                     <button onClick={() => handleInactivate(survey.id, survey.nome)} className="text-red-600 hover:text-red-800 font-medium">
                                                         Inativar

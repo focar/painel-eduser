@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from '@/utils/supabase/client';
-import type { Database } from "@/lib/supabase-types";
+//import type { Database } from '@/types/database';
 import { QuestionAnalysisData, Launch } from "@/lib/types"; 
 import QuestionAnalysisCard from "@/components/dashboard/QuestionAnalysisCard";
 

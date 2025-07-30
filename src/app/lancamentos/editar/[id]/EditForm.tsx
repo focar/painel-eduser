@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaCalendarAlt } from 'react-icons/fa';
 import type { LaunchData, Survey } from './page'; 
-import AgendaModal from '@/app/lancamentos/components/AgendaModal'; // Caminho novo e corrigido
+import AgendaModal from '@/app/lancamentos/components/AgendaModal';
 import type { LaunchEvent } from '../../types';
 
 function SurveySelectionModal({ isOpen, surveys, currentSurveyId, onSelect, onClose }: {
@@ -49,7 +49,7 @@ export default function EditForm({ initialData, allSurveys }: { initialData: Lau
     const supabase = createClient();
     const router = useRouter();
     const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState(initialData);
+    const [formData, setFormData] = useState<LaunchData>(initialData);
     
     const [events, setEvents] = useState<LaunchEvent[]>([]);
     const [surveys] = useState<Survey[]>(allSurveys);
@@ -57,42 +57,52 @@ export default function EditForm({ initialData, allSurveys }: { initialData: Lau
     const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
     const [isAgendaModalOpen, setIsAgendaModalOpen] = useState(false);
 
+    // ================== INÍCIO DA CORREÇÃO ==================
+    // Toda a lógica de inicialização foi unificada neste useEffect.
     useEffect(() => {
-        setFormData({
-            nome: initialData.nome,
-            descricao: initialData.descricao,
-            status: initialData.status,
-        });
-        if (initialData.associated_survey_ids && initialData.associated_survey_ids.length > 0) {
-            setSelectedSurveyId(initialData.associated_survey_ids[0]);
-        }
-        const existingEvents = new Map(initialData.eventos.map(e => [e.nome, e]));
-        let combinedEvents: LaunchEvent[] = defaultEventNames.map((name, index) => {
-            const existing = existingEvents.get(name);
-            return {
-                id: Date.now() + index, nome: name,
-                data_inicio: existing?.data_inicio?.split('T')[0] || '',
-                data_fim: existing?.data_fim?.split('T')[0] || '',
-                is_custom: false,
-            };
-        });
-        initialData.eventos.forEach((event, index) => {
-            if (!defaultEventNames.includes(event.nome)) {
-                combinedEvents.push({
-                    id: Date.now() + defaultEventNames.length + index, nome: event.nome,
-                    data_inicio: event.data_inicio?.split('T')[0] || '',
-                    data_fim: event.data_fim?.split('T')[0] || '',
-                    is_custom: true,
-                });
+        if (initialData) {
+            // 1. Define os dados do formulário
+            setFormData(initialData);
+
+            // 2. Define a pesquisa selecionada
+            if (initialData.associated_survey_ids && initialData.associated_survey_ids.length > 0) {
+                setSelectedSurveyId(initialData.associated_survey_ids[0]);
             }
-        });
-        let customEventCount = combinedEvents.filter(e => e.is_custom).length;
-        while (customEventCount < 2) {
-            combinedEvents.push({ id: Date.now() + combinedEvents.length, nome: '', data_inicio: '', data_fim: '', is_custom: true });
-            customEventCount++;
+
+            // 3. Processa e combina os eventos para a agenda
+            const existingEvents = new Map(initialData.eventos.map(e => [e.nome, e]));
+            
+            let combinedEvents: LaunchEvent[] = defaultEventNames.map((name, index) => {
+                const existing = existingEvents.get(name);
+                return {
+                    id: Date.now() + index, nome: name,
+                    data_inicio: existing?.data_inicio?.split('T')[0] || '',
+                    data_fim: existing?.data_fim?.split('T')[0] || '',
+                    is_custom: false,
+                };
+            });
+
+            initialData.eventos.forEach((event, index) => {
+                if (!defaultEventNames.includes(event.nome)) {
+                    combinedEvents.push({
+                        id: Date.now() + defaultEventNames.length + index, nome: event.nome,
+                        data_inicio: event.data_inicio?.split('T')[0] || '',
+                        data_fim: event.data_fim?.split('T')[0] || '',
+                        is_custom: true,
+                    });
+                }
+            });
+
+            let customEventCount = combinedEvents.filter(e => e.is_custom).length;
+            while (customEventCount < 2) {
+                combinedEvents.push({ id: Date.now() + combinedEvents.length, nome: '', data_inicio: '', data_fim: '', is_custom: true });
+                customEventCount++;
+            }
+            
+            setEvents(combinedEvents);
         }
-        setEvents(combinedEvents);
     }, [initialData]);
+    // ================== FIM DA CORREÇÃO ==================
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -136,7 +146,7 @@ export default function EditForm({ initialData, allSurveys }: { initialData: Lau
                         const eventsToSave = events.filter(event => event.nome && event.data_inicio);
 
                         if (eventsToSave.length > 0) {
-                            const allDates = eventsToSave.flatMap(ev => [ev.data_inicio, ev.data_fim]).filter(Boolean);
+                            const allDates = eventsToSave.flatMap(ev => [ev.data_inicio, ev.data_fim]).filter(Boolean) as string[];
                             minDate = allDates.reduce((min, p) => p < min ? p : min, allDates[0]);
                             maxDate = allDates.reduce((max, p) => p > max ? p : max, allDates[0]);
                         }

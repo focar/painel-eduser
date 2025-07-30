@@ -28,11 +28,12 @@ async function getLaunchById(id: string): Promise<LaunchData> {
         .eq('id', id)
         .single();
     if (error || !data) notFound();
-    return { 
-        ...data, 
-        eventos: data.eventos || [],
-        associated_survey_ids: data.associated_survey_ids || []
-    };
+return {
+    ...data,
+    descricao: data.descricao || '', // <-- ADICIONE ESTA LINHA
+    eventos: (data.eventos as LaunchEvent[]) || [],
+    associated_survey_ids: data.associated_survey_ids || []
+};
 }
 
 // Função para buscar TODAS as pesquisas disponíveis

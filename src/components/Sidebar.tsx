@@ -5,25 +5,27 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
 import { createClient } from '@/utils/supabase/client';
+// ================== INÍCIO DAS CORREÇÕES ==================
+// 1. Importamos o tipo 'Tables' do arquivo gerado pelo Supabase.
+import type { Tables } from '@/types/database';
 
-// --- NOVOS TIPOS: Para nos ajudar com os dados do usuário ---
+// 2. Inferimos o tipo diretamente. Agora 'Profile' é um espelho da sua tabela.
+type Profile = Tables<'profiles'>;
+
+// O tipo User continua o mesmo, pois vem da biblioteca de autenticação
 type User = {
   id: string;
   email?: string;
 };
-type Profile = {
-  role: 'admin' | 'viewer';
-  full_name?: string;
-};
+// ================== FIM DAS CORREÇÕES ====================
 
-// Seus menuItems continuam os mesmos
 const menuItems = [
     {
         title: "Dashboards",
-        icon: "fa-chart-pie",
+        icon: FaChartPie,
         links: [
             { name: "Análise de Campanha", href: "/dashboard-analise-campanha" },
-            { name: "Evolução de Canal ", href: "/dashboard-evolucao-por-hora" },
+            { name: "Evolução de Canal", href: "/dashboard-evolucao-por-hora" },
             { name: "Resumo Diário", href: "/dashboard-resumo" },
             { name: "Performance e Controle", href: "/dashboard-performance" },
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
@@ -38,7 +40,7 @@ const menuItems = [
     },
     {
         title: "Operacional",
-        icon: "fa-rocket",
+        icon: FaRocket,
         links: [
             { name: "Lançamentos", href: "/lancamentos" },
             { name: "Pesquisas", href: "/pesquisas" },
@@ -47,7 +49,7 @@ const menuItems = [
     },
     {
         title: "Ferramentas",
-        icon: "fa-tools",
+        icon: FaTools,
         links: [
             { name: "Controle de Inscrições", href: "/ferramentas/controle-inscricoes" },
             { name: "Ajustes de Arquivos", href: "/ferramentas/importacao" },
@@ -64,7 +66,6 @@ export default function Sidebar() {
     const router = useRouter();
     const supabase = createClient();
 
-    // --- NOVOS ESTADOS: Para guardar o usuário, seu perfil e o estado de carregamento ---
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -74,7 +75,6 @@ export default function Sidebar() {
     const [isOperacionalOpen, setIsOperacionalOpen] = useState(activeGroup?.title === 'Operacional');
     const [isFerramentasOpen, setIsFerramentasOpen] = useState(activeGroup?.title === 'Ferramentas');
 
-    // --- NOVO useEffect: Para buscar os dados do usuário ao carregar o componente ---
     useEffect(() => {
         const fetchUserData = async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -82,10 +82,11 @@ export default function Sidebar() {
                 setUser(user);
                 const { data: userProfile, error } = await supabase
                     .from('profiles')
-                    .select('role, full_name')
+                    .select('*') // Seleciona tudo para garantir compatibilidade
                     .eq('id', user.id)
                     .single();
                 if (userProfile) {
+                    // Agora os tipos são 100% compatíveis
                     setProfile(userProfile);
                 }
                 if(error) {
@@ -97,10 +98,9 @@ export default function Sidebar() {
         fetchUserData();
     }, [supabase]);
 
-    // --- NOVA FUNÇÃO: Para fazer o logout ---
     const handleLogout = async () => {
         await supabase.auth.signOut();
-        router.refresh(); // Garante que a página recarregue e o middleware redirecione
+        router.refresh();
         router.push('/login');
     };
 
@@ -145,26 +145,23 @@ export default function Sidebar() {
                     </div>
                 </div>
 
-                {/* Container da Navegação que cresce e empurra o logout para baixo */}
-                <nav className="flex-1 flex flex-col justify-between">
-                    {/* Lista principal de menus */}
+                <nav className="flex-1 flex flex-col justify-between overflow-y-auto">
                     <ul className="space-y-2">
                         {loading ? (
                             <li className="text-center p-4">
                                 <FaSpinner className="animate-spin mx-auto text-xl" />
                             </li>
                         ) : menuItems.map((group) => {
-                            // --- LÓGICA DE ACESSO: Mostra os menus restritos apenas se o perfil for 'admin' ---
                             if ((group.title === 'Operacional' || group.title === 'Ferramentas') && profile?.role !== 'admin') {
-                                return null; // Se não for admin, não renderiza estes menus
+                                return null;
                             }
 
-                            // Lógica para o grupo DASHBOARDS (sempre aberto)
+                            const Icon = group.icon;
                             if (group.title === 'Dashboards') {
                                 return (
-                                    <div key={group.title} className="mb-4">
+                                    <li key={group.title} className="mb-4">
                                         <h2 className="w-full flex items-center text-left text-xs font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
-                                            <i className={`fas ${group.icon} mr-3`}></i>
+                                            <Icon className="mr-3" />
                                             {group.title}
                                         </h2>
                                         <ul className="mt-2 space-y-1">
@@ -184,21 +181,20 @@ export default function Sidebar() {
                                                 </li>
                                             ))}
                                         </ul>
-                                    </div>
+                                    </li>
                                 );
                             }
 
-                            // Lógica para os outros grupos (retráteis)
                             const isOpen = group.title === 'Operacional' ? isOperacionalOpen : isFerramentasOpen;
                             const setIsOpen = group.title === 'Operacional' ? setIsOperacionalOpen : setIsFerramentasOpen;
 
                             return (
-                                <div key={group.title} className="mb-4">
+                                <li key={group.title} className="mb-4">
                                     <button 
                                         onClick={() => setIsOpen(!isOpen)}
                                         className="w-full flex justify-between items-center text-left text-xs font-bold text-slate-400 uppercase tracking-wider px-2 py-1 hover:bg-slate-700 rounded-md"
                                     >
-                                        <span><i className={`fas ${group.icon} mr-3`}></i>{group.title}</span>
+                                        <span className="flex items-center"><Icon className="mr-3" />{group.title}</span>
                                         <FaChevronDown className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                                     </button>
 
@@ -221,15 +217,14 @@ export default function Sidebar() {
                                             ))}
                                         </ul>
                                     )}
-                                </div>
+                                </li>
                             );
                         })}
                     </ul>
 
-                    {/* --- NOVO ELEMENTO: Seção do Usuário e Botão de Logout --- */}
                     {user && (
                         <div className="border-t border-slate-700 pt-4 mt-4">
-                            <p className="text-sm text-white px-2 truncate" title={user.email}>{profile?.full_name || user.email}</p>
+                            <p className="text-sm text-white px-2 truncate" title={user.email || ''}>{profile?.full_name || user.email}</p>
                             <p className="text-xs text-slate-400 px-2 mb-2 capitalize">{profile?.role}</p>
                             <button
                                 onClick={handleLogout}
@@ -243,7 +238,6 @@ export default function Sidebar() {
                 </nav>
             </aside>
             
-            {/* Overlay para fechar o menu no mobile */}
             {isMobileMenuOpen && (
                 <div 
                     className="fixed inset-0 bg-black/50 z-20 md:hidden"

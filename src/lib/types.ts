@@ -1,5 +1,3 @@
-// COPIE E COLE EM: src/lib/types.ts
-
 export interface AnswerData {
   answer_text: string;
   lead_count: number;
@@ -16,8 +14,6 @@ export interface Launch {
   nome: string;
   status: string;
 }
-
-// Adicione estes tipos ao seu ficheiro src/lib/types.ts
 
 export interface ScoreBreakdown {
   quente?: number;
@@ -39,8 +35,6 @@ export interface QuestionBreakdownData {
   answers: AnswerBreakdownData[];
 }
 
-// Adicione estes tipos ao seu ficheiro src/lib/types.ts
-
 export interface ScoreProfileAnswer {
   answer_text: string;
   lead_count: number;
@@ -51,3 +45,10 @@ export interface ScoreProfileQuestion {
   question_text: string;
   answers: ScoreProfileAnswer[];
 }
+
+// ================== TIPO ADICIONADO AQUI ==================
+export type Survey = {
+    id: string;
+    nome: string;
+};
+// =========================================================

@@ -1,56 +1,78 @@
-// Conteúdo CORRIGIDO para: src/app/pesquisas/editar/[id]/page.tsx
+'use client';
 
-import SurveyForm from "@/components/survey/SurveyForm";
-import { db } from "@/lib/supabaseClient";
+import { useEffect, useState } from 'react';
+import { createClient } from '@/utils/supabase/client';
+import { notFound } from 'next/navigation';
+import SurveyForm from '@/components/survey/SurveyForm';
+import { FaSpinner } from 'react-icons/fa';
+// 1. Importamos o tipo 'Tables' do arquivo gerado pelo Supabase.
+import type { Tables } from '@/types/database';
 
-async function getSurveyById(id: string) {
-    const { data, error } = await db
-        .from('pesquisas')
-        .select(`
-            id,
-            nome,
-            categoria_pesquisa,
-            status,
-            pesquisas_perguntas ( pergunta_id )
-        `)
-        .eq('id', id)
-        .single();
+// 2. Inferimos o tipo diretamente da tabela 'pesquisas'.
+//    Agora, SurveyData é um espelho perfeito da sua tabela.
+type SurveyData = Tables<'pesquisas'> & {
+    associated_question_ids: string[];
+};
+
+
+export default function EditarPesquisaPage({ params }: { params: { id: string } }) {
+    const supabase = createClient();
     
-    if (error) {
-        console.error("Erro ao buscar pesquisa:", error);
-        return null;
-    }
+    const [initialData, setInitialData] = useState<SurveyData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // ### INÍCIO DA CORREÇÃO ###
-    // Verificamos se pesquisas_perguntas existe e é um array antes de usar o .map()
-    const associated_ids = Array.isArray(data.pesquisas_perguntas) 
-        ? data.pesquisas_perguntas.map(pq => pq.pergunta_id) 
-        : [];
-    // ### FIM DA CORREÇÃO ###
+    useEffect(() => {
+        const getSurveyById = async (id: string) => {
+            try {
+                const { data, error } = await supabase
+                    .from('pesquisas')
+                    .select(`
+                        *,
+                        pesquisas_perguntas ( pergunta_id )
+                    `)
+                    .eq('id', id)
+                    .single();
+                
+                if (error || !data) {
+                    throw new Error("Pesquisa não encontrada ou erro ao buscar.");
+                }
+        
+                const associated_ids = Array.isArray(data.pesquisas_perguntas) 
+                    ? data.pesquisas_perguntas.map((pq: any) => pq.pergunta_id) 
+                    : [];
+                
+                // Agora os tipos são 100% compatíveis
+                setInitialData({
+                    ...data,
+                    associated_question_ids: associated_ids
+                });
 
-    // Formata os dados para o nosso componente de formulário
-    return {
-        ...data,
-        associated_question_ids: associated_ids
-    };
-}
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-export default async function EditarPesquisaPage({ params }: { params: { id: string } }) {
-    // Usamos um bloco try...catch para lidar com possíveis erros durante a busca de dados
-    try {
-        const surveyData = await getSurveyById(params.id);
+        getSurveyById(params.id);
+    }, [params.id, supabase]);
 
-        if (!surveyData) {
-            return <div className="text-center p-8">Pesquisa não encontrada.</div>;
-        }
-
-        return <SurveyForm initialData={surveyData} />;
-    } catch (error: any) {
+    if (loading) {
         return (
-            <div className="text-center p-8">
-                <h1 className="text-2xl font-bold text-red-500">Erro ao Carregar</h1>
-                <p className="mt-2 text-slate-600">{error.message}</p>
+            <div className="flex justify-center items-center h-screen">
+                <FaSpinner className="animate-spin text-4xl text-blue-600" />
             </div>
         );
     }
+
+    if (error) {
+        return <div className="text-center p-8 text-red-500">{error}</div>;
+    }
+
+    if (!initialData) {
+        notFound();
+    }
+
+    return <SurveyForm initialData={initialData} />;
 }

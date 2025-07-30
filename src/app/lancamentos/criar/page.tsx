@@ -5,8 +5,20 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaCalendarAlt } from 'react-icons/fa';
-import AgendaModal from '@/app/lancamentos/components/AgendaModal'; // Caminho novo e corrigido
-import type { LaunchEvent, Survey } from './types';
+import AgendaModal from '@/app/lancamentos/components/AgendaModal';
+// ================== INÍCIO DAS CORREÇÕES ==================
+// 1. Definimos o tipo LaunchEvent localmente, já que ele não está no arquivo central.
+type LaunchEvent = {
+    id: number;
+    nome: string;
+    data_inicio: string;
+    data_fim: string;
+    is_custom: boolean;
+};
+
+// 2. Importamos apenas o tipo Survey, que deve existir no arquivo de tipos.
+import type { Survey } from '@/lib/types';
+// ================== FIM DAS CORREÇÕES ==================
 
 function SurveySelectionModal({ isOpen, surveys, currentSurveyId, onSelect, onClose }: {
     isOpen: boolean; surveys: Survey[]; currentSurveyId: string;
@@ -45,7 +57,8 @@ const defaultEventNames = [
     "Live Aprofundamento CPL1", "CPL 2", "CPL 3", "Live Encerramento", "Carrinho Aberto"
 ];
 
-const initialEventsState: LaunchEvent[] = [
+// Gera um estado inicial para os eventos da agenda
+const generateInitialEvents = (): LaunchEvent[] => [
     ...defaultEventNames.map((name, index) => ({
         id: Date.now() + index, nome: name, data_inicio: '',
         data_fim: '', is_custom: false,
@@ -54,12 +67,13 @@ const initialEventsState: LaunchEvent[] = [
     { id: Date.now() + defaultEventNames.length + 1, nome: '', data_inicio: '', data_fim: '', is_custom: true },
 ];
 
+
 export default function CriarLancamentoPage() {
     const supabase = createClient();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [launch, setLaunch] = useState({ nome: '', descricao: '', status: 'Planejado' });
-    const [events, setEvents] = useState<LaunchEvent[]>(initialEventsState);
+    const [events, setEvents] = useState<LaunchEvent[]>(generateInitialEvents);
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [selectedSurveyId, setSelectedSurveyId] = useState<string>('');
     const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
@@ -117,7 +131,7 @@ export default function CriarLancamentoPage() {
                         const eventsWithDates = events.filter(event => event.nome && event.data_inicio);
 
                         if (eventsWithDates.length > 0) {
-                            const allDates = eventsWithDates.flatMap(ev => [ev.data_inicio, ev.data_fim]).filter(Boolean);
+                            const allDates = eventsWithDates.flatMap(ev => [ev.data_inicio, ev.data_fim]).filter(Boolean) as string[];
                             minDate = allDates.reduce((min, p) => p < min ? p : min, allDates[0]);
                             maxDate = allDates.reduce((max, p) => p > max ? p : max, allDates[0]);
                         }

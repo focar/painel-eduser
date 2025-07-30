@@ -9,7 +9,7 @@ import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import { FaSpinner } from 'react-icons/fa';
 import { addDays } from 'date-fns';
 
-// --- Tipos de Dados (Atualizados) ---
+// --- Tipos de Dados ---
 type LaunchEvent = {
     nome: string;
     data_inicio: string;
@@ -36,7 +36,7 @@ type CalendarEvent = {
     }
 };
 
-// --- Dicionário de Cores (Sem alterações) ---
+// --- Dicionário de Cores ---
 const eventColorMap: { [key: string]: string } = {
     'padrão': '#71717a', 'planejamento': '#af6813', 'pré-lançamento': '#fea43d',
     'início da captação': '#91258e', 'cpl 1': '#c563dc', 'live aprofundamento cpl1': '#5d77ab',
@@ -54,19 +54,17 @@ const getEventColor = (eventName: string): string => {
 };
 
 
-// --- Componente Principal (Modificado) ---
+// --- Componente Principal ---
 export default function HomePage() {
     const supabase = createClient();
     const [allLaunches, setAllLaunches] = useState<Launch[]>([]);
     const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
 
-    // Busca e ordena os lançamentos ao carregar a página
     useEffect(() => {
         const fetchLaunches = async () => {
             setIsLoading(true);
             try {
-                // 1. Busca os lançamentos, agora incluindo o 'status'
                 const { data: launches, error } = await supabase
                     .from('lancamentos')
                     .select('id, nome, status, eventos');
@@ -74,15 +72,19 @@ export default function HomePage() {
                 if (error) throw error;
 
                 if (launches) {
-                    // 2. Define a ordem de prioridade dos status
                     const statusOrder: { [key: string]: number } = {
-                        'Em Andamento': 1,
-                        'Planejado': 2,
-                        'Concluído': 3,
+                        'Em Andamento': 1, 'Planejado': 2, 'Concluído': 3,
                     };
 
-                    // 3. Ordena a lista de lançamentos
-                    const sortedLaunches = [...launches].sort((a, b) => {
+                    // ================== INÍCIO DA CORREÇÃO ==================
+                    // Mapeamos os resultados para garantir que o tipo de 'eventos' esteja correto.
+                    const correctlyTypedLaunches = launches.map(launch => ({
+                        ...launch,
+                        eventos: (launch.eventos as LaunchEvent[]) || null,
+                    }));
+                    // ================== FIM DA CORREÇÃO ====================
+
+                    const sortedLaunches = [...correctlyTypedLaunches].sort((a, b) => {
                         const orderA = statusOrder[a.status] || 99;
                         const orderB = statusOrder[b.status] || 99;
                         return orderA - orderB;
@@ -90,12 +92,10 @@ export default function HomePage() {
                     
                     setAllLaunches(sortedLaunches);
 
-                    // 4. Define o lançamento "Em Andamento" como padrão, se existir
                     const inProgressLaunch = sortedLaunches.find(l => l.status === 'Em Andamento');
                     if (inProgressLaunch) {
                         setSelectedLaunchId(inProgressLaunch.id);
                     } else if (sortedLaunches.length > 0) {
-                        // Se não, seleciona o primeiro da lista ordenada
                         setSelectedLaunchId(sortedLaunches[0].id);
                     }
                 }
@@ -109,25 +109,21 @@ export default function HomePage() {
         fetchLaunches();
     }, [supabase]);
 
-    // Filtra os eventos a serem exibidos com base no lançamento selecionado
     const filteredEvents = useMemo((): CalendarEvent[] => {
-        if (!selectedLaunchId || allLaunches.length === 0) {
-            return [];
-        }
-
+        if (!selectedLaunchId || allLaunches.length === 0) return [];
+        
         const selectedLaunch = allLaunches.find(launch => launch.id === selectedLaunchId);
-        if (!selectedLaunch || !selectedLaunch.eventos) {
-            return [];
-        }
+        if (!selectedLaunch || !selectedLaunch.eventos) return [];
         
         const formattedEvents: CalendarEvent[] = [];
         selectedLaunch.eventos.forEach(event => {
             if (event.nome && event.data_inicio) {
                 const eventColor = getEventColor(event.nome);
+                // O end date no FullCalendar é exclusivo, então adicionamos 1 dia para incluir o último dia.
                 const endDate = event.data_fim ? addDays(new Date(event.data_fim), 1).toISOString().split('T')[0] : undefined;
 
                 formattedEvents.push({
-                    title: event.nome, // O nome do lançamento já está no título da página
+                    title: event.nome,
                     start: event.data_inicio,
                     end: endDate,
                     backgroundColor: eventColor,
@@ -137,7 +133,6 @@ export default function HomePage() {
                 });
             }
         });
-
         return formattedEvents;
     }, [selectedLaunchId, allLaunches]);
 
@@ -146,7 +141,6 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Agenda de Lançamentos</h1>
                 
-                {/* --- NOVO DROPDOWN DE FILTRO --- */}
                 <div className="w-full sm:w-auto">
                     <label htmlFor="launch-select" className="sr-only">Selecionar Lançamento</label>
                     <select 
@@ -177,7 +171,7 @@ export default function HomePage() {
                         plugins={[dayGridPlugin, interactionPlugin]}
                         initialView="dayGridMonth"
                         locale={ptBrLocale}
-                        events={filteredEvents} // <-- Usa os eventos já filtrados
+                        events={filteredEvents}
                         headerToolbar={{
                             left: 'prev,next today',
                             center: 'title',

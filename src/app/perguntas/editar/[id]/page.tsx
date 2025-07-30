@@ -1,56 +1,77 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import QuestionForm from "@/components/question/QuestionForm";
-// --- CORREÇÃO 1: Importa o novo cliente para o navegador ---
+import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { notFound } from 'next/navigation';
+import QuestionForm from '@/components/question/QuestionForm';
+import { FaSpinner } from 'react-icons/fa';
+import type { Tables } from '@/types/database';
 
-export default function EditarPerguntaPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  // --- CORREÇÃO 2: Usa a nova forma de criar o cliente ---
-  const supabase = createClient();
-  const [initialData, setInitialData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type QuestionData = Tables<'perguntas'>;
 
-  useEffect(() => {
-    const fetchQuestion = async () => {
-      if (!params.id) return;
-      try {
-        const { data, error: dbError } = await supabase
-          .from("perguntas")
-          .select("*")
-          .eq("id", params.id)
-          .single();
+// ================== INÍCIO DA CORREÇÃO ==================
+// 1. Definimos o tipo 'Option' que o componente QuestionForm espera.
+//    Este tipo deve corresponder à estrutura de cada objeto dentro do JSON 'opcoes'.
+type Option = {
+    texto: string;
+    peso: number;
+};
+// ================== FIM DA CORREÇÃO ====================
 
-        if (dbError || !data) {
-          throw new Error("Pergunta não encontrada ou erro ao buscar.");
-        }
-        setInitialData(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
+export default function EditQuestionPage({ params }: { params: { id: string } }) {
+    const supabase = createClient();
+    
+    const [initialData, setInitialData] = useState<QuestionData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchQuestion = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('perguntas')
+                    .select('*')
+                    .eq('id', params.id)
+                    .single();
+
+                if (error || !data) {
+                    throw new Error('Pergunta não encontrada ou erro ao buscar.');
+                }
+                
+                setInitialData(data);
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchQuestion();
+    }, [params.id, supabase]);
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-screen">
+                <FaSpinner className="animate-spin text-4xl text-blue-600" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return <div className="text-center p-8 text-red-500">{error}</div>;
+    }
+
+    if (!initialData) {
+        notFound();
+    }
+
+    // 2. Preparamos os dados para o formulário, convertendo 'opcoes' para o tipo correto.
+    const formInitialData = {
+        ...initialData,
+        // Garantimos que 'opcoes' seja um array de 'Option' antes de passá-lo para o componente
+        opcoes: (Array.isArray(initialData.opcoes) ? initialData.opcoes : []) as Option[],
     };
 
-    fetchQuestion();
-  }, [params.id, supabase]);
-
-  if (isLoading) {
-    return (
-      <div className="p-8 text-center">
-        <i className="fas fa-spinner fa-spin"></i> Carregando pergunta...
-      </div>
-    );
-  }
-
-  if (error) {
-    return <div className="p-8 text-center text-red-500">{error}</div>;
-  }
-
-  return <QuestionForm initialData={initialData} />;
+    // 3. Passamos os dados já formatados para o formulário.
+    return <QuestionForm initialData={formInitialData} />;
 }

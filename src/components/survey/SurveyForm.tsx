@@ -2,35 +2,40 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-// CORREÇÃO: Importa o cliente recomendado
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
+// ================== INÍCIO DAS CORREÇÕES ==================
+// 1. Importamos o tipo 'Tables' para ter acesso aos tipos do banco de dados
+import type { Tables } from '@/types/database';
 
-// --- Tipos de Dados ---
-type Question = { id: string; texto: string; };
-type SurveyData = { id?: string; nome: string; categoria_pesquisa: string; status: string; };
-type SurveyFormProps = { initialData?: SurveyData & { associated_question_ids: string[] } | null };
+// 2. Definimos os tipos com base na estrutura real do banco de dados
+type Question = Tables<'perguntas'>;
+type SurveyData = Tables<'pesquisas'>;
+
+// 3. As props do formulário agora usam o tipo correto e esperam a propriedade adicional
+type SurveyFormProps = { 
+    initialData?: SurveyData & { associated_question_ids: string[] } | null 
+};
+// ================== FIM DAS CORREÇÕES ====================
 
 export default function SurveyForm({ initialData }: SurveyFormProps) {
-    // CORREÇÃO: Cria a instância do cliente da forma correta
     const supabase = createClient();
     const router = useRouter();
     
     const [survey, setSurvey] = useState({
+        // 4. Lidamos com possíveis valores nulos dos dados iniciais
         nome: initialData?.nome || '',
         categoria_pesquisa: initialData?.categoria_pesquisa || '',
         status: initialData?.status || 'Ativo',
     });
-    const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+    const [allQuestions, setAllQuestions] = useState<Pick<Question, 'id' | 'texto'>[]>([]);
     const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(
         new Set(initialData?.associated_question_ids || [])
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Busca todas as perguntas disponíveis quando o componente carrega
     useEffect(() => {
         const fetchQuestions = async () => {
-            // CORREÇÃO: Usa a nova variável 'supabase'
             const { data } = await supabase.from('perguntas').select('id, texto').order('created_at', { ascending: false });
             if (data) setAllQuestions(data);
         };
@@ -60,7 +65,6 @@ export default function SurveyForm({ initialData }: SurveyFormProps) {
         setIsSubmitting(true);
 
         try {
-            // CORREÇÃO: Usa a nova variável 'supabase' em todas as chamadas
             const surveyToSave = {
                 id: initialData?.id,
                 ...survey,
@@ -95,21 +99,6 @@ export default function SurveyForm({ initialData }: SurveyFormProps) {
         }
     };
 
-    // Verificação de um bug de JSX duplicado que estava no seu código original
-    const duplicatedInput = (
-        <div>
-            <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome da Pesquisa</label>
-            <input 
-                type="text" 
-                id="nome" 
-                value={survey.nome} 
-                onChange={handleChange} 
-                required 
-                className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm"
-            />
-        </div>
-    );
-
     return (
         <div className="max-w-2xl mx-auto p-4 md:p-0">
             <div className="bg-white p-6 md:p-8 rounded-lg shadow-md">
@@ -117,9 +106,17 @@ export default function SurveyForm({ initialData }: SurveyFormProps) {
                     {initialData ? 'Editar Pesquisa' : 'Criar Nova Pesquisa'}
                 </h1>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    
-                    {/* Corrigido para remover o input duplicado */}
-                    {duplicatedInput}
+                    <div>
+                        <label htmlFor="nome" className="block text-sm font-medium text-slate-700">Nome da Pesquisa</label>
+                        <input 
+                            type="text" 
+                            id="nome" 
+                            value={survey.nome} 
+                            onChange={handleChange} 
+                            required 
+                            className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm"
+                        />
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>

@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from '@/utils/supabase/client';
-import type { Database } from "@/lib/supabase-types"; // <-- CORREÇÃO AQUI
+//import type { Database } from '@/types/database'; // <-- CORREÇÃO AQUI
 import { Launch, QuestionBreakdownData } from "@/lib/types";
 import AnswerBreakdownCard from "@/components/dashboard/AnswerBreakdownCard";
 import { FaSpinner } from "react-icons/fa";

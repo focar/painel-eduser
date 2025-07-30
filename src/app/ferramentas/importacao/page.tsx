@@ -18,6 +18,26 @@ type AnalysisResult = {
     peso_proposto: number;
 };
 
+// Tipo explícito para os dados de leads que serão inseridos via RPC
+type LeadInsertData = {
+    p_launch_id: string;
+    p_email: string;
+    p_nome: string | null;
+    p_created_at: string; // Já é string via toISOString()
+    p_utm_source: string | null;
+    p_utm_medium: string | null;
+    p_utm_campaign: string | null;
+    p_utm_term: string | null;
+    p_utm_content: string | null;
+};
+
+// Tipo explícito para os dados da pesquisa que serão processados via RPC
+type SurveyProcessData = {
+    p_email: string;
+    p_score: number;
+    p_respostas: { [key: string]: string }; // Objeto cujos valores são strings
+};
+
 // --- Função Auxiliar ---
 const findValueIgnoreCase = (obj: CsvRow, key: string): string | undefined => {
     const objKey = Object.keys(obj).find(k => k.toLowerCase() === key.toLowerCase());
@@ -52,8 +72,10 @@ const LaunchSelector = ({ id, label, launches, selectedValue, onChange, disabled
     </div>
 );
 
+// AQUI ESTÁ A CORREÇÃO PRINCIPAL: Cliente Supabase criado fora do componente para evitar loops
+const supabase = createClient();
+
 export default function ImportacaoPage() {
-    const supabase = createClient()
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
 
@@ -80,11 +102,15 @@ export default function ImportacaoPage() {
     const handleCloseModal = () => setModal({ isOpen: false, type: 'alert', title: '', message: '' });
 
     // --- FUNÇÃO CORRIGIDA ---
-    // Removemos o 'handleCloseModal()' daqui. Agora, a função onConfirm
-    // é responsável por mostrar o próximo modal (sucesso/erro),
-    // o que dará o feedback correto para o usuário.
+    // Esta é a correção para o botão "OK" que não funcionava.
     const handleConfirmModal = () => {
-        modal.onConfirm?.();
+        // Se o modal for do tipo 'confirmation' e tiver uma ação, executa a ação.
+        if (modal.type === 'confirmation' && modal.onConfirm) {
+            modal.onConfirm();
+        } else {
+            // Caso contrário (se for um alerta simples), apenas fecha o modal.
+            handleCloseModal();
+        }
     };
 
     useEffect(() => {
@@ -103,7 +129,7 @@ export default function ImportacaoPage() {
                 const filtered = (launchResult.data || []).filter(l => l.status === 'Em Andamento' || l.status === 'Concluído').sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
                 setLaunches(filtered);
-                setQuestions(questionResult.data || []);
+                setQuestions((questionResult.data as Question[]) || []);
 
             } catch (err: unknown) {
                 const error = err as Error;
@@ -113,7 +139,7 @@ export default function ImportacaoPage() {
             }
         };
         fetchData();
-    }, [supabase]);
+    }, []); // Dependência vazia, pois `supabase` agora é estável
 
     const addLog = useCallback((message: string) => {
         setLog(prev => [`[${new Date().toLocaleTimeString()}] ${message}`, ...prev.slice(0, 200)]);
@@ -154,14 +180,14 @@ export default function ImportacaoPage() {
                 else if (hasCampaignColumn && !hasQuestionColumns) importType = 'INSCRICAO';
 
                 if (importType === 'INVALIDO') {
-                    showAlertModal("Erro de Formato", "Não foi possível determinar o tipo do arquivo de leads.");
+                    showAlertModal("Erro de Formato", "Não foi possível determinar o tipo do arquivo de leads. Verifique se contém 'utm_campaign' e/ou colunas de perguntas.");
                     setIsProcessing(false);
                     return;
                 }
                 addLog(`Tipo de importação detetado: ${importType}`);
 
-                const inscriptionDataMap = new Map<string, object>();
-                const surveyDataMap = new Map<string, { p_email: string; p_score: number; p_respostas: { [key: string]: string } }>();
+                const inscriptionDataMap = new Map<string, LeadInsertData>();
+                const surveyDataMap = new Map<string, SurveyProcessData>();
                 let invalidRowCount = 0;
 
                 for (const row of rows) {
@@ -199,8 +225,8 @@ export default function ImportacaoPage() {
                     }
                 }
 
-                const inscriptionData = Array.from(inscriptionDataMap.values());
-                const surveyData = Array.from(surveyDataMap.values());
+                const inscriptionData: LeadInsertData[] = Array.from(inscriptionDataMap.values());
+                const surveyData: SurveyProcessData[] = Array.from(surveyDataMap.values());
 
                 if (invalidRowCount > 0) addLog(`AVISO: ${invalidRowCount} linhas foram ignoradas por não conterem um email válido.`);
 
@@ -281,8 +307,8 @@ export default function ImportacaoPage() {
                 let totalUpdatedCount = 0;
                 try {
                     addLog(`Enviando ${buyerEmails.length} e-mails para marcar como compradores em lotes de ${BATCH_SIZE}...`);
-
-                    const { error: resetError } = await supabase.rpc('reset_buyers_for_launch', { p_launch_id: selectedLaunchForBuyers });
+                    
+                    const { error: resetError } = await supabase.rpc('reset_buyers_for_launch' as any, { p_launch_id: selectedLaunchForBuyers });
                     if (resetError) throw new Error(`Falha ao resetar compradores: ${resetError.message}`);
                     addLog('Status de comprador resetado para todos os leads do lançamento.');
 
@@ -331,7 +357,7 @@ export default function ImportacaoPage() {
             if (!data || data.length === 0) {
                 showAlertModal("Análise Concluída", "A análise foi executada, mas não encontrou dados de respostas suficientes para gerar propostas.");
                 addLog("Análise não gerou propostas. Verifique se os leads responderam às pesquisas.");
-                setIsProcessing(false); // Adicionado para garantir que o processing pare
+                setIsProcessing(false);
                 return;
             }
             addLog(`Análise concluída com sucesso. ${data.length} propostas de score geradas.`);
@@ -452,7 +478,7 @@ export default function ImportacaoPage() {
                     <div className="w-full bg-slate-200 rounded-full h-2.5"><div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div></div>
                 )}
                 <div className="text-right pt-4">
-                    <button onClick={handleImport} disabled={isProcessing || !selectedLaunchForLeads || !file} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    <button onClick={handleImport} disabled={isProcessing || isDataLoading || !selectedLaunchForLeads || !file} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         <FaUpload className="mr-2" />Importar Leads
                     </button>
                 </div>
@@ -476,12 +502,12 @@ export default function ImportacaoPage() {
                     <input id="buyer-file-upload" type="file" accept=".csv" onChange={e => setBuyerFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
                 </div>
                 <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
-                    <button onClick={handleBuyerImport} disabled={isProcessing || !selectedLaunchForBuyers || !buyerFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                    <button onClick={handleBuyerImport} disabled={isProcessing || isDataLoading || !selectedLaunchForBuyers || !buyerFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50">
                         <FaUserCheck className="mr-2" />Importar Compradores
                     </button>
                     <button
                         onClick={handleAnalyzeLaunch}
-                        disabled={isProcessing || !selectedLaunchForBuyers || buyersImportedForLaunch !== selectedLaunchForBuyers}
+                        disabled={isProcessing || isDataLoading || !selectedLaunchForBuyers || buyersImportedForLaunch !== selectedLaunchForBuyers}
                         className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         title={buyersImportedForLaunch !== selectedLaunchForBuyers ? "Importe os compradores para este lançamento primeiro" : "Analisar Lançamento"}
                     >
@@ -504,10 +530,10 @@ export default function ImportacaoPage() {
                     isLoading={isDataLoading}
                 />
                 <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                    <button onClick={handleClearLeads} disabled={isProcessing || !selectedLaunchForTesting} className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
+                    <button onClick={handleClearLeads} disabled={isProcessing || isDataLoading || !selectedLaunchForTesting} className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
                         <FaTrash className="mr-2" /> Limpar Leads do Lançamento
                     </button>
-                    <button onClick={handleRefreshDates} disabled={isProcessing || !selectedLaunchForTesting} className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50">
+                    <button onClick={handleRefreshDates} disabled={isProcessing || isDataLoading || !selectedLaunchForTesting} className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50">
                         <FaClock className="mr-2" /> Atualizar Datas para Teste
                     </button>
                 </div>
@@ -548,17 +574,20 @@ export default function ImportacaoPage() {
                                                     type="number"
                                                     value={result.peso_proposto}
                                                     onChange={(e) => handleWeightChange(result.pergunta_id, result.resposta_dada, e.target.value)}
-                                                    className="w-20 p-1 border border-slate-300 rounded-md"
+                                                    className="w-20 px-2 py-1 border border-slate-300 rounded-md text-sm text-center"
                                                 />
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
+                            {analysisResults.length === 0 && (
+                                <p className="text-center text-slate-500 py-8">Nenhum resultado de análise encontrado para exibir.</p>
+                            )}
                         </div>
-                        <div className="mt-6 flex justify-end space-x-3 border-t pt-4">
-                            <button onClick={() => setIsAnalysisModalOpen(false)} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
-                            <button onClick={handleUpdateWeights} disabled={isProcessing} className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold inline-flex items-center disabled:opacity-50">
+                        <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+                            <button onClick={() => setIsAnalysisModalOpen(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 disabled:opacity-50" disabled={isProcessing}>Cancelar</button>
+                            <button onClick={handleUpdateWeights} className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50" disabled={isProcessing}>
                                 {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaSave className="mr-2" />}
                                 Salvar Pesos
                             </button>
@@ -567,25 +596,24 @@ export default function ImportacaoPage() {
                 </div>
             )}
 
-            {/* Modal de Alerta/Confirmação */}
+            {/* Modal genérico de Alerta/Confirmação */}
             {modal.isOpen && (
-                <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md">
-                        <div className="flex items-start">
-                            <div className="mr-4 text-3xl">
-                                {modal.title.toLowerCase().includes('erro') || modal.title.toLowerCase().includes('atenção') || modal.title.toLowerCase().includes('certeza') ? <FaExclamationTriangle className="text-red-500" /> : <FaCheckCircle className="text-green-500" />}
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="text-xl font-bold text-slate-800">{modal.title}</h3>
-                                <p className="text-slate-600 mt-2 whitespace-pre-wrap">{modal.message}</p>
-                            </div>
+                <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className={`text-xl font-bold ${modal.type === 'alert' ? 'text-blue-700' : 'text-amber-600'}`}>
+                                {modal.type === 'alert' ? <FaCheckCircle className="inline mr-2" /> : <FaExclamationTriangle className="inline mr-2" />}
+                                {modal.title}
+                            </h3>
+                            <button onClick={handleCloseModal} className="text-slate-500 hover:text-slate-800 text-2xl leading-none">&times;</button>
                         </div>
-                        <div className="mt-6 flex justify-end space-x-3">
+                        <p className="text-slate-700 mb-6 whitespace-pre-line">{modal.message}</p>
+                        <div className="flex justify-end gap-3">
                             {modal.type === 'confirmation' && (
-                                <button onClick={handleCloseModal} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 font-semibold">Cancelar</button>
+                                <button onClick={handleCloseModal} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300">Cancelar</button>
                             )}
-                            <button onClick={modal.type === 'confirmation' ? handleConfirmModal : handleCloseModal} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold">
-                                {modal.type === 'confirmation' ? 'Confirmar' : 'OK'}
+                            <button onClick={handleConfirmModal} className={`px-4 py-2 rounded-md font-bold ${modal.type === 'alert' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'}`}>
+                                {modal.type === 'alert' ? 'OK' : 'Confirmar'}
                             </button>
                         </div>
                     </div>

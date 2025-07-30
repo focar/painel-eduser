@@ -12,8 +12,8 @@ export default function LoginPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        router.refresh();
-        router.push('/');
+        // CORREÇÃO: Redireciona para a nova página de callback
+        router.push('/auth/callback');
       }
     });
 

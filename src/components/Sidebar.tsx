@@ -5,20 +5,15 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
 import { createClient } from '@/utils/supabase/client';
-// ================== INÍCIO DAS CORREÇÕES ==================
-// 1. Importamos o tipo 'Tables' do arquivo gerado pelo Supabase.
 import type { Tables } from '@/types/database';
 
-// 2. Inferimos o tipo diretamente. Agora 'Profile' é um espelho da sua tabela.
 type Profile = Tables<'profiles'>;
-
-// O tipo User continua o mesmo, pois vem da biblioteca de autenticação
 type User = {
   id: string;
   email?: string;
 };
-// ================== FIM DAS CORREÇÕES ====================
 
+// ... (a variável 'menuItems' continua a mesma)
 const menuItems = [
     {
         title: "Dashboards",
@@ -61,6 +56,7 @@ const menuItems = [
     },
 ];
 
+
 export default function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
@@ -77,16 +73,39 @@ export default function Sidebar() {
 
     useEffect(() => {
         const fetchUserData = async () => {
+            // ================== LOGIN FICTÍCIO PARA DESENVOLVIMENTO ==================
+            const isDevelopmentBypass = process.env.NODE_ENV === 'development';
+
+            if (isDevelopmentBypass) {
+                // **COLE AQUI O ID (UUID) DO SEU USUÁRIO ADMIN DE TESTE**
+                const DEV_ADMIN_ID = '0d985e22-ee07-4899-845a-2aa9ef30ece4'; // SUBSTITUA ESTE VALOR
+
+                setUser({ id: DEV_ADMIN_ID, email: 'admin@test.com' });
+                setProfile({
+                    id: DEV_ADMIN_ID,
+                    role: 'admin',
+                    full_name: 'Admin de Desenvolvimento',
+                    // Preencha outras propriedades do tipo Profile com null ou valores padrão
+                    avatar_url: null,
+                    updated_at: null,
+                    username: null,
+                    website: null,
+                });
+                setLoading(false);
+                return; // Pula a busca real de dados
+            }
+            // ================== FIM DO LOGIN FICTÍCIO ==================
+
+            // Lógica original para produção
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setUser(user);
                 const { data: userProfile, error } = await supabase
                     .from('profiles')
-                    .select('*') // Seleciona tudo para garantir compatibilidade
+                    .select('*')
                     .eq('id', user.id)
                     .single();
                 if (userProfile) {
-                    // Agora os tipos são 100% compatíveis
                     setProfile(userProfile);
                 }
                 if(error) {
@@ -99,11 +118,17 @@ export default function Sidebar() {
     }, [supabase]);
 
     const handleLogout = async () => {
+        // Em modo de bypass, o logout apenas redireciona
+        if (process.env.NODE_ENV === 'development') {
+            alert("Logout desativado em modo de desenvolvimento.");
+            return;
+        }
         await supabase.auth.signOut();
         router.refresh();
         router.push('/login');
     };
-
+    
+    // O resto do seu componente continua igual...
     return (
         <>
             <button 

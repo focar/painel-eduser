@@ -86,9 +86,8 @@ export default function ScorePorRespostaPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Dashboard: Análise de Respostas
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
+          Análise de Respostas</h1>
         {launches.length > 0 && (
           <div className="w-full sm:w-64">
             <select

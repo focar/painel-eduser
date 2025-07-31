@@ -166,14 +166,14 @@ export default function DetalhamentoCanaisPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col gap-4">
-                    <h2 className="text-lg font-semibold text-slate-700">Totais Gerais do Lançamento</h2>
+                    <h2 className="text-lg font-semibold text-slate-700 mb-4 text-center lg:text-Center">Totais Gerais do Lançamento</h2>
                     <div className="grid grid-cols-2 gap-4">
                         <KpiCard title="Total Inscrições" value={kpis.totalGeralInscricoes.toLocaleString('pt-BR')} />
                         <KpiCard title="Total Check-ins" value={kpis.totalGeralCheckins.toLocaleString('pt-BR')} />
                     </div>
                 </div>
                 <div className="bg-white p-4 rounded-xl shadow-lg flex flex-col gap-4">
-                     <h2 className="text-lg font-semibold text-slate-700">
+                     <h2 className="text-lg font-semibold text-slate-700 text-center lg:text-Center">
                         { trafficType === 'paid' && 'Performance do Tráfego Pago' }
                         { trafficType === 'organic' && 'Performance do Tráfego Orgânico' }
                         { trafficType === 'untracked' && 'Performance de Não Traqueados' }

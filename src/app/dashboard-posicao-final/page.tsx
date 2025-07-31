@@ -151,7 +151,7 @@ export default function PosicaoFinalPage() {
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Dashboard de Posição Final</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Demonstrativo da Posição Final</h1>
                 <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
                     <select value={selectedLaunch} onChange={e => setSelectedLaunch(e.target.value)} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent" disabled={isLoading}>
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}

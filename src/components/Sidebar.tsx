@@ -24,12 +24,13 @@ const menuItems = [
             { name: "Performance e Controle", href: "/dashboard-performance" },
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
             { name: "Análise de Score", href: "/dashboard-analise-score" },
-            { name: "Análise de Respostas", href: "/dashboard-score-por-resposta" },
-            { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Perfil de Score", href: "/dashboard-perfil-score" },
             { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/dashboard-detalhamento-canais" },
             { name: "Posição Final", href: "/dashboard-posicao-final" },
+            { name: "Análise de Respostas", href: "/dashboard-score-por-resposta" },
+            { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
+
         ],
     },
     {
@@ -133,8 +134,8 @@ export default function Sidebar() {
                         </h1>
                     </Link>
                     
-                    <div className="flex justify-between items-center text-xs text-slate-400 mt-2 px-1">
-                        <span>v 4.00</span>
+                    <div className="flex justify-between items-center text-xs text-slate-500 mt-2 px-1">
+                        <span>v 1.00</span>
                         <span>by FOCAR</span>
                     </div>
                 </div>

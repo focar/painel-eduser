@@ -1,4 +1,3 @@
-// src/app/auth/status/page.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -11,20 +10,15 @@ export default function AuthStatusPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    
     const checkSessionAndRedirect = async () => {
       await new Promise(resolve => setTimeout(resolve, 100));
-
       const { data: { user } } = await supabase.auth.getUser();
-
       if (user) {
-        // CORRIGIDO: Redirecionando para /agenda
-        router.replace('/agenda');
+        router.replace('/');
       } else {
         router.replace('/login');
       }
     };
-
     checkSessionAndRedirect();
   }, [router]);
 

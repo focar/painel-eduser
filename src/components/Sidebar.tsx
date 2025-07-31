@@ -1,13 +1,13 @@
-// src/components/Sidebar.tsx
+// src/components/Sidebar.tsx (VERSÃO FINAL E CORRIGIDA)
 'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation'; // 1. Importar o useRouter
 import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
 import { useUser } from '@/components/providers/UserProvider';
+import { createClient } from '@/utils/supabase/client';
 
-// O array menuItems continua o mesmo. Cole o seu array original aqui.
 const menuItems = [
     {
         title: "Dashboards",
@@ -25,7 +25,6 @@ const menuItems = [
             { name: "Posição Final", href: "/dashboard-posicao-final" },
             { name: "Análise de Respostas", href: "/dashboard-score-por-resposta" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
-
         ],
     },
     {
@@ -53,6 +52,7 @@ const menuItems = [
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter(); // 2. Inicializar o router
     const { session, isLoading } = useUser();
     const { user, profile } = session;
 
@@ -61,14 +61,19 @@ export default function Sidebar() {
     const [isOperacionalOpen, setIsOperacionalOpen] = useState(activeGroup?.title === 'Operacional');
     const [isFerramentasOpen, setIsFerramentasOpen] = useState(activeGroup?.title === 'Ferramentas');
 
+    // 3. FUNÇÃO DE LOGOUT CORRIGIDA
     const handleLogout = async () => {
-        // O `UserProvider` irá detectar o signOut e limpar o estado automaticamente.
-        // Apenas precisamos redirecionar o navegador para uma limpeza completa.
-        window.location.href = '/login';
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        
+        // Esta é a linha mais importante.
+        // Ela força uma atualização da página com o servidor, que então
+        // acionará o middleware. Como o usuário já está deslogado,
+        // o middleware o redirecionará corretamente para a página de login.
+        router.refresh();
     };
     
-    // Esconde a sidebar na página de login para evitar layout quebrado.
-    if (pathname === '/login') {
+    if (pathname === '/login' || pathname === '/auth/status') {
         return null;
     }
 

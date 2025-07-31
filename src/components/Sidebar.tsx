@@ -1,18 +1,13 @@
+// src/components/Sidebar.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
-import { createClient } from '@/utils/supabase/client';
-import type { Tables } from '@/types/database';
+import { useUser } from '@/components/providers/UserProvider';
 
-type Profile = Tables<'profiles'>;
-type User = {
-  id: string;
-  email?: string;
-};
-
+// O array menuItems continua o mesmo. Cole o seu array original aqui.
 const menuItems = [
     {
         title: "Dashboards",
@@ -58,48 +53,25 @@ const menuItems = [
 
 export default function Sidebar() {
     const pathname = usePathname();
-    const router = useRouter();
-    const supabase = createClient();
-
-    const [user, setUser] = useState<User | null>(null);
-    const [profile, setProfile] = useState<Profile | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { session, isLoading } = useUser();
+    const { user, profile } = session;
 
     const activeGroup = menuItems.find(group => group.links.some(link => link.href === pathname));
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isOperacionalOpen, setIsOperacionalOpen] = useState(activeGroup?.title === 'Operacional');
     const [isFerramentasOpen, setIsFerramentasOpen] = useState(activeGroup?.title === 'Ferramentas');
 
-    useEffect(() => {
-        const fetchUserData = async () => {
-            // Lógica de produção para buscar o usuário real que está logado
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                setUser(user);
-                const { data: userProfile, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', user.id)
-                    .single();
-                if (userProfile) {
-                    setProfile(userProfile);
-                }
-                if(error) {
-                    console.error("Erro ao buscar perfil:", error);
-                }
-            }
-            setLoading(false);
-        };
-        fetchUserData();
-    }, [supabase]);
-
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        router.refresh();
-        router.push('/login');
+        // O `UserProvider` irá detectar o signOut e limpar o estado automaticamente.
+        // Apenas precisamos redirecionar o navegador para uma limpeza completa.
+        window.location.href = '/login';
     };
     
-    // O JSX (parte visual) continua o mesmo
+    // Esconde a sidebar na página de login para evitar layout quebrado.
+    if (pathname === '/login') {
+        return null;
+    }
+
     return (
         <>
             <button 
@@ -141,7 +113,7 @@ export default function Sidebar() {
                 </div>
                 <nav className="flex-1 flex flex-col justify-between overflow-y-auto">
                     <ul className="space-y-2">
-                        {loading ? (
+                        {isLoading ? (
                             <li className="text-center p-4">
                                 <FaSpinner className="animate-spin mx-auto text-xl" />
                             </li>
@@ -211,7 +183,7 @@ export default function Sidebar() {
                             );
                         })}
                     </ul>
-                    {user && (
+                    {!isLoading && user && (
                         <div className="border-t border-slate-700 pt-4 mt-4">
                             <p className="text-sm text-white px-2 truncate" title={user.email || ''}>{profile?.full_name || user.email}</p>
                             <p className="text-xs text-slate-400 px-2 mb-2 capitalize">{profile?.role}</p>

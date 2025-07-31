@@ -1,4 +1,5 @@
-// Caminho do arquivo: src/app/layout.tsx
+// src/app/layout.tsx
+// VERSÃO CORRETA E LIMPA
 
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -6,6 +7,7 @@ import "./globals.css";
 
 import Sidebar from "@/components/Sidebar";
 import { Toaster } from "react-hot-toast";
+import { UserProvider } from "@/components/providers/UserProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,17 +24,15 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.className} bg-gray-50`}>
-        <div className="relative min-h-screen md:flex">
-          
-          <Sidebar />
-          
-          <main className="flex-1">
-            {/* O Toaster é usado para mostrar notificações */}
-            <Toaster position="top-right" />
-            {children}
-          </main>
-
-        </div>
+        <UserProvider>
+          <div className="relative min-h-screen md:flex">
+            <Sidebar />
+            <main className="flex-1">
+              <Toaster position="top-right" />
+              {children}
+            </main>
+          </div>
+        </UserProvider>
       </body>
     </html>
   );

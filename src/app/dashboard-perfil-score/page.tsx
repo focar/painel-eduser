@@ -1,12 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from '@/utils/supabase/client';
-//import type { Database } from '@/types/database';
-import { Launch, ScoreProfileQuestion } from "@/lib/types";
-import ScoreProfileCard from "@/components/dashboard/ScoreProfileCard";
+import { Launch } from "@/lib/types";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
+import { Users, UserCheck, Percent } from "lucide-react";
+
+// --- Tipos de Dados ---
+// Definindo os tipos aqui para que o ficheiro seja autónomo
+type AnswerProfile = {
+    answer_text: string;
+    lead_count: number; // <-- O nome da propriedade é provavelmente 'lead_count'
+};
+
+type ScoreProfileQuestion = {
+    question_id: string;
+    question_text: string;
+    answers: AnswerProfile[];
+};
 
 const scoreCategories = [
     { key: 'quente', name: 'Quente (>80)', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-500' },
@@ -17,13 +29,65 @@ const scoreCategories = [
 ] as const;
 
 type ScoreCategoryKey = typeof scoreCategories[number]['key'];
-type KpiData = Record<ScoreCategoryKey, number>;
+type ScoreKpiData = Record<ScoreCategoryKey, number>;
+type GeneralKpiData = {
+    total_inscricoes: number;
+    total_checkins: number;
+};
 
+// --- Componentes ---
 const Spinner = () => (
     <div className="flex justify-center items-center h-40">
         <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" />
     </div>
 );
+
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => (
+    <div className="bg-white p-4 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
+        <Icon className="mx-auto text-blue-500 mb-2" size={28} />
+        <p className="text-3xl font-bold text-slate-800">{value}</p>
+        <h3 className="text-sm font-medium text-slate-500 mt-1">{title}</h3>
+    </div>
+);
+
+// --- Componente do Cartão de Score (com a correção) ---
+const ScoreProfileCard = ({ questionData }: { questionData: ScoreProfileQuestion }) => {
+    const totalResponses = useMemo(() => {
+        // CORREÇÃO: Usa 'answer.lead_count' para somar
+        return questionData.answers.reduce((sum, answer) => sum + answer.lead_count, 0);
+    }, [questionData.answers]);
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
+            <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
+            <ul className="space-y-3 flex-grow">
+                {questionData.answers
+                    // CORREÇÃO: Usa 'b.lead_count' e 'a.lead_count' para ordenar
+                    .sort((a, b) => b.lead_count - a.lead_count)
+                    .map((answer, index) => {
+                        // CORREÇÃO: Usa 'answer.lead_count' para o cálculo
+                        const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
+                        return (
+                            <li key={index}>
+                                <div className="flex justify-between items-center mb-1 text-sm">
+                                    <span className="text-slate-600">{answer.answer_text}</span>
+                                    <span className="font-medium text-slate-700">
+                                        {/* CORREÇÃO: Usa 'answer.lead_count' para exibir */}
+                                        {answer.lead_count.toLocaleString('pt-BR')}
+                                        <span className="text-slate-400 ml-2">({percentage.toFixed(1)}%)</span>
+                                    </span>
+                                </div>
+                                <div className="w-full bg-slate-200 rounded-full h-2.5">
+                                    <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
+                                </div>
+                            </li>
+                        );
+                })}
+            </ul>
+        </div>
+    );
+};
+
 
 export default function PerfilDeScorePage() {
     const supabase = createClient();
@@ -31,7 +95,8 @@ export default function PerfilDeScorePage() {
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [selectedScore, setSelectedScore] = useState<ScoreCategoryKey>('quente');
     const [data, setData] = useState<ScoreProfileQuestion[]>([]);
-    const [kpiData, setKpiData] = useState<KpiData | null>(null);
+    const [scoreKpiData, setScoreKpiData] = useState<ScoreKpiData | null>(null);
+    const [generalKpis, setGeneralKpis] = useState<GeneralKpiData>({ total_inscricoes: 0, total_checkins: 0 });
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
 
@@ -41,32 +106,41 @@ export default function PerfilDeScorePage() {
             if (launchesData) {
                 const sorted = [...launchesData].sort((a, b) => (a.status === 'Em Andamento' ? -1 : 1) || a.nome.localeCompare(b.nome));
                 setLaunches(sorted);
-                if (sorted.length > 0) setSelectedLaunch(sorted[0].id);
+                if (sorted.length > 0) {
+                    const inProgress = sorted.find(l => l.status === 'Em Andamento');
+                    setSelectedLaunch(inProgress ? inProgress.id : sorted[0].id);
+                }
             }
         };
         fetchLaunches();
     }, [supabase]);
 
-    const fetchData = useCallback(async (launchId: string) => {
+    const fetchInitialData = useCallback(async (launchId: string) => {
         if (!launchId) return;
         setLoading(true);
 
-        const { data: kpiResult, error: kpiError } = await supabase.rpc('get_score_category_totals', { p_launch_id: launchId });
-        
-        if (kpiError) {
-            toast.error("Erro ao carregar os totais.");
-            console.error(kpiError);
-            setKpiData(null);
-        } else {
-            // ================== INÍCIO DA CORREÇÃO ==================
-            // Adicionamos a conversão de tipo segura para o kpiData
-            setKpiData(kpiResult as unknown as KpiData);
-            // ================== FIM DA CORREÇÃO ==================
-        }
+        const [scoreKpiResult, generalKpiResult] = await Promise.all([
+            supabase.rpc('get_score_category_totals', { p_launch_id: launchId }),
+            supabase.rpc('get_kpis_for_launch', { p_launch_id: launchId })
+        ]);
 
+        const { data: scoreKpis, error: scoreKpiError } = scoreKpiResult;
+        const { data: generalKpisData, error: generalKpiError } = generalKpiResult;
+
+        if (scoreKpiError || generalKpiError) {
+            toast.error("Erro ao carregar os totais.");
+            console.error({ scoreKpiError, generalKpiError });
+        } else {
+            setScoreKpiData(scoreKpis as unknown as ScoreKpiData);
+            setGeneralKpis(generalKpisData);
+        }
+    }, [supabase]);
+
+    const fetchBreakdownData = useCallback(async (launchId: string, scoreCategory: ScoreCategoryKey) => {
+        setLoading(true);
         const { data: breakdownResult, error: breakdownError } = await supabase.rpc('get_score_profile_by_answers', { 
             p_launch_id: launchId,
-            p_score_category: selectedScore
+            p_score_category: scoreCategory
         });
         
         if (breakdownError) {
@@ -77,45 +151,32 @@ export default function PerfilDeScorePage() {
             setData((breakdownResult as unknown as ScoreProfileQuestion[]) || []);
         }
         setLoading(false);
-    }, [supabase, selectedScore]);
+    }, [supabase]);
 
     useEffect(() => {
         if (selectedLaunch) {
-            fetchData(selectedLaunch);
+            fetchInitialData(selectedLaunch);
         }
-    }, [selectedLaunch, fetchData]);
-    
+    }, [selectedLaunch, fetchInitialData]);
+
     useEffect(() => {
-        const fetchBreakdownOnly = async () => {
-            if (!selectedLaunch || !kpiData) return; // Não roda se os KPIs ainda não carregaram
-            
-            // Reutiliza o estado de loading para feedback visual
-            setLoading(true); 
-            const { data: breakdownResult, error: breakdownError } = await supabase.rpc('get_score_profile_by_answers', { 
-                p_launch_id: selectedLaunch,
-                p_score_category: selectedScore
-            });
-            if (breakdownError) {
-                toast.error("Erro ao carregar dados de análise.");
-                setData([]);
-            } else {
-                setData((breakdownResult as unknown as ScoreProfileQuestion[]) || []);
-            }
-            setLoading(false);
-        };
-        // A busca inicial é feita pelo outro useEffect. Este só roda em mudanças.
-        if (kpiData) {
-            fetchBreakdownOnly();
+        if (selectedLaunch && selectedScore) {
+            fetchBreakdownData(selectedLaunch, selectedScore);
         }
-    }, [selectedScore, selectedLaunch, kpiData, supabase]);
+    }, [selectedLaunch, selectedScore, fetchBreakdownData]);
 
 
     const handleExport = async () => {
         toast.success('Funcionalidade de exportação a ser implementada!');
     };
+    
+    const taxaDeConversao = generalKpis.total_inscricoes > 0 
+        ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' 
+        : '0.0%';
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 min-h-screen space-y-6">
+            <Toaster position="top-center" />
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Perfil de Score por Respostas</h1>
                 <div className="flex gap-4">
@@ -126,9 +187,28 @@ export default function PerfilDeScorePage() {
                     </div>
                 </div>
             </header>
+
+            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <KpiCard 
+                    title="Total de Inscrições"
+                    value={generalKpis.total_inscricoes.toLocaleString('pt-BR')}
+                    icon={Users}
+                />
+                <KpiCard 
+                    title="Total de Check-ins"
+                    value={generalKpis.total_checkins.toLocaleString('pt-BR')}
+                    icon={UserCheck}
+                />
+                <KpiCard 
+                    title="Taxa de Conversão"
+                    value={taxaDeConversao}
+                    icon={Percent}
+                />
+            </section>
+
             <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                    {!kpiData && loading ? (
+                    {!scoreKpiData && loading ? (
                         Array.from({ length: 5 }).map((_, i) => (
                             <div key={i} className="bg-white p-4 rounded-lg shadow-md h-20 animate-pulse"></div>
                         ))
@@ -145,7 +225,7 @@ export default function PerfilDeScorePage() {
                             >
                                 <p className="text-sm text-slate-500">{cat.name}</p>
                                 <p className={`text-2xl font-bold ${cat.color}`}>
-                                    {kpiData ? kpiData[cat.key].toLocaleString('pt-BR') : <FaSpinner className="animate-spin mx-auto mt-1" />}
+                                    {scoreKpiData ? scoreKpiData[cat.key].toLocaleString('pt-BR') : <FaSpinner className="animate-spin mx-auto mt-1" />}
                                 </p>
                             </button>
                         ))

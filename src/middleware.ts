@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
@@ -25,14 +25,21 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
-  const publicRoutes = ['/login', '/auth/callback', '/auth/status', '/signup'];
+  const publicRoutes = ['/login', '/auth/callback', '/signup', '/complete-profile'];
 
   if (!user && !publicRoutes.includes(pathname)) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (user && pathname === '/login') {
-    return NextResponse.redirect(new URL('/', request.url));
+  if (user) {
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    // Lógica de Onboarding para forçar o preenchimento do nome
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+    if (!profile?.full_name && !publicRoutes.includes(pathname)) {
+      return NextResponse.redirect(new URL('/complete-profile', request.url));
+    }
   }
 
   return response;

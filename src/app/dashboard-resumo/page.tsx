@@ -1,252 +1,217 @@
+// src/app/dashboard-resumo/page.tsx (VERSÃO FINAL E OTIMIZADA)
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@/utils/supabase/client';
-import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createClient } from '../../utils/supabase/client'; // Caminho relativo para evitar erros de build
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaSpinner } from 'react-icons/fa';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import toast, { Toaster } from 'react-hot-toast';
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
-type RawLead = {
-    created_at: string | null;
-    check_in_at: string | null;
-    utm_source: string | null;
+
+type KpiData = {
+    totalInscricoes: number;
+    totalCheckins: number;
+    trafegoPago: number;
+    trafegoOrganico: number;
+    trafegoNaoTraqueado: number;
 };
+
 type DailyData = {
     full_date: string;
-    short_date: string;
     inscricoes: number;
     checkins: number;
+    trfPago: number;
+    trfOrganico: number;
+    trfNaoTraqueado: number;
 };
 
 // --- Componentes ---
-const KpiCard = ({ title, value }: { title: string, value: string | number }) => (
-    <div className="bg-slate-50 p-4 rounded-lg text-center flex-1 border border-slate-200">
-        <h3 className="text-sm font-medium text-slate-500 uppercase">{title}</h3>
-        <p className="text-3xl font-bold text-slate-800 mt-2">{value}</p>
-    </div>
-);
-
-const ChartCard = ({ title, children }: { title: string, children: React.ReactElement }) => (
-    <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-        <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
-        <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer>{children}</ResponsiveContainer>
-        </div>
+const LoadingSpinner = () => <div className="flex justify-center items-center h-64"><FaSpinner className="animate-spin text-blue-600 text-3xl" /></div>;
+const KpiCard = ({ title, value, description }: { title: string; value: number; description: string; }) => (
+    <div className="p-4 bg-slate-50 rounded-lg text-center h-full flex flex-col justify-center">
+        <p className="text-3xl font-bold text-slate-800 mt-1">{value.toLocaleString('pt-BR')}</p>
+        <h3 className="text-sm font-medium text-slate-500 truncate mt-1">{title}</h3>
+        <p className="text-xs text-slate-400">{description}</p>
     </div>
 );
 
 export default function ResumoDiarioPage() {
     const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
-    const [selectedLaunch, setSelectedLaunch] = useState<string>('');
-    const [rawLeads, setRawLeads] = useState<RawLead[]>([]);
+    const [selectedLaunchId, setSelectedLaunchId] = useState<string | null>(null);
+    const [kpis, setKpis] = useState<KpiData>({ totalInscricoes: 0, totalCheckins: 0, trafegoPago: 0, trafegoOrganico: 0, trafegoNaoTraqueado: 0 });
+    const [dailyData, setDailyData] = useState<DailyData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
+    // Busca inicial de lançamentos
     useEffect(() => {
-        const fetchInitialData = async () => {
-            setIsLoading(true);
-            const { data: launchesData } = await supabase
-                .from('lancamentos')
-                .select('id, nome, status')
-                .in('status', ['Em Andamento', 'Concluído']);
-            
-            if (launchesData && launchesData.length > 0) {
-                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
-                const sorted = [...launchesData].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+        const fetchLaunches = async () => {
+            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído', 'Planejado']);
+            if (error) { toast.error('Falha ao carregar lançamentos.'); setError('Falha ao carregar lançamentos.'); console.error(error); return; }
+            if (data && data.length > 0) {
+                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Planejado': 2, 'Concluído': 3 };
+                const sorted = data.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
                 setLaunches(sorted);
-                if (sorted[0]) {
-                  setSelectedLaunch(sorted[0].id);
-                }
+                const inProgress = sorted.find(l => l.status === 'Em Andamento');
+                setSelectedLaunchId(inProgress ? inProgress.id : sorted[0].id);
             }
         };
-        fetchInitialData();
+        fetchLaunches();
     }, [supabase]);
 
+    // Busca TODOS os dados do dashboard com uma ÚNICA chamada à nova função RPC
     useEffect(() => {
-        if (!selectedLaunch) {
-            setIsLoading(false);
-            return;
-        }
-        const loadAllLeads = async () => {
+        if (!selectedLaunchId) return;
+
+        let isActive = true;
+
+        const fetchDashboardData = async () => {
             setIsLoading(true);
-            setRawLeads([]);
-            let allLeads: RawLead[] = [];
-            let page = 0;
-            const pageSize = 1000;
-            let keepFetching = true;
-            while (keepFetching) {
-                const from = page * pageSize;
-                const to = from + pageSize - 1;
-                const { data, error } = await supabase
-                    .from('leads')
-                    .select('created_at, check_in_at, utm_source')
-                    .eq('launch_id', selectedLaunch)
-                    .range(from, to);
-                if (error) {
-                    console.error("Erro ao buscar leads:", error);
-                    keepFetching = false;
-                    break;
-                }
-                if (data) allLeads.push(...data);
-                if (!data || data.length < pageSize) keepFetching = false;
-                else page++;
+            setError(null);
+            
+            const { data, error } = await supabase.rpc('get_resumo_diario_dashboard', {
+                launch_id_param: selectedLaunchId
+            });
+
+            if (!isActive) return;
+
+            if (error) {
+                toast.error('Erro ao carregar dados do resumo.');
+                setError("Erro ao carregar dados do resumo.");
+                console.error(error);
+                setIsLoading(false);
+                return;
             }
-            setRawLeads(allLeads);
+
+            if (data) {
+                setKpis(data.kpis || { totalInscricoes: 0, totalCheckins: 0, trafegoPago: 0, trafegoOrganico: 0, trafegoNaoTraqueado: 0 });
+                setDailyData(data.dailyData || []);
+            }
             setIsLoading(false);
         };
-        loadAllLeads();
-    }, [selectedLaunch, supabase]);
-    
-    const kpis = useMemo(() => {
-        if (rawLeads.length === 0) {
-            return { totalGeral: 0, totalCheckins: 0, totalPago: 0, totalOrganico: 0, totalNaoTraqueado: 0 };
-        }
-        const untrackedSources = ['{:utm_source}', '{{site_source_name}}utm_', '{{site_source_name}}'];
-        let totalPago = 0, totalOrganico = 0, totalNaoTraqueado = 0;
-        rawLeads.forEach(lead => {
-            const source = lead.utm_source?.toLowerCase() || '';
-            if (source === 'organic') totalOrganico++;
-            else if (untrackedSources.includes(source)) totalNaoTraqueado++;
-            else totalPago++;
-        });
-        return {
-            totalGeral: rawLeads.length,
-            totalCheckins: rawLeads.filter(l => l.check_in_at).length,
-            totalPago, totalOrganico, totalNaoTraqueado
+
+        fetchDashboardData();
+
+        return () => {
+            isActive = false;
         };
-    }, [rawLeads]);
+    }, [selectedLaunchId, supabase]);
 
-    const dailyData = useMemo(() => {
-        if (rawLeads.length === 0) return [];
-        const dailyTotals: Record<string, { inscricoes: number; checkins: number }> = {};
-        rawLeads.forEach(lead => {
-            if (lead.created_at) {
-                const dayKey = lead.created_at.split('T')[0];
-                if (!dailyTotals[dayKey]) dailyTotals[dayKey] = { inscricoes: 0, checkins: 0 };
-                dailyTotals[dayKey].inscricoes++;
-                if (lead.check_in_at) dailyTotals[dayKey].checkins++;
-            }
-        });
-        return Object.keys(dailyTotals)
-          .sort((a, b) => b.localeCompare(a))
-          .map(dateStr => {
-            const date = parseISO(dateStr);
-            return {
-              full_date: format(date, "dd/MM/yyyy", { locale: ptBR }),
-              short_date: format(date, "dd/MM", { locale: ptBR }),
-              inscricoes: dailyTotals[dateStr].inscricoes,
-              checkins: dailyTotals[dateStr].checkins,
-            };
-        });
-    }, [rawLeads]);
+    // Prepara os dados para os gráficos
+    const chartData = useMemo(() => {
+        if (!dailyData) return [];
+        return [...dailyData]
+            .map(day => ({
+                ...day,
+                short_date: new Date(day.full_date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            }))
+            .reverse();
+    }, [dailyData]);
 
-    const chartData = useMemo(() => [...dailyData].reverse(), [dailyData]);
+    if (error) return <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg">{error}</div>;
 
     return (
-      <div className="space-y-6 p-4 md:p-6 bg-slate-100 min-h-screen">
-          <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Resumo Diário do Lançamento</h1>
-              {launches.length > 0 && (
-                <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
-                    <select value={selectedLaunch} onChange={(e) => setSelectedLaunch(e.target.value)} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent" disabled={isLoading}>
-                        {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
+        <>
+            <Toaster position="top-center" />
+            <div className="p-4 md:p-8 space-y-6 bg-slate-100 min-h-screen">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-4 md:mb-0">Resumo Diário do Lançamento</h1>
+                    <select value={selectedLaunchId || ''} onChange={(e) => setSelectedLaunchId(e.target.value)} disabled={isLoading} className="w-full md:w-72 bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 disabled:opacity-50">
+                        {launches.map((launch) => (<option key={launch.id} value={launch.id}> {launch.nome} ({launch.status}) </option>))}
                     </select>
-                </div>
-              )}
-          </div>
+                </header>
 
-          {isLoading ? (
-              <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>
-          ) : rawLeads.length === 0 ? (
-              <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-slate-500">Nenhum dado encontrado para este lançamento.</p></div>
-          ) : (
-              <div className="space-y-6">
-                  
-                  {/* --- BLOCO DE KPIs DIVIDIDO --- */}
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                    {/* Bloco 1: KPIs Gerais */}
-                    <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                      <h2 className="text-lg font-semibold text-slate-700 mb-4 text-center lg:text-Center">Visão Geral</h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <KpiCard title="Total Inscrições" value={kpis.totalGeral.toLocaleString('pt-BR')} />
-                        <KpiCard title="Total Check-ins" value={kpis.totalCheckins.toLocaleString('pt-BR')} />
-                      </div>
-                    </div>
+                {isLoading ? <LoadingSpinner /> : (
+                    <main className="space-y-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                            <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">Visão Geral</h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <KpiCard title="TOTAL INSCRIÇÕES" value={kpis.totalInscricoes} description="Total do Lançamento" />
+                                    <KpiCard title="TOTAL CHECK-INS" value={kpis.totalCheckins} description="Total do Lançamento" />
+                                </div>
+                            </div>
+                            <div className="lg:col-span-3 bg-white p-6 rounded-lg shadow-md">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4">Origem do Tráfego</h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <KpiCard title="TRÁFEGO PAGO" value={kpis.trafegoPago} description="Todas as outras fontes" />
+                                    <KpiCard title="TRÁFEGO ORGÂNICO" value={kpis.trafegoOrganico} description="utm_source = organic" />
+                                    <KpiCard title="NÃO TRAQUEADO" value={kpis.trafegoNaoTraqueado} description="Fonte vazia ou placeholders" />
+                                </div>
+                            </div>
+                        </div>
 
-                    {/* Bloco 2: KPIs de Tráfego */}
-                    <div className="lg:col-span-3 bg-white p-6 rounded-lg shadow-md">
-                      <h2 className="text-lg font-semibold text-slate-700 mb-4 text-center lg:text-Center">Origem do Tráfego</h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <KpiCard title="Tráfego Pago" value={kpis.totalPago.toLocaleString('pt-BR')} />
-                        <KpiCard title="Tráfego Orgânico" value={kpis.totalOrganico.toLocaleString('pt-BR')} />
-                        <KpiCard title="Não Traqueado" value={kpis.totalNaoTraqueado.toLocaleString('pt-BR')} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tabela */}
-                  <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
-                    <h2 className="text-lg font-semibold text-slate-700 mb-4">Dados Detalhados por Dia</h2>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                            <thead className="bg-slate-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Data</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-slate-200">
-                                <tr className="bg-slate-100 font-bold">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">Totais Gerais</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 text-right">{kpis.totalGeral.toLocaleString('pt-BR')}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 text-right">{kpis.totalCheckins.toLocaleString('pt-BR')}</td>
-                                </tr>
-                                {dailyData.map((item) => (
-                                    <tr key={item.full_date}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{item.full_date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 text-right">{item.inscricoes.toLocaleString('pt-BR')}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 text-right">{item.checkins.toLocaleString('pt-BR')}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                  </div>
-                  
-                  {/* Gráficos */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <ChartCard title="Inscrições vs Check-ins (Barras)">
-                          <BarChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="short_date" interval="preserveStartEnd" fontSize={12} />
-                              <YAxis fontSize={12} />
-                              <Tooltip />
-                              <Legend />
-                              <Bar dataKey="inscricoes" fill="#8884d8" name="Inscrições" />
-                              <Bar dataKey="checkins" fill="#82ca9d" name="Check-ins" />
-                          </BarChart>
-                      </ChartCard>
-                      <ChartCard title="Inscrições vs Check-ins (Linhas)">
-                          <LineChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="short_date" interval="preserveStartEnd" fontSize={12} />
-                              <YAxis fontSize={12} />
-                              <Tooltip />
-                              <Legend />
-                              <Line type="monotone" dataKey="inscricoes" stroke="#8884d8" name="Inscrições" />
-                              <Line type="monotone" dataKey="checkins" stroke="#82ca9d" name="Check-ins" />
-                          </LineChart>
-                      </ChartCard>
-                  </div>
-              </div>
-          )}
-      </div>
+                        {dailyData.length > 0 && (
+                            <>
+                                <div className="bg-white p-6 rounded-lg shadow-md">
+                                    <h2 className="text-lg font-semibold text-slate-700 mb-4">Dados Detalhados por Dia</h2>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead className="bg-slate-50 text-slate-600 font-medium">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left">DATA</th>
+                                                    <th className="px-4 py-3 text-right">LEADS</th>
+                                                    <th className="px-4 py-3 text-right">CHECK-IN</th>
+                                                    <th className="px-4 py-3 text-right">TRF PAGO</th>
+                                                    <th className="px-4 py-3 text-right">TRF ORGÂNICO</th>
+                                                    <th className="px-4 py-3 text-right">NÃO TRAQ.</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200">
+                                                {dailyData.map(day => (
+                                                    <tr key={day.full_date}>
+                                                        <td className="px-4 py-4">{new Date(day.full_date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</td>
+                                                        <td className="px-4 py-4 text-right">{day.inscricoes.toLocaleString('pt-BR')}</td>
+                                                        <td className="px-4 py-4 text-right">{day.checkins.toLocaleString('pt-BR')}</td>
+                                                        <td className="px-4 py-4 text-right">{day.trfPago.toLocaleString('pt-BR')}</td>
+                                                        <td className="px-4 py-4 text-right">{day.trfOrganico.toLocaleString('pt-BR')}</td>
+                                                        <td className="px-4 py-4 text-right">{day.trfNaoTraqueado.toLocaleString('pt-BR')}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 gap-6">
+                                    <div className="bg-white p-6 rounded-lg shadow-md">
+                                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Evolução Diária de Inscritos</h2>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={chartData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="short_date" />
+                                                <YAxis allowDecimals={false} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="inscricoes" fill="#4f46e5" name="Inscrições" />
+                                                <Bar dataKey="checkins" fill="#22c55e" name="Check-ins" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-lg shadow-md">
+                                        <h2 className="text-lg font-semibold text-slate-700 mb-4">Evolução Diária de Tráfego</h2>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <LineChart data={chartData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="short_date" />
+                                                <YAxis allowDecimals={false} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Line type="monotone" dataKey="trfPago" stroke="#3b82f6" name="Pago" strokeWidth={2} />
+                                                <Line type="monotone" dataKey="trfOrganico" stroke="#16a34a" name="Orgânico" strokeWidth={2} />
+                                                <Line type="monotone" dataKey="trfNaoTraqueado" stroke="#ef4444" name="Não Traqueado" strokeWidth={2} />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </main>
+                )}
+            </div>
+        </>
     );
 }

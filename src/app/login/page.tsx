@@ -1,4 +1,3 @@
-// src/app/login/page.tsx (VERSÃO FINAL COM DICA DE AUTOCOMPLETE)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -18,16 +17,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  useEffect(() => {
-    setEmail('');
-    setPassword('');
-  }, []);
+  useEffect(() => { setEmail(''); setPassword(''); }, []);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault(); setLoading(true); setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError('E-mail ou senha inválidos.'); setLoading(false); } 
-    else { router.push('/'); }
+    else { router.push('/'); router.refresh(); } // Adicionado router.refresh() para garantir a recarga dos dados
   };
 
   const handlePasswordReset = async () => {
@@ -47,13 +43,11 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">Seu e-mail</label>
-              {/* Adicionado autocomplete="username" */}
               <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">Sua senha</label>
               <div className="relative">
-                {/* Adicionado autocomplete="current-password" */}
                 <input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <FaEyeSlash /> : <FaEye />}

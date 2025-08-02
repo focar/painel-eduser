@@ -1,5 +1,4 @@
 'use client';
-
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import type { User } from '@supabase/supabase-js';
@@ -29,29 +28,28 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     };
     fetchSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       const user = newSession?.user ?? null;
       let profile = null;
       if (user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        profile = data;
+        // Busca o perfil novamente quando o estado de auth muda
+        supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
+          setSession({ user, profile: data });
+        });
+      } else {
+        setSession({ user: null, profile: null });
       }
-      setSession({ user, profile });
-      setIsLoading(false);
     });
 
     return () => { authListener.subscription.unsubscribe(); };
   }, [supabase]);
 
   const value = { session, isLoading };
-
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };
 
 export const useUser = (): UserContextType => {
   const context = useContext(UserContext);
-  if (context === undefined) {
-    throw new Error('useUser deve ser usado dentro de um UserProvider');
-  }
+  if (context === undefined) { throw new Error('useUser must be used within a UserProvider'); }
   return context;
 };

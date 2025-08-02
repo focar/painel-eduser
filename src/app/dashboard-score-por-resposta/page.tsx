@@ -2,15 +2,31 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from '@/utils/supabase/client';
-//import type { Database } from '@/types/database';
 import { QuestionAnalysisData, Launch } from "@/lib/types"; 
 import QuestionAnalysisCard from "@/components/dashboard/QuestionAnalysisCard";
+import { Users, UserCheck, Percent } from "lucide-react"; // Ícones para os KPIs
 
+// --- Tipos de Dados ---
+type KpiData = {
+    total_inscricoes: number;
+    total_checkins: number;
+};
+
+// --- Componentes ---
 const Spinner = () => (
   <div className="flex justify-center items-center h-40">
     <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
   </div>
 );
+
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => (
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
+        <Icon className="mx-auto text-blue-500 mb-2" size={28} />
+        <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">{value}</p>
+        <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">{title}</h3>
+    </div>
+);
+
 
 export default function ScorePorRespostaPage() {
   const supabase = createClient();
@@ -18,6 +34,8 @@ export default function ScorePorRespostaPage() {
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [selectedLaunch, setSelectedLaunch] = useState<string>('');
   const [analysisData, setAnalysisData] = useState<QuestionAnalysisData[]>([]);
+  // Novo estado para os dados dos KPIs
+  const [kpis, setKpis] = useState<KpiData>({ total_inscricoes: 0, total_checkins: 0 });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,20 +49,18 @@ export default function ScorePorRespostaPage() {
       if (error) {
         console.error("Erro ao buscar lançamentos:", error);
       } else if (data) {
-        // ================== INÍCIO DA CORREÇÃO DE ORDENAÇÃO ==================
         const sortedData = [...data].sort((a, b) => {
-            // Prioriza 'Em Andamento' para o topo da lista
             if (a.status !== b.status) {
                 return a.status === 'Em Andamento' ? -1 : 1;
             }
-            // Se o status for o mesmo, ordena por nome
             return a.nome.localeCompare(b.nome);
         });
-        // ================== FIM DA CORREÇÃO DE ORDENAÇÃO ==================
         
         setLaunches(sortedData as Launch[]);
         if (sortedData.length > 0) {
-            setSelectedLaunch(sortedData[0].id);
+            // Define o lançamento "Em Andamento" como padrão, se existir
+            const inProgressLaunch = sortedData.find(l => l.status === 'Em Andamento');
+            setSelectedLaunch(inProgressLaunch ? inProgressLaunch.id : sortedData[0].id);
         } else {
             setLoading(false);
         }
@@ -53,6 +69,7 @@ export default function ScorePorRespostaPage() {
     fetchLaunches();
   }, [supabase]);
 
+  // Função atualizada para buscar tanto os dados de análise quanto os KPIs
   const fetchDataForLaunch = useCallback(async (launchId: string) => {
     if (!launchId) return;
 
@@ -60,18 +77,26 @@ export default function ScorePorRespostaPage() {
     setError(null);
 
     try {
-      const { data, error: rpcError } = await supabase.rpc('get_answer_counts_for_launch', {
-        p_launch_id: launchId,
-      });
+      // Executa as duas chamadas em paralelo para mais performance
+      const [analysisResult, kpiResult] = await Promise.all([
+        supabase.rpc('get_answer_counts_for_launch', { p_launch_id: launchId }),
+        supabase.rpc('get_kpis_for_launch', { p_launch_id: launchId })
+      ]);
 
-      if (rpcError) throw rpcError;
+      const { data: analysisData, error: analysisError } = analysisResult;
+      const { data: kpiData, error: kpiError } = kpiResult;
+
+      if (analysisError) throw analysisError;
+      if (kpiError) throw kpiError;
       
-      setAnalysisData((data as unknown as QuestionAnalysisData[]) || []);
+      setAnalysisData((analysisData as unknown as QuestionAnalysisData[]) || []);
+      setKpis(kpiData || { total_inscricoes: 0, total_checkins: 0 });
 
     } catch (err: any) {
       console.error(err);
       setError("Não foi possível carregar os dados de análise.");
       setAnalysisData([]);
+      setKpis({ total_inscricoes: 0, total_checkins: 0 });
     } finally {
       setLoading(false);
     }
@@ -83,13 +108,19 @@ export default function ScorePorRespostaPage() {
     }
   }, [selectedLaunch, fetchDataForLaunch]);
 
+  // Calcula a taxa de conversão
+  const taxaDeConversao = kpis.total_inscricoes > 0 
+    ? ((kpis.total_checkins / kpis.total_inscricoes) * 100).toFixed(1) + '%' 
+    : '0.0%';
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-900 min-h-screen">
       <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
-          Análise de Respostas</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
+          Análise de Respostas
+        </h1>
         {launches.length > 0 && (
-          <div className="w-full sm:w-64">
+          <div className="w-full sm:w-72">
             <select
               id="launch-select"
               value={selectedLaunch}
@@ -105,6 +136,28 @@ export default function ScorePorRespostaPage() {
           </div>
         )}
       </header>
+
+      {/* Seção de KPIs adicionada aqui */}
+      {!loading && !error && (
+        <section className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <KpiCard 
+                title="Total de Inscrições"
+                value={kpis.total_inscricoes.toLocaleString('pt-BR')}
+                icon={Users}
+            />
+            <KpiCard 
+                title="Total de Check-ins"
+                value={kpis.total_checkins.toLocaleString('pt-BR')}
+                icon={UserCheck}
+            />
+            <KpiCard 
+                title="Taxa de Conversão"
+                value={taxaDeConversao}
+                icon={Percent}
+            />
+        </section>
+      )}
+
       <main>
         {loading && <Spinner />}
         

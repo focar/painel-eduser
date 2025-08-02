@@ -1,33 +1,59 @@
-// COPIE E COLE EM: src/components/dashboard/QuestionAnalysisCard.tsx
+// CAMINHO: src/components/dashboard/QuestionAnalysisCard.tsx
 
-import { QuestionAnalysisData } from "@/lib/types";
+import type { QuestionAnalysisData } from "@/lib/types";
 
-interface QuestionAnalysisCardProps {
+type Props = {
   questionData: QuestionAnalysisData;
-}
+};
 
-export default function QuestionAnalysisCard({ questionData }: QuestionAnalysisCardProps) {
+export default function QuestionAnalysisCard({ questionData }: Props) {
+  // CORREÇÃO AQUI: Usa 'answer.lead_count'
+  const totalRespostas = questionData.answers.reduce(
+    (sum, answer) => sum + answer.lead_count,
+    0
+  );
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border border-gray-200 dark:border-gray-700">
-      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
+      <h3 className="text-md font-bold text-slate-800 dark:text-slate-100 mb-4 truncate">
         {questionData.question_text}
       </h3>
-      <div className="space-y-3">
-        {questionData.answers && questionData.answers.length > 0 ? (
-          questionData.answers.map((answer) => (
-            <div key={answer.answer_text} className="flex justify-between items-center text-sm">
-              <span className="text-gray-700 dark:text-gray-300">{answer.answer_text}</span>
-              <span className="font-bold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-0.5 rounded-full">
-                {answer.lead_count}
-              </span>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-            Nenhuma resposta encontrada para esta pergunta.
-          </p>
-        )}
-      </div>
+      
+      <ul className="space-y-3 flex-grow">
+        {/* CORREÇÃO AQUI: Usa 'b.lead_count' e 'a.lead_count' para ordenar */}
+        {questionData.answers
+          .sort((a, b) => b.lead_count - a.lead_count)
+          .map((answer) => {
+            // CORREÇÃO AQUI: Usa 'answer.lead_count' para o cálculo
+            const percentual =
+              totalRespostas > 0
+                ? (answer.lead_count / totalRespostas) * 100
+                : 0;
+
+            return (
+              <li key={answer.answer_text}>
+                <div className="flex justify-between items-center text-sm mb-1">
+                  <span className="text-slate-600 dark:text-slate-300 truncate pr-2">
+                    {answer.answer_text}
+                  </span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                    {/* CORREÇÃO AQUI: Exibe 'answer.lead_count' */}
+                    {answer.lead_count}
+                    <span className="text-slate-400 dark:text-slate-500 ml-2">
+                      ({percentual.toFixed(1)}%)
+                    </span>
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full"
+                    style={{ width: `${percentual}%` }}
+                  ></div>
+                </div>
+              </li>
+            );
+          })}
+      </ul>
     </div>
   );
 }

@@ -1,64 +1,90 @@
 // CAMINHO: src/components/dashboard/AnswerBreakdownCard.tsx
+'use client';
 
-import { QuestionBreakdownData } from '@/lib/types';
+import { useMemo } from 'react';
+import { QuestionBreakdownData, ScoreCategory } from '@/lib/types';
 
-// ================== INÍCIO DA CORREÇÃO DAS CORES ==================
-// Nova paleta de cores de "temperatura" para uma leitura mais intuitiva
-const scoreCategories = [
-    { key: 'quente', name: 'Quente (>80)', color: 'bg-red-500' },
-    { key: 'quente_morno', name: 'Quente-Morno (65-79)', color: 'bg-orange-400' },
-    { key: 'morno', name: 'Morno (50-64)', color: 'bg-amber-400' },
-    { key: 'morno_frio', name: 'Morno-Frio (35-49)', color: 'bg-sky-400' },
-    { key: 'frio', name: 'Frio (<35)', color: 'bg-blue-500' },
-] as const;
-// ================== FIM DA CORREÇÃO DAS CORES ==================
+// Define a ordem e as cores para cada categoria de score
+const scoreCategories: { key: ScoreCategory; label: string; color: string }[] = [
+    { key: 'quente', label: 'Quente', color: 'bg-red-500' },
+    { key: 'quente_morno', label: 'Quente/Morno', color: 'bg-orange-500' },
+    { key: 'morno', label: 'Morno', color: 'bg-yellow-500' },
+    { key: 'morno_frio', label: 'Morno/Frio', color: 'bg-blue-400' },
+    { key: 'frio', label: 'Frio', color: 'bg-blue-600' },
+];
 
-export default function AnswerBreakdownCard({ questionData }: { questionData: QuestionBreakdownData }) {
+const AnswerBreakdownCard = ({ questionData }: { questionData: QuestionBreakdownData }) => {
+    // Memoiza o total de respostas para evitar recálculos desnecessários
+    const totalResponses = useMemo(() => {
+        if (!questionData.answers) return 0;
+        return questionData.answers.reduce((total, answer) => {
+            if (!answer.scores) return total;
+            const answerTotal = answer.scores.reduce((sum, score) => sum + score.count, 0);
+            return total + answerTotal;
+        }, 0);
+    }, [questionData.answers]);
+
+    // Não renderiza o card se não houver dados válidos
+    if (!totalResponses || totalResponses === 0) {
+        return (
+             <div className="bg-white p-6 rounded-lg shadow-md">
+                <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
+                <p className="text-slate-500 text-sm">Nenhuma resposta encontrada para esta pergunta nos filtros selecionados.</p>
+            </div>
+        )
+    }
+
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">
-                {questionData.question_text}
-            </h3>
-            <div className="space-y-4">
-                {questionData.answers.map(answer => (
-                    <div key={answer.answer_text}>
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{answer.answer_text}</span>
-                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Total: {answer.total_leads}</span>
-                        </div>
-                        <div className="w-full flex h-4 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-600">
-                            {scoreCategories.map(category => {
-                                // A lógica para encontrar a categoria correta e calcular a porcentagem
-                                const sortedBreakdown = Object.entries(answer.score_breakdown)
-                                    .map(([key, value]) => ({ key, value }))
-                                    .sort((a, b) => {
-                                        const orderA = scoreCategories.findIndex(sc => sc.key === a.key);
-                                        const orderB = scoreCategories.findIndex(sc => sc.key === b.key);
-                                        return orderA - orderB;
-                                    });
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
+            <ul className="space-y-4">
+                {questionData.answers?.map((answer, index) => {
+                    // Calcula o total de respostas para esta resposta específica
+                    const answerTotal = answer.scores?.reduce((sum, score) => sum + score.count, 0) || 0;
+                    if (answerTotal === 0) return null; // Não mostra respostas sem contagem
 
-                                const count = answer.score_breakdown[category.key as keyof typeof answer.score_breakdown] || 0;
-                                if (count === 0) return null;
-                                
-                                const percentage = (count / answer.total_leads) * 100;
-                                
-                                return (
-                                    <div
-                                        key={category.key}
-                                        className={`flex items-center justify-center ${category.color}`}
-                                        style={{ width: `${percentage}%` }}
-                                        title={`${category.name}: ${count} leads`}
-                                    >
-                                        <span className="text-white text-[10px] font-bold drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
-                                          {percentage > 10 ? `${Math.round(percentage)}%` : ''}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                    const percentageOfTotal = (answerTotal / totalResponses) * 100;
+
+                    return (
+                        <li key={index} className="border-t border-slate-100 pt-4 first:border-t-0 first:pt-0">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-slate-600 font-medium">{answer.answer_text}</span>
+                                <span className="text-slate-800 font-bold">
+                                    {answerTotal.toLocaleString('pt-BR')} ({percentageOfTotal.toFixed(1)}%)
+                                </span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-5 flex overflow-hidden">
+                                {scoreCategories.map(category => {
+                                    const scoreInfo = answer.scores?.find(s => s.score_category === category.key);
+                                    const scoreCount = scoreInfo?.count || 0;
+                                    const widthPercentage = answerTotal > 0 ? (scoreCount / answerTotal) * 100 : 0;
+
+                                    if (widthPercentage === 0) return null;
+
+                                    return (
+                                        <div
+                                            key={category.key}
+                                            className={`${category.color} h-full transition-all duration-500`}
+                                            style={{ width: `${widthPercentage}%` }}
+                                            title={`${category.label}: ${scoreCount}`}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+                {scoreCategories.map(category => (
+                    <div key={category.key} className="flex items-center text-xs">
+                        <span className={`w-3 h-3 rounded-sm mr-2 ${category.color}`}></span>
+                        <span className="text-slate-600">{category.label}</span>
                     </div>
                 ))}
             </div>
         </div>
     );
-}
+};
+
+export default AnswerBreakdownCard;

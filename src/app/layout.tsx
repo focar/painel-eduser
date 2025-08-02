@@ -1,5 +1,5 @@
 // src/app/layout.tsx
-// VERSÃO CORRETA E LIMPA
+// VERSÃO CORRIGIDA E LIMPA
 
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -25,9 +25,12 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={`${inter.className} bg-gray-50`}>
         <UserProvider>
-          <div className="relative min-h-screen md:flex">
+          {/* Esta estrutura garante que a sidebar tenha uma altura fixa e que apenas a área
+            de conteúdo principal tenha uma barra de rolagem quando necessário.
+          */}
+          <div className="relative flex h-screen">
             <Sidebar />
-            <main className="flex-1">
+            <main className="flex-1 overflow-y-auto">
               <Toaster position="top-right" />
               {children}
             </main>

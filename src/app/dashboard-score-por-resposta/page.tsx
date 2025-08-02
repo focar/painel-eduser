@@ -1,184 +1,238 @@
 'use client';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from '@/utils/supabase/client';
-import { QuestionAnalysisData, Launch } from "@/lib/types"; 
-import QuestionAnalysisCard from "@/components/dashboard/QuestionAnalysisCard";
-import { Users, UserCheck, Percent } from "lucide-react"; // Ícones para os KPIs
+import { Launch } from "@/lib/types";
+import { Users, UserCheck, Percent, ShoppingCart } from "lucide-react";
 
 // --- Tipos de Dados ---
+type AnswerData = {
+    answer_text: string;
+    lead_count: number;
+};
+
+type QuestionAnalysisData = {
+    question_id: string;
+    question_text: string;
+    answers: AnswerData[];
+};
+
 type KpiData = {
     total_inscricoes: number;
     total_checkins: number;
+    total_buyers: number;
+    total_buyer_checkins: number;
 };
+
+type ViewMode = 'all' | 'buyers';
 
 // --- Componentes ---
 const Spinner = () => (
-  <div className="flex justify-center items-center h-40">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-  </div>
+    <div className="flex justify-center items-center h-40">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
 );
 
 const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
-        <Icon className="mx-auto text-blue-500 mb-2" size={28} />
-        <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">{value}</p>
-        <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">{title}</h3>
+    <div className="bg-slate-50 p-4 rounded-lg text-center flex flex-col justify-center h-full">
+        <Icon className="mx-auto text-blue-500 mb-2" size={24} />
+        <p className="text-3xl font-bold text-slate-800">{value}</p>
+        <h3 className="text-sm font-medium text-slate-500 mt-1">{title}</h3>
     </div>
 );
 
+const QuestionAnalysisCard = ({ questionData }: { questionData: QuestionAnalysisData }) => {
+    const totalResponses = useMemo(() => {
+        return questionData.answers?.reduce((sum, answer) => sum + answer.lead_count, 0) || 0;
+    }, [questionData.answers]);
 
-export default function ScorePorRespostaPage() {
-  const supabase = createClient();
-  
-  const [launches, setLaunches] = useState<Launch[]>([]);
-  const [selectedLaunch, setSelectedLaunch] = useState<string>('');
-  const [analysisData, setAnalysisData] = useState<QuestionAnalysisData[]>([]);
-  // Novo estado para os dados dos KPIs
-  const [kpis, setKpis] = useState<KpiData>({ total_inscricoes: 0, total_checkins: 0 });
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+    if (!totalResponses || totalResponses === 0) {
+        return null;
+    }
 
-  useEffect(() => {
-    async function fetchLaunches() {
-      const { data, error } = await supabase
-        .from('lancamentos')
-        .select('id, nome, status') 
-        .in('status', ['Em Andamento', 'Concluído']);
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
+            <ul className="space-y-3">
+                {questionData.answers
+                    .sort((a, b) => b.lead_count - a.lead_count)
+                    .map((answer, index) => {
+                    const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
+                    return (
+                        <li key={index}>
+                            <div className="flex justify-between items-center mb-1 text-sm">
+                                <span className="text-slate-600">{answer.answer_text}</span>
+                                <span className="font-medium text-slate-700">
+                                    {answer.lead_count.toLocaleString('pt-BR')} ({percentage.toFixed(1)}%)
+                                </span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2.5">
+                                <div
+                                    className="bg-blue-500 h-2.5 rounded-full"
+                                    style={{ width: `${percentage}%` }}
+                                ></div>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+};
 
-      if (error) {
-        console.error("Erro ao buscar lançamentos:", error);
-      } else if (data) {
-        const sortedData = [...data].sort((a, b) => {
-            if (a.status !== b.status) {
-                return a.status === 'Em Andamento' ? -1 : 1;
+
+export default function AnaliseRespostasPage() {
+    const supabase = createClient();
+
+    const [launches, setLaunches] = useState<Launch[]>([]);
+    // CORREÇÃO: O estado inicial agora é uma string vazia para esperar a seleção do lançamento padrão.
+    const [selectedLaunch, setSelectedLaunch] = useState<string>('');
+    const [analysisData, setAnalysisData] = useState<QuestionAnalysisData[]>([]);
+    const [kpis, setKpis] = useState<KpiData>({ total_inscricoes: 0, total_checkins: 0, total_buyers: 0, total_buyer_checkins: 0 });
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<ViewMode>('all');
+
+    // Este useEffect busca a lista de lançamentos e define o padrão
+    useEffect(() => {
+        async function fetchLaunches() {
+            const { data, error } = await supabase
+                .from('lancamentos')
+                .select('id, nome, status')
+                .in('status', ['Em Andamento', 'Concluído']);
+
+            if (error) {
+                console.error("Erro ao buscar lançamentos:", error);
+                // Mesmo com erro, define um padrão para evitar um estado de loading infinito
+                setSelectedLaunch('all'); 
+            } else if (data) {
+                const sortedData = [...data].sort((a, b) => {
+                    if (a.status !== b.status) return a.status === 'Em Andamento' ? -1 : 1;
+                    return a.nome.localeCompare(b.nome);
+                });
+
+                setLaunches(sortedData as Launch[]);
+                const inProgressLaunch = sortedData.find(l => l.status === 'Em Andamento');
+                // Define o lançamento "Em Andamento" como padrão, ou o primeiro da lista, ou 'todos' como último recurso.
+                setSelectedLaunch(inProgressLaunch ? inProgressLaunch.id : (sortedData[0] ? sortedData[0].id : 'all'));
             }
-            return a.nome.localeCompare(b.nome);
-        });
-        
-        setLaunches(sortedData as Launch[]);
-        if (sortedData.length > 0) {
-            // Define o lançamento "Em Andamento" como padrão, se existir
-            const inProgressLaunch = sortedData.find(l => l.status === 'Em Andamento');
-            setSelectedLaunch(inProgressLaunch ? inProgressLaunch.id : sortedData[0].id);
-        } else {
-            setLoading(false);
         }
-      }
-    }
-    fetchLaunches();
-  }, [supabase]);
+        fetchLaunches();
+    }, [supabase]);
 
-  // Função atualizada para buscar tanto os dados de análise quanto os KPIs
-  const fetchDataForLaunch = useCallback(async (launchId: string) => {
-    if (!launchId) return;
+    // Este useEffect busca os dados do dashboard
+    const fetchDataForLaunch = useCallback(async (launchId: string, mode: ViewMode) => {
+        const rpcLaunchId = launchId === 'all' ? null : launchId;
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Executa as duas chamadas em paralelo para mais performance
-      const [analysisResult, kpiResult] = await Promise.all([
-        supabase.rpc('get_answer_counts_for_launch', { p_launch_id: launchId }),
-        supabase.rpc('get_kpis_for_launch', { p_launch_id: launchId })
-      ]);
-
-      const { data: analysisData, error: analysisError } = analysisResult;
-      const { data: kpiData, error: kpiError } = kpiResult;
-
-      if (analysisError) throw analysisError;
-      if (kpiError) throw kpiError;
-      
-      setAnalysisData((analysisData as unknown as QuestionAnalysisData[]) || []);
-      setKpis(kpiData || { total_inscricoes: 0, total_checkins: 0 });
-
-    } catch (err: any) {
-      console.error(err);
-      setError("Não foi possível carregar os dados de análise.");
-      setAnalysisData([]);
-      setKpis({ total_inscricoes: 0, total_checkins: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    if (selectedLaunch) {
-      fetchDataForLaunch(selectedLaunch);
-    }
-  }, [selectedLaunch, fetchDataForLaunch]);
-
-  // Calcula a taxa de conversão
-  const taxaDeConversao = kpis.total_inscricoes > 0 
-    ? ((kpis.total_checkins / kpis.total_inscricoes) * 100).toFixed(1) + '%' 
-    : '0.0%';
-
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-900 min-h-screen">
-      <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
-          Análise de Respostas
-        </h1>
-        {launches.length > 0 && (
-          <div className="w-full sm:w-72">
-            <select
-              id="launch-select"
-              value={selectedLaunch}
-              onChange={(e) => setSelectedLaunch(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
-            >
-              {launches.map((launch) => (
-                <option key={launch.id} value={launch.id}>
-                  {`${launch.nome} - ${launch.status}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </header>
-
-      {/* Seção de KPIs adicionada aqui */}
-      {!loading && !error && (
-        <section className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <KpiCard 
-                title="Total de Inscrições"
-                value={kpis.total_inscricoes.toLocaleString('pt-BR')}
-                icon={Users}
-            />
-            <KpiCard 
-                title="Total de Check-ins"
-                value={kpis.total_checkins.toLocaleString('pt-BR')}
-                icon={UserCheck}
-            />
-            <KpiCard 
-                title="Taxa de Conversão"
-                value={taxaDeConversao}
-                icon={Percent}
-            />
-        </section>
-      )}
-
-      <main>
-        {loading && <Spinner />}
+        setLoading(true);
+        setError(null);
         
-        {!loading && error && (
-          <div className="text-center py-10 px-4 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg"><p>{error}</p></div>
-        )}
+        let isActive = true;
 
-        {!loading && !error && (!analysisData || analysisData.length === 0) && (
-          <div className="text-center py-10 px-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-            <p className="text-gray-600 dark:text-gray-400">Nenhuma pergunta ou resposta encontrada para a pesquisa deste lançamento.</p>
-          </div>
-        )}
+        try {
+            const kpiPromise = supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: rpcLaunchId });
+            const analysisPromise = supabase.rpc('get_answer_analysis', { 
+                p_launch_id: rpcLaunchId,
+                p_filter_by_buyers: mode === 'buyers'
+            });
 
-        {!loading && !error && analysisData && analysisData.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-            {analysisData.map((question) => (
-              <QuestionAnalysisCard key={question.question_id} questionData={question} />
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
-  );
+            const [analysisResult, kpiResult] = await Promise.all([analysisPromise, kpiPromise]);
+
+            if (!isActive) return;
+
+            if (kpiResult.error) throw { source: 'get_geral_and_buyer_kpis', error: kpiResult.error };
+            if (analysisResult.error) throw { source: 'get_answer_analysis', error: analysisResult.error };
+
+            setAnalysisData((analysisResult.data as unknown as QuestionAnalysisData[]) || []);
+            setKpis(kpiResult.data || { total_inscricoes: 0, total_checkins: 0, total_buyers: 0, total_buyer_checkins: 0 });
+
+        } catch (err: any) {
+            console.error(`Erro ao carregar dados da função '${err.source}':`, err.error);
+            if(isActive) {
+                setError(`Não foi possível carregar os dados. Verifique se a função '${err.source}' existe e está correta. (Detalhes: ${err.error.message})`);
+            }
+        } finally {
+            if(isActive) setLoading(false);
+        }
+        
+        return () => { isActive = false; };
+
+    }, [supabase]);
+
+    // CORREÇÃO: Adicionamos uma verificação para só buscar dados quando um lançamento estiver selecionado.
+    useEffect(() => {
+        if (selectedLaunch) {
+            fetchDataForLaunch(selectedLaunch, viewMode);
+        }
+    }, [selectedLaunch, viewMode, fetchDataForLaunch]);
+
+    const taxaCheckinGeral = kpis.total_inscricoes > 0 ? ((kpis.total_checkins / kpis.total_inscricoes) * 100) : 0;
+    const taxaConversaoCompradores = kpis.total_inscricoes > 0 ? ((kpis.total_buyers / kpis.total_inscricoes) * 100) : 0;
+
+    return (
+        <div className="p-4 sm:p-6 lg:p-8 bg-slate-100 min-h-screen">
+            <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Respostas</h1>
+                <div className="w-full sm:w-72">
+                    <select
+                        id="launch-select"
+                        value={selectedLaunch}
+                        onChange={(e) => setSelectedLaunch(e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        disabled={!selectedLaunch} // Desabilita o seletor enquanto carrega o padrão
+                    >
+                        <option value="all">Visão Geral (Todos)</option>
+                        {launches.map((launch) => (
+                            <option key={launch.id} value={launch.id}>{`${launch.nome} - ${launch.status}`}</option>
+                        ))}
+                    </select>
+                </div>
+            </header>
+
+            <section className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <button
+                    onClick={() => setViewMode('all')}
+                    className={`p-4 rounded-xl shadow-lg flex flex-col gap-4 transition-all duration-200 border-2 ${viewMode === 'all' ? 'bg-white border-blue-500' : 'bg-white border-transparent hover:border-blue-300'}`}
+                >
+                    <h2 className="text-lg font-semibold text-slate-700 text-center">Visão Geral do Lançamento</h2>
+                    <div className="grid grid-cols-3 gap-4">
+                        <KpiCard title="Total Inscrições" value={kpis.total_inscricoes.toLocaleString('pt-BR')} icon={Users} />
+                        <KpiCard title="Total Check-ins" value={kpis.total_checkins.toLocaleString('pt-BR')} icon={UserCheck} />
+                        <KpiCard title="Taxa de Check-in" value={`${taxaCheckinGeral.toFixed(1)}%`} icon={Percent} />
+                    </div>
+                </button>
+                
+                <button
+                    onClick={() => setViewMode('buyers')}
+                    className={`p-4 rounded-xl shadow-lg flex flex-col gap-4 transition-all duration-200 border-2 ${viewMode === 'buyers' ? 'bg-white border-blue-500' : 'bg-white border-transparent hover:border-blue-300'}`}
+                >
+                    <h2 className="text-lg font-semibold text-slate-700 text-center">Análise de Compradores</h2>
+                    <div className="grid grid-cols-3 gap-4">
+                        <KpiCard title="Total Compradores" value={kpis.total_buyers.toLocaleString('pt-BR')} icon={ShoppingCart} />
+                        <KpiCard title="Check-ins (Compradores)" value={kpis.total_buyer_checkins.toLocaleString('pt-BR')} icon={UserCheck} />
+                        <KpiCard title="Taxa de Conversão" value={`${taxaConversaoCompradores.toFixed(1)}%`} icon={Percent} />
+                    </div>
+                </button>
+            </section>
+
+            <main>
+                {loading && <Spinner />}
+                {!loading && error && (
+                    <div className="text-center py-10 px-4 bg-red-100 text-red-700 rounded-lg"><p>{error}</p></div>
+                )}
+                {!loading && !error && (!analysisData || analysisData.filter(q => q.answers !== null).length === 0) && (
+                    <div className="text-center py-10 px-4 bg-white rounded-lg shadow-md">
+                        <p className="text-gray-600">Nenhuma pergunta ou resposta encontrada para os filtros selecionados.</p>
+                    </div>
+                )}
+                {!loading && !error && analysisData && analysisData.filter(q => q.answers !== null).length > 0 && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                        {analysisData.map((question) => (
+                            <QuestionAnalysisCard key={question.question_id} questionData={question} />
+                        ))}
+                    </div>
+                )}
+            </main>
+        </div>
+    );
 }

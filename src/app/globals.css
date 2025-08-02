@@ -30,3 +30,27 @@ body {
   overflow-y: scroll;
 }
 
+/* Estilização da barra de rolagem para navegadores Webkit (Chrome, Safari, Edge) */
+
+/* Define a aparência geral da barra de rolagem */
+::-webkit-scrollbar {
+  width: 8px; /* Largura da barra de rolagem */
+}
+
+/* Define a aparência do "caminho" por onde a barra de rolagem corre */
+::-webkit-scrollbar-track {
+  background: transparent; /* Deixa o fundo transparente */
+}
+
+/* Define a aparência do "polegar" (a parte que você arrasta) */
+::-webkit-scrollbar-thumb {
+  background-color: #4a5568; /* Cor escura, similar ao seu menu */
+  border-radius: 4px; /* Cantos arredondados */
+  border: 2px solid transparent; /* Adiciona um pequeno espaçamento */
+  background-clip: content-box;
+}
+
+/* Define a aparência do "polegar" quando você passa o rato por cima */
+::-webkit-scrollbar-thumb:hover {
+  background-color: #718096; /* Uma cor um pouco mais clara ao passar o rato */
+}

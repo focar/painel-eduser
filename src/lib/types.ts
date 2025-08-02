@@ -23,17 +23,21 @@ export interface ScoreBreakdown {
   frio?: number;
 }
 
-export interface AnswerBreakdownData {
+// Definição de uma única resposta dentro do breakdown
+export type AnswerWithScores = {
   answer_text: string;
-  total_leads: number;
-  score_breakdown: ScoreBreakdown;
-}
+  scores: {
+    score_category: ScoreCategory;
+    count: number;
+  }[];
+};
 
-export interface QuestionBreakdownData {
+// Definição principal para os dados de uma pergunta
+export type QuestionBreakdownData = {
   question_id: string;
   question_text: string;
-  answers: AnswerBreakdownData[];
-}
+  answers: AnswerWithScores[];
+};
 
 export interface ScoreProfileAnswer {
   answer_text: string;
@@ -51,4 +55,6 @@ export type Survey = {
     id: string;
     nome: string;
 };
+
+export type ScoreCategory = 'quente' | 'quente_morno' | 'morno' | 'morno_frio' | 'frio';
 // =========================================================

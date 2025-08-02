@@ -1,7 +1,8 @@
-// src/app/dashboard-detalhamento-canais/page.tsx (VERSÃO FINAL E ROBUSTA)
+// src/app/dashboard-detalhamento-canais/page.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+// CORREÇÃO: Usando o caminho de importação padrão do seu projeto
 import { createClient } from '@/utils/supabase/client';
 import { FaSpinner, FaChevronDown, FaFileCsv } from 'react-icons/fa';
 import toast, { Toaster } from 'react-hot-toast';
@@ -15,6 +16,11 @@ type LeadComTrafego = {
   utm_medium: string | null;
   utm_content: string | null;
   tipo_trafego: 'paid' | 'organic' | 'untracked';
+  created_at: string;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  score: number | null;
 };
 type GroupedDetails = Record<string, Record<string, LeadComTrafego[]>>;
 type TrafficType = 'paid' | 'organic' | 'untracked';
@@ -71,12 +77,11 @@ export default function DetalhamentoCanaisPage() {
   useEffect(() => {
     if (!selectedLaunch) return;
 
-    // Criamos uma "bandeira" para esta busca específica.
     let isActive = true;
 
     const loadAllLeadsForLaunch = async () => {
       setIsLoading(true);
-      setAllLeads([]); // Limpa os dados antigos para evitar mostrar dados do lançamento anterior
+      setAllLeads([]);
       
       let allFetchedLeads: LeadComTrafego[] = [];
       const pageSize = 1000;
@@ -90,37 +95,27 @@ export default function DetalhamentoCanaisPage() {
             p_offset: page * pageSize
           });
 
-          // Se a busca foi cancelada enquanto esperávamos a resposta, paramos.
           if (!isActive) return;
-
-          if (error) {
-            throw error;
-          }
+          if (error) throw error;
 
           if (data) {
             allFetchedLeads.push(...data);
           }
 
           if (!data || data.length < pageSize) {
-            break; // Saímos do loop se for a última página.
+            break;
           }
-
           page++;
         }
-
-        // Apenas atualizamos o estado se a busca ainda estiver "ativa".
         if (isActive) {
           setAllLeads(allFetchedLeads);
         }
-
       } catch (err: any) {
-        // Apenas mostramos o erro se a busca ainda estiver "ativa".
         if (isActive) {
           toast.error(`Erro ao carregar leads: ${err.message}`);
           setError("Não foi possível carregar os dados dos leads.");
         }
       } finally {
-        // Apenas paramos o loading se a busca ainda estiver "ativa".
         if (isActive) {
           setIsLoading(false);
         }
@@ -129,14 +124,12 @@ export default function DetalhamentoCanaisPage() {
 
     loadAllLeadsForLaunch();
 
-    // A MÁGICA ACONTECE AQUI: A Função de Limpeza
-    // Esta função é executada ANTES de o useEffect correr de novo, ou quando o componente é desmontado.
     return () => {
-      isActive = false; // "Baixamos a bandeira", sinalizando que esta busca já não é a mais recente.
+      isActive = false;
     };
   }, [selectedLaunch, supabase]);
 
-  // --- Cálculos com useMemo (sem alterações) ---
+  // --- Cálculos com useMemo ---
   const { kpis, filteredLeads, groupedDetails } = useMemo(() => {
     if (!allLeads || allLeads.length === 0) {
       const emptyKpis: KpiData = { totalGeralInscricoes: 0, totalGeralCheckins: 0, leadsSelecao: 0, checkinsSelecao: 0, taxaCheckinSelecao: 0 };
@@ -162,14 +155,21 @@ export default function DetalhamentoCanaisPage() {
   }, [allLeads, trafficType]);
 
 
-  // --- Funções de Interação (sem alterações) ---
+  // --- Funções de Interação ---
   const toggleItem = (key: string) => setOpenItems(prev => ({ ...prev, [key]: !prev[key] }));
+
   const handleExport = useCallback(() => {
     if (filteredLeads.length === 0) {
       toast.error("Não há dados na seleção atual para exportar.");
       return;
     }
+
     const dataToExport = filteredLeads.map(lead => ({
+      'Data Inscricao': new Date(lead.created_at).toLocaleDateString('pt-BR'),
+      'Nome': lead.nome || 'N/A',
+      'Email': lead.email || 'N/A',
+      'Telefone': lead.telefone || 'N/A',
+      'Score': lead.score ?? 'N/A',
       'UTM Source': lead.utm_source || 'N/A',
       'UTM Medium': lead.utm_medium || 'N/A',
       'UTM Content': lead.utm_content || 'N/A',
@@ -177,8 +177,9 @@ export default function DetalhamentoCanaisPage() {
       'Fez Check-in': lead.check_in_at ? 'Sim' : 'Não',
       'Data Check-in': lead.check_in_at ? new Date(lead.check_in_at).toLocaleString('pt-BR') : 'N/A',
     }));
+
     const csv = Papa.unparse(dataToExport);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -191,14 +192,14 @@ export default function DetalhamentoCanaisPage() {
   }, [filteredLeads, selectedLaunch, trafficType, launches]);
 
 
-  // --- Renderização (sem alterações) ---
+  // --- Renderização ---
   if (error) return <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg">{error}</div>;
 
   return (
     <>
       <Toaster position="top-center" />
       <div className="space-y-6 p-4 md:p-6 bg-slate-100 min-h-screen">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Detalhamento dos Canais</h1>
           <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
             <select
@@ -211,7 +212,7 @@ export default function DetalhamentoCanaisPage() {
               {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
             </select>
           </div>
-        </div>
+        </header>
         {isLoading ? <LoadingSpinner /> : (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

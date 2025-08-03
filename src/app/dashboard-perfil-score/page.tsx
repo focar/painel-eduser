@@ -6,12 +6,12 @@ import { Launch } from "@/lib/types";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
 import toast, { Toaster } from 'react-hot-toast';
 import { Users, UserCheck, Percent } from "lucide-react";
+import Papa from 'papaparse'; // Importa a biblioteca para gerar o CSV
 
 // --- Tipos de Dados ---
-// Definindo os tipos aqui para que o ficheiro seja autónomo
 type AnswerProfile = {
     answer_text: string;
-    lead_count: number; // <-- O nome da propriedade é provavelmente 'lead_count'
+    lead_count: number;
 };
 
 type ScoreProfileQuestion = {
@@ -50,29 +50,30 @@ const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; i
     </div>
 );
 
-// --- Componente do Cartão de Score (com a correção) ---
 const ScoreProfileCard = ({ questionData }: { questionData: ScoreProfileQuestion }) => {
     const totalResponses = useMemo(() => {
-        // CORREÇÃO: Usa 'answer.lead_count' para somar
-        return questionData.answers.reduce((sum, answer) => sum + answer.lead_count, 0);
+        // Garante que 'answers' não é nulo antes de tentar usar o reduce
+        return questionData.answers?.reduce((sum, answer) => sum + answer.lead_count, 0) || 0;
     }, [questionData.answers]);
+
+    // Não renderiza o card se não houver respostas
+    if (!questionData.answers || totalResponses === 0) {
+        return null;
+    }
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
             <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
             <ul className="space-y-3 flex-grow">
                 {questionData.answers
-                    // CORREÇÃO: Usa 'b.lead_count' e 'a.lead_count' para ordenar
                     .sort((a, b) => b.lead_count - a.lead_count)
                     .map((answer, index) => {
-                        // CORREÇÃO: Usa 'answer.lead_count' para o cálculo
                         const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
                         return (
                             <li key={index}>
                                 <div className="flex justify-between items-center mb-1 text-sm">
                                     <span className="text-slate-600">{answer.answer_text}</span>
                                     <span className="font-medium text-slate-700">
-                                        {/* CORREÇÃO: Usa 'answer.lead_count' para exibir */}
                                         {answer.lead_count.toLocaleString('pt-BR')}
                                         <span className="text-slate-400 ml-2">({percentage.toFixed(1)}%)</span>
                                     </span>
@@ -121,7 +122,7 @@ export default function PerfilDeScorePage() {
 
         const [scoreKpiResult, generalKpiResult] = await Promise.all([
             supabase.rpc('get_score_category_totals', { p_launch_id: launchId }),
-            supabase.rpc('get_kpis_for_launch', { p_launch_id: launchId })
+            supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: launchId })
         ]);
 
         const { data: scoreKpis, error: scoreKpiError } = scoreKpiResult;
@@ -132,7 +133,7 @@ export default function PerfilDeScorePage() {
             console.error({ scoreKpiError, generalKpiError });
         } else {
             setScoreKpiData(scoreKpis as unknown as ScoreKpiData);
-            setGeneralKpis(generalKpisData);
+            setGeneralKpis(generalKpisData || { total_inscricoes: 0, total_checkins: 0 });
         }
     }, [supabase]);
 
@@ -165,9 +166,47 @@ export default function PerfilDeScorePage() {
         }
     }, [selectedLaunch, selectedScore, fetchBreakdownData]);
 
-
     const handleExport = async () => {
-        toast.success('Funcionalidade de exportação a ser implementada!');
+        if (!selectedLaunch || !selectedScore) {
+            toast.error("Selecione um lançamento e um perfil de score para exportar.");
+            return;
+        }
+        
+        setIsExporting(true);
+        const exportToast = toast.loading("A preparar a exportação...");
+
+        try {
+            const { data: exportData, error } = await supabase.rpc('export_leads_by_score', {
+                p_launch_id: selectedLaunch,
+                p_score_category: selectedScore
+            });
+
+            if (error) throw error;
+
+            if (!exportData || exportData.length === 0) {
+                toast.success("Não há leads para exportar neste perfil de score.", { id: exportToast });
+                return;
+            }
+
+            const csv = Papa.unparse(exportData);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            const launchName = launches.find(l => l.id === selectedLaunch)?.nome || 'lancamento';
+            link.setAttribute("download", `export_${launchName}_${selectedScore}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            toast.success("Exportação concluída com sucesso!", { id: exportToast });
+
+        } catch (err: any) {
+            console.error("Erro na exportação:", err);
+            toast.error(`Falha na exportação: ${err.message}`, { id: exportToast });
+        } finally {
+            setIsExporting(false);
+        }
     };
     
     const taxaDeConversao = generalKpis.total_inscricoes > 0 
@@ -241,7 +280,7 @@ export default function PerfilDeScorePage() {
 
             <main>
                 {loading ? <Spinner /> : (
-                    data.length > 0 ? (
+                    data && data.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {data.map(question => (
                                 <ScoreProfileCard key={question.question_id} questionData={question} />

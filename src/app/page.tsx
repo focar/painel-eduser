@@ -38,7 +38,8 @@ type CalendarEvent = {
 
 // --- Dicionário de Cores ---
 const eventColorMap: { [key: string]: string } = {
-    'padrão': '#71717a', 'planejamento': '#af6813', 'pré-lançamento': '#fea43d',
+    'padrão': '#a1a1aa', // Cor cinzenta para eventos passados
+    'planejamento': '#af6813', 'pré-lançamento': '#fea43d',
     'início da captação': '#91258e', 'cpl 1': '#c563dc', 'live aprofundamento cpl1': '#5d77ab',
     'cpl 2': '#182777', 'cpl 3': '#00aef1', 'live encerramento': '#01aa9c',
     'carrinho aberto': '#01a550', 'evento personalisado 1': '#ec98ca', 'evento personalisado 2': '#ed008d',
@@ -76,13 +77,10 @@ export default function HomePage() {
                         'Em Andamento': 1, 'Planejado': 2, 'Concluído': 3,
                     };
 
-                    // ================== INÍCIO DA CORREÇÃO ==================
-                    // Mapeamos os resultados para garantir que o tipo de 'eventos' esteja correto.
                     const correctlyTypedLaunches = launches.map(launch => ({
                         ...launch,
                         eventos: (launch.eventos as LaunchEvent[]) || null,
                     }));
-                    // ================== FIM DA CORREÇÃO ====================
 
                     const sortedLaunches = [...correctlyTypedLaunches].sort((a, b) => {
                         const orderA = statusOrder[a.status] || 99;
@@ -115,24 +113,54 @@ export default function HomePage() {
         const selectedLaunch = allLaunches.find(launch => launch.id === selectedLaunchId);
         if (!selectedLaunch || !selectedLaunch.eventos) return [];
         
+        // ================== INÍCIO DA MELHORIA ==================
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Zera a hora para comparar apenas a data
+
         const formattedEvents: CalendarEvent[] = [];
+
         selectedLaunch.eventos.forEach(event => {
             if (event.nome && event.data_inicio) {
-                const eventColor = getEventColor(event.nome);
-                // O end date no FullCalendar é exclusivo, então adicionamos 1 dia para incluir o último dia.
-                const endDate = event.data_fim ? addDays(new Date(event.data_fim), 1).toISOString().split('T')[0] : undefined;
+                
+                // Trata as datas como locais para evitar problemas de fuso horário com a data de hoje
+                const startDateParts = event.data_inicio.split('-').map(Number);
+                const startDate = new Date(startDateParts[0], startDateParts[1] - 1, startDateParts[2]);
 
-                formattedEvents.push({
-                    title: event.nome,
-                    start: event.data_inicio,
-                    end: endDate,
-                    backgroundColor: eventColor,
-                    borderColor: eventColor,
-                    allDay: true,
-                    extendedProps: { launchName: selectedLaunch.nome, eventName: event.nome }
-                });
+                const endDateString = event.data_fim || event.data_inicio;
+                const endDateParts = endDateString.split('-').map(Number);
+                const endDate = new Date(endDateParts[0], endDateParts[1] - 1, endDateParts[2]);
+
+                let currentDate = startDate;
+
+                // Itera por cada dia do evento, do início ao fim
+                while (currentDate <= endDate) {
+                    const eventHasPassed = currentDate < today;
+                    
+                    const eventColor = eventHasPassed 
+                        ? eventColorMap['padrão'] 
+                        : getEventColor(event.nome);
+                    
+                    const dateString = currentDate.toISOString().split('T')[0];
+
+                    // Cria um evento de um único dia para cada dia do intervalo
+                    formattedEvents.push({
+                        title: event.nome,
+                        start: dateString,
+                        backgroundColor: eventColor,
+                        borderColor: eventColor,
+                        allDay: true,
+                        extendedProps: { 
+                            launchName: selectedLaunch.nome, 
+                            eventName: event.nome 
+                        }
+                    });
+
+                    // Avança para o dia seguinte
+                    currentDate = addDays(currentDate, 1);
+                }
             }
         });
+        // ================== FIM DA MELHORIA ====================
         return formattedEvents;
     }, [selectedLaunchId, allLaunches]);
 
@@ -183,7 +211,7 @@ export default function HomePage() {
                     <div className="mt-6 pt-4 border-t">
                         <h3 className="text-lg font-semibold text-slate-700 mb-3">Legenda</h3>
                         <div className="flex flex-wrap gap-x-6 gap-y-3">
-                            {Object.entries(eventColorMap).filter(([name]) => name !== 'padrão').map(([name, color]) => (
+                            {Object.entries(eventColorMap).map(([name, color]) => (
                                 <div key={name} className="flex items-center gap-2">
                                     <span className="w-4 h-4 rounded-full" style={{ backgroundColor: color }}></span>
                                     <span className="text-sm capitalize text-slate-600">{name.replace(/cpl (\d)/, 'CPL $1')}</span>

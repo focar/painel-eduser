@@ -18,26 +18,12 @@ type AnalysisResult = {
     indice_impacto: number;
     peso_proposto: number;
 };
-
-// Tipo explícito para os dados de leads que serão inseridos via RPC
 type LeadInsertData = {
-    p_launch_id: string;
-    p_email: string;
-    p_nome: string | null;
-    p_created_at: string; // Já é string via toISOString()
-    p_utm_source: string | null;
-    p_utm_medium: string | null;
-    p_utm_campaign: string | null;
-    p_utm_term: string | null;
-    p_utm_content: string | null;
+    p_launch_id: string; p_email: string; p_nome: string | null; p_created_at: string; 
+    p_utm_source: string | null; p_utm_medium: string | null; p_utm_campaign: string | null; 
+    p_utm_term: string | null; p_utm_content: string | null;
 };
-
-// Tipo explícito para os dados da pesquisa que serão processados via RPC
-type SurveyProcessData = {
-    p_email: string;
-    p_score: number;
-    p_respostas: { [key: string]: string }; // Objeto cujos valores são strings
-};
+type SurveyProcessData = { p_email: string; p_score: number; p_respostas: { [key: string]: string }; };
 
 // --- Função Auxiliar ---
 const findValueIgnoreCase = (obj: CsvRow, key: string): string | undefined => {
@@ -47,24 +33,16 @@ const findValueIgnoreCase = (obj: CsvRow, key: string): string | undefined => {
 
 const BATCH_SIZE = 500;
 
-// --- COMPONENTE REUTILIZÁVEL PARA O SELETOR DE LANÇAMENTO ---
+// --- Componente Reutilizável ---
 const LaunchSelector = ({ id, label, launches, selectedValue, onChange, disabled, isLoading, className = '' }: {
-    id: string;
-    label: string;
-    launches: Launch[];
-    selectedValue: string;
+    id: string; label: string; launches: Launch[]; selectedValue: string;
     onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-    disabled: boolean;
-    isLoading: boolean;
-    className?: string;
+    disabled: boolean; isLoading: boolean; className?: string;
 }) => (
     <div className='space-y-2'>
         <label htmlFor={id} className="block text-sm font-medium text-slate-700">{label}</label>
         <select
-            id={id}
-            value={selectedValue}
-            onChange={onChange}
-            disabled={disabled || isLoading}
+            id={id} value={selectedValue} onChange={onChange} disabled={disabled || isLoading}
             className={`w-full sm:w-1/2 px-3 py-2 border border-slate-300 rounded-md disabled:bg-slate-100 ${className}`}
         >
             {isLoading ? <option>A carregar lançamentos...</option> : <option value="">Selecione um lançamento...</option>}
@@ -73,18 +51,14 @@ const LaunchSelector = ({ id, label, launches, selectedValue, onChange, disabled
     </div>
 );
 
-// AQUI ESTÁ A CORREÇÃO PRINCIPAL: Cliente Supabase criado fora do componente para evitar loops
 const supabase = createClient();
 
 export default function ImportacaoPage() {
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
-
-    // --- ESTADOS DE SELEÇÃO REATORADOS ---
     const [selectedLaunchForLeads, setSelectedLaunchForLeads] = useState<string>('');
     const [selectedLaunchForBuyers, setSelectedLaunchForBuyers] = useState<string>('');
     const [selectedLaunchForTesting, setSelectedLaunchForTesting] = useState<string>('');
-
     const [file, setFile] = useState<File | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [log, setLog] = useState<string[]>(['Aguardando uma operação...']);
@@ -92,8 +66,6 @@ export default function ImportacaoPage() {
     const [isDataLoading, setIsDataLoading] = useState(true);
     const [modal, setModal] = useState<ModalState>({ isOpen: false, type: 'alert', title: '', message: '' });
     const [buyerFile, setBuyerFile] = useState<File | null>(null);
-
-    // --- ESTADOS PARA ANÁLISE ---
     const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [buyersImportedForLaunch, setBuyersImportedForLaunch] = useState<string | null>(null);
@@ -102,16 +74,11 @@ export default function ImportacaoPage() {
     const showConfirmationModal = (title: string, message: string, onConfirm: () => void) => setModal({ isOpen: true, type: 'confirmation', title, message, onConfirm });
     const handleCloseModal = () => setModal({ isOpen: false, type: 'alert', title: '', message: '' });
 
-    // --- FUNÇÃO CORRIGIDA ---
-    // Esta é a correção para o botão "OK" que não funcionava.
     const handleConfirmModal = () => {
-        // Se o modal for do tipo 'confirmation' e tiver uma ação, executa a ação.
         if (modal.type === 'confirmation' && modal.onConfirm) {
             modal.onConfirm();
-        } else {
-            // Caso contrário (se for um alerta simples), apenas fecha o modal.
-            handleCloseModal();
         }
+        handleCloseModal();
     };
 
     useEffect(() => {
@@ -126,10 +93,16 @@ export default function ImportacaoPage() {
                 if (launchResult.error) throw launchResult.error;
                 if (questionResult.error) throw questionResult.error;
 
-                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
-                const filtered = (launchResult.data || []).filter(l => l.status === 'Em Andamento' || l.status === 'Concluído').sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+                const sorted = (launchResult.data || [])
+                    .filter(l => l.status === 'Em Andamento' || l.status === 'Concluído')
+                    .sort((a, b) => {
+                        if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
+                        if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
+                        if (a.status === 'Concluído' && b.status === 'Concluído') return b.nome.localeCompare(a.nome);
+                        return a.nome.localeCompare(b.nome);
+                    });
 
-                setLaunches(filtered);
+                setLaunches(sorted);
                 setQuestions((questionResult.data as Question[]) || []);
 
             } catch (err: unknown) {
@@ -140,7 +113,7 @@ export default function ImportacaoPage() {
             }
         };
         fetchData();
-    }, []); // Dependência vazia, pois `supabase` agora é estável
+    }, []);
 
     const addLog = useCallback((message: string) => {
         setLog(prev => [`[${new Date().toLocaleTimeString()}] ${message}`, ...prev.slice(0, 200)]);
@@ -275,7 +248,7 @@ export default function ImportacaoPage() {
             }
         });
     };
-
+    
     const handleBuyerImport = async () => {
         if (!buyerFile || !selectedLaunchForBuyers) {
             showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV para compradores.");
@@ -305,32 +278,43 @@ export default function ImportacaoPage() {
                     return;
                 }
 
-                let totalUpdatedCount = 0;
+                let totalUpdated = 0;
+                let totalCreatedForLaunch = 0;
+                let totalNewlyCreated = 0;
+
                 try {
-                    addLog(`Enviando ${buyerEmails.length} e-mails para marcar como compradores em lotes de ${BATCH_SIZE}...`);
+                    addLog(`Iniciando processo para ${buyerEmails.length} compradores...`);
                     
-                    const { error: resetError } = await supabase.rpc('reset_buyers_for_launch' as any, { p_launch_id: selectedLaunchForBuyers });
+                    const { error: resetError } = await supabase.rpc('reset_buyers_for_launch', { p_launch_id: selectedLaunchForBuyers });
                     if (resetError) throw new Error(`Falha ao resetar compradores: ${resetError.message}`);
                     addLog('Status de comprador resetado para todos os leads do lançamento.');
 
                     for (let i = 0; i < buyerEmails.length; i += BATCH_SIZE) {
                         const batch = buyerEmails.slice(i, i + BATCH_SIZE);
 
-                        const { data, error } = await supabase.rpc('mark_leads_as_buyers', {
+                        const { data, error } = await supabase.rpc('process_buyers_for_launch', {
                             p_launch_id: selectedLaunchForBuyers,
                             p_buyer_emails: batch
                         });
 
                         if (error) throw error;
 
-                        totalUpdatedCount += data || 0;
+                        totalUpdated += data.updated_in_launch || 0;
+                        totalCreatedForLaunch += data.created_for_launch || 0;
+                        totalNewlyCreated += data.newly_created_leads || 0;
+
                         const currentProgress = Math.round(((i + batch.length) / buyerEmails.length) * 100);
                         setProgress(currentProgress);
-                        addLog(`Lote ${i / BATCH_SIZE + 1}/${Math.ceil(buyerEmails.length / BATCH_SIZE)} processado. ${data} compradores atualizados neste lote.`);
+                        addLog(`Lote ${i / BATCH_SIZE + 1}/${Math.ceil(buyerEmails.length / BATCH_SIZE)} processado.`);
                     }
 
-                    addLog(`Importação finalizada. Total de ${totalUpdatedCount} leads marcados como compradores.`);
-                    showAlertModal("Importação de Compradores Concluída", `${totalUpdatedCount} leads foram atualizados com sucesso!`);
+                    let summaryMessage = `Importação Concluída!\n\n`;
+                    summaryMessage += `- ${totalUpdated} leads existentes foram marcados como compradores.\n`;
+                    summaryMessage += `- ${totalCreatedForLaunch} novos registos de compradores foram criados para este lançamento.\n`;
+                    summaryMessage += `- ${totalNewlyCreated} novos leads foram criados a partir do zero.`;
+
+                    addLog(`Importação finalizada. Resumo: ${totalUpdated} atualizados, ${totalCreatedForLaunch} movidos, ${totalNewlyCreated} criados.`);
+                    showAlertModal("Resumo da Importação", summaryMessage);
                     setBuyersImportedForLaunch(selectedLaunchForBuyers);
 
                 } catch (err: unknown) {
@@ -463,13 +447,9 @@ export default function ImportacaoPage() {
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
                 <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação de Leads</h2>
                 <LaunchSelector
-                    id="launch-select-leads"
-                    label="1. Selecione o Lançamento de Destino"
-                    launches={launches}
-                    selectedValue={selectedLaunchForLeads}
-                    onChange={e => setSelectedLaunchForLeads(e.target.value)}
-                    disabled={isProcessing}
-                    isLoading={isDataLoading}
+                    id="launch-select-leads" label="1. Selecione o Lançamento de Destino" launches={launches}
+                    selectedValue={selectedLaunchForLeads} onChange={e => setSelectedLaunchForLeads(e.target.value)}
+                    disabled={isProcessing} isLoading={isDataLoading}
                 />
                 <div>
                     <label htmlFor="file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Leads (delimitado por &apos;;&apos;)</label>
@@ -490,13 +470,9 @@ export default function ImportacaoPage() {
                 <h2 className="text-xl font-bold text-slate-700">Importação de Compradores e Análise</h2>
                 <p className="text-sm text-slate-500">Após o fim do lançamento, importe a lista de compradores para marcar os leads e ativar a análise de scores.</p>
                 <LaunchSelector
-                    id="launch-select-buyers"
-                    label="1. Selecione o Lançamento"
-                    launches={launches}
-                    selectedValue={selectedLaunchForBuyers}
-                    onChange={e => setSelectedLaunchForBuyers(e.target.value)}
-                    disabled={isProcessing}
-                    isLoading={isDataLoading}
+                    id="launch-select-buyers" label="1. Selecione o Lançamento" launches={launches}
+                    selectedValue={selectedLaunchForBuyers} onChange={e => setSelectedLaunchForBuyers(e.target.value)}
+                    disabled={isProcessing} isLoading={isDataLoading}
                 />
                 <div>
                     <label htmlFor="buyer-file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Compradores</label>
@@ -522,13 +498,9 @@ export default function ImportacaoPage() {
                 <h2 className="text-lg font-semibold text-slate-700">Ferramentas de Teste</h2>
                 <p className="text-sm text-slate-500">Use estas ferramentas para preparar o ambiente para testes. A ação será executada no lançamento selecionado abaixo.</p>
                 <LaunchSelector
-                    id="launch-select-testing"
-                    label="Selecione o Lançamento para a Ação"
-                    launches={launches}
-                    selectedValue={selectedLaunchForTesting}
-                    onChange={e => setSelectedLaunchForTesting(e.target.value)}
-                    disabled={isProcessing}
-                    isLoading={isDataLoading}
+                    id="launch-select-testing" label="Selecione o Lançamento para a Ação" launches={launches}
+                    selectedValue={selectedLaunchForTesting} onChange={e => setSelectedLaunchForTesting(e.target.value)}
+                    disabled={isProcessing} isLoading={isDataLoading}
                 />
                 <div className="flex flex-col sm:flex-row gap-4 pt-2">
                     <button onClick={handleClearLeads} disabled={isProcessing || isDataLoading || !selectedLaunchForTesting} className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">

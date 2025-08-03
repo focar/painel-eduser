@@ -46,36 +46,41 @@ const QuestionAnalysisCard = ({ questionData }: { questionData: QuestionAnalysis
         return questionData.answers?.reduce((sum, answer) => sum + answer.lead_count, 0) || 0;
     }, [questionData.answers]);
 
-    if (!totalResponses || totalResponses === 0) {
+    // Renderiza o card mesmo sem respostas, para mostrar a pergunta
+    if (!questionData) {
         return null;
     }
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
-            <ul className="space-y-3">
-                {questionData.answers
-                    .sort((a, b) => b.lead_count - a.lead_count)
-                    .map((answer, index) => {
-                    const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
-                    return (
-                        <li key={index}>
-                            <div className="flex justify-between items-center mb-1 text-sm">
-                                <span className="text-slate-600">{answer.answer_text}</span>
-                                <span className="font-medium text-slate-700">
-                                    {answer.lead_count.toLocaleString('pt-BR')} ({percentage.toFixed(1)}%)
-                                </span>
-                            </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2.5">
-                                <div
-                                    className="bg-blue-500 h-2.5 rounded-full"
-                                    style={{ width: `${percentage}%` }}
-                                ></div>
-                            </div>
-                        </li>
-                    );
-                })}
-            </ul>
+            {(!questionData.answers || totalResponses === 0) ? (
+                <p className="text-sm text-slate-500">Nenhuma resposta encontrada para esta pergunta nos filtros selecionados.</p>
+            ) : (
+                <ul className="space-y-3">
+                    {questionData.answers
+                        .sort((a, b) => b.lead_count - a.lead_count)
+                        .map((answer, index) => {
+                        const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
+                        return (
+                            <li key={index}>
+                                <div className="flex justify-between items-center mb-1 text-sm">
+                                    <span className="text-slate-600">{answer.answer_text}</span>
+                                    <span className="font-medium text-slate-700">
+                                        {answer.lead_count.toLocaleString('pt-BR')} ({percentage.toFixed(1)}%)
+                                    </span>
+                                </div>
+                                <div className="w-full bg-slate-200 rounded-full h-2.5">
+                                    <div
+                                        className="bg-blue-500 h-2.5 rounded-full"
+                                        style={{ width: `${percentage}%` }}
+                                    ></div>
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
         </div>
     );
 };
@@ -85,7 +90,6 @@ export default function AnaliseRespostasPage() {
     const supabase = createClient();
 
     const [launches, setLaunches] = useState<Launch[]>([]);
-    // CORREÇÃO: O estado inicial agora é uma string vazia para esperar a seleção do lançamento padrão.
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [analysisData, setAnalysisData] = useState<QuestionAnalysisData[]>([]);
     const [kpis, setKpis] = useState<KpiData>({ total_inscricoes: 0, total_checkins: 0, total_buyers: 0, total_buyer_checkins: 0 });
@@ -93,7 +97,6 @@ export default function AnaliseRespostasPage() {
     const [error, setError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>('all');
 
-    // Este useEffect busca a lista de lançamentos e define o padrão
     useEffect(() => {
         async function fetchLaunches() {
             const { data, error } = await supabase
@@ -103,24 +106,23 @@ export default function AnaliseRespostasPage() {
 
             if (error) {
                 console.error("Erro ao buscar lançamentos:", error);
-                // Mesmo com erro, define um padrão para evitar um estado de loading infinito
                 setSelectedLaunch('all'); 
             } else if (data) {
                 const sortedData = [...data].sort((a, b) => {
-                    if (a.status !== b.status) return a.status === 'Em Andamento' ? -1 : 1;
+                    if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
+                    if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
+                    if (a.status === 'Concluído' && b.status === 'Concluído') return b.nome.localeCompare(a.nome);
                     return a.nome.localeCompare(b.nome);
                 });
 
                 setLaunches(sortedData as Launch[]);
                 const inProgressLaunch = sortedData.find(l => l.status === 'Em Andamento');
-                // Define o lançamento "Em Andamento" como padrão, ou o primeiro da lista, ou 'todos' como último recurso.
                 setSelectedLaunch(inProgressLaunch ? inProgressLaunch.id : (sortedData[0] ? sortedData[0].id : 'all'));
             }
         }
         fetchLaunches();
     }, [supabase]);
 
-    // Este useEffect busca os dados do dashboard
     const fetchDataForLaunch = useCallback(async (launchId: string, mode: ViewMode) => {
         const rpcLaunchId = launchId === 'all' ? null : launchId;
 
@@ -131,6 +133,7 @@ export default function AnaliseRespostasPage() {
 
         try {
             const kpiPromise = supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: rpcLaunchId });
+            // CORREÇÃO: Voltando a usar a função original e correta para esta página
             const analysisPromise = supabase.rpc('get_answer_analysis', { 
                 p_launch_id: rpcLaunchId,
                 p_filter_by_buyers: mode === 'buyers'
@@ -159,7 +162,6 @@ export default function AnaliseRespostasPage() {
 
     }, [supabase]);
 
-    // CORREÇÃO: Adicionamos uma verificação para só buscar dados quando um lançamento estiver selecionado.
     useEffect(() => {
         if (selectedLaunch) {
             fetchDataForLaunch(selectedLaunch, viewMode);
@@ -172,14 +174,14 @@ export default function AnaliseRespostasPage() {
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-slate-100 min-h-screen">
             <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Respostas</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Respostas sem Score</h1>
                 <div className="w-full sm:w-72">
                     <select
                         id="launch-select"
                         value={selectedLaunch}
                         onChange={(e) => setSelectedLaunch(e.target.value)}
                         className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        disabled={!selectedLaunch} // Desabilita o seletor enquanto carrega o padrão
+                        disabled={!selectedLaunch}
                     >
                         <option value="all">Visão Geral (Todos)</option>
                         {launches.map((launch) => (
@@ -220,12 +222,12 @@ export default function AnaliseRespostasPage() {
                 {!loading && error && (
                     <div className="text-center py-10 px-4 bg-red-100 text-red-700 rounded-lg"><p>{error}</p></div>
                 )}
-                {!loading && !error && (!analysisData || analysisData.filter(q => q.answers !== null).length === 0) && (
+                {!loading && !error && (!analysisData || analysisData.length === 0) && (
                     <div className="text-center py-10 px-4 bg-white rounded-lg shadow-md">
                         <p className="text-gray-600">Nenhuma pergunta ou resposta encontrada para os filtros selecionados.</p>
                     </div>
                 )}
-                {!loading && !error && analysisData && analysisData.filter(q => q.answers !== null).length > 0 && (
+                {!loading && !error && analysisData && analysisData.length > 0 && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
                         {analysisData.map((question) => (
                             <QuestionAnalysisCard key={question.question_id} questionData={question} />

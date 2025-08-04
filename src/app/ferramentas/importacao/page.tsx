@@ -1,10 +1,10 @@
-// --- ferramenta/importacao/page.tsx
+// --- CÓDIGO 100% COMPLETO E FINAL ---
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Papa from 'papaparse';
-import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck, FaMagic, FaSave } from 'react-icons/fa';
+import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck, FaMagic, FaSave, FaFileCsv } from 'react-icons/fa';
 
 // --- Tipos ---
 type Launch = { id: string; nome: string; status: string; };
@@ -58,6 +58,7 @@ export default function ImportacaoPage() {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [selectedLaunchForLeads, setSelectedLaunchForLeads] = useState<string>('');
     const [selectedLaunchForBuyers, setSelectedLaunchForBuyers] = useState<string>('');
+    const [selectedLaunchForProfile, setSelectedLaunchForProfile] = useState<string>('');
     const [selectedLaunchForTesting, setSelectedLaunchForTesting] = useState<string>('');
     const [file, setFile] = useState<File | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -66,6 +67,7 @@ export default function ImportacaoPage() {
     const [isDataLoading, setIsDataLoading] = useState(true);
     const [modal, setModal] = useState<ModalState>({ isOpen: false, type: 'alert', title: '', message: '' });
     const [buyerFile, setBuyerFile] = useState<File | null>(null);
+    const [profileFile, setProfileFile] = useState<File | null>(null);
     const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [buyersImportedForLaunch, setBuyersImportedForLaunch] = useState<string | null>(null);
@@ -329,6 +331,89 @@ export default function ImportacaoPage() {
         });
     };
 
+    const handleProfileSurveyImport = () => {
+        if (!profileFile || !selectedLaunchForProfile) {
+            showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV para as respostas de perfil.");
+            return;
+        }
+        setIsProcessing(true);
+        setLog(['--- INICIANDO IMPORTAÇÃO DE PERFIL ---']);
+
+        Papa.parse(profileFile, {
+            header: true,
+            skipEmptyLines: true,
+            delimiter: ";",
+            transformHeader: header => header.trim().replace(/["\n\r]/g, ''),
+
+            complete: async (results) => {
+                const rows = results.data as CsvRow[];
+                const cleanedHeaders = results.meta.fields || [];
+                addLog(`[INFO] Leitura do CSV concluída. ${rows.length} linhas e ${cleanedHeaders.length} cabeçalhos encontrados.`);
+                
+                const emailColumnName = cleanedHeaders.find(h => h.toLowerCase().includes('email'));
+                if (!emailColumnName) {
+                    addLog("[ERRO FATAL] Coluna de 'email' não encontrada nos cabeçalhos.");
+                    showAlertModal("Erro de Formato", "Não foi possível encontrar uma coluna de 'email' no ficheiro.");
+                    setIsProcessing(false);
+                    return;
+                }
+
+                const questionHeaders = cleanedHeaders.filter(h =>
+                    h &&
+                    !['email', 'nome', 'telefone'].includes(h.toLowerCase()) &&
+                    !h.toLowerCase().includes('data')
+                );
+
+                try {
+                    addLog(`[FASE 1] Verificando e registando ${questionHeaders.length} perguntas no banco de dados...`);
+                    
+                    // Verificação de segurança para evitar enviar um array vazio
+                    if (questionHeaders.length > 0) {
+                        const { error: registerError } = await supabase.rpc('register_new_questions_from_headers', {
+                            p_question_headers: questionHeaders
+                        });
+                        if (registerError) throw new Error(`Falha ao registrar novas perguntas: ${registerError.message}`);
+                    } else {
+                        addLog("[FASE 1] Nenhuma pergunta nova para registrar. Pulando.");
+                    }
+                    addLog("[FASE 1] Verificação de perguntas concluída com sucesso.");
+                    
+                    const payload = rows.map(row => ({
+                        email: row[emailColumnName] ? String(row[emailColumnName]).trim().toLowerCase() : null,
+                        respostas_raw: row,
+                    })).filter(item => item.email && item.email.includes('@'));
+
+                    if (payload.length === 0) {
+                        addLog("[AVISO] Nenhuma linha com email válido (@) foi encontrada para processar.");
+                        showAlertModal("Nenhum Dado Válido", "Nenhuma linha com um email válido foi encontrada no ficheiro.");
+                        setIsProcessing(false);
+                        return;
+                    }
+
+                    addLog(`[FASE 2] Enviando ${payload.length} registos válidos para a função 'process_smart_profile_upload'...`);
+                    const { data, error: processError } = await supabase.rpc('process_smart_profile_upload', {
+                        p_launch_id: selectedLaunchForProfile,
+                        p_payload: payload,
+                    });
+
+                    if (processError) throw processError;
+
+                    const updatedCount = data.leads_com_perfil_atualizado || 0;
+                    const summaryMessage = `Importação de Perfil Concluída!\n\n- ${updatedCount} leads tiveram as suas respostas de perfil atualizadas/inseridas.`;
+                    showAlertModal("Importação Concluída", summaryMessage);
+                    addLog(`[SUCESSO] Operação finalizada. ${updatedCount} perfis atualizados.`);
+
+                } catch (err: unknown) {
+                    const error = err as Error;
+                    addLog(`[ERRO GERAL] A operação falhou: ${error.message}`);
+                    showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${error.message}`);
+                } finally {
+                    setIsProcessing(false);
+                }
+            }
+        });
+    };
+
     const handleAnalyzeLaunch = async () => {
         if (!selectedLaunchForBuyers) {
             showAlertModal("Atenção", "Por favor, selecione um lançamento.");
@@ -440,12 +525,11 @@ export default function ImportacaoPage() {
     };
 
     return (
-        <div className="space-y-6 p-4 md:p-8">
+        <div className="space-y-8 p-4 md:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
 
-            {/* Bloco de Importação de Leads */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
-                <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação de Leads</h2>
+                <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação de Leads (Score)</h2>
                 <LaunchSelector
                     id="launch-select-leads" label="1. Selecione o Lançamento de Destino" launches={launches}
                     selectedValue={selectedLaunchForLeads} onChange={e => setSelectedLaunchForLeads(e.target.value)}
@@ -465,7 +549,25 @@ export default function ImportacaoPage() {
                 </div>
             </div>
 
-            {/* Bloco de Importação de Compradores e Análise */}
+            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-teal-500">
+                <h2 className="text-xl font-bold text-slate-700">Importação de Respostas de Perfil (Sem Score)</h2>
+                <p className="text-sm text-slate-500">Use esta ferramenta para carregar as respostas de perfil (sem score) a partir da sua planilha de check-in. Isto irá popular o dashboard "Análise de Respostas".</p>
+                <LaunchSelector
+                    id="launch-select-profile" label="1. Selecione o Lançamento" launches={launches}
+                    selectedValue={selectedLaunchForProfile} onChange={e => setSelectedLaunchForProfile(e.target.value)}
+                    disabled={isProcessing} isLoading={isDataLoading}
+                />
+                <div>
+                    <label htmlFor="profile-file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Check-in</label>
+                    <input id="profile-file-upload" type="file" accept=".csv" onChange={e => setProfileFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                </div>
+                <div className="text-right pt-4">
+                    <button onClick={handleProfileSurveyImport} disabled={isProcessing || isDataLoading || !selectedLaunchForProfile || !profileFile} className="inline-flex items-center bg-teal-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-teal-700 disabled:opacity-50">
+                        <FaFileCsv className="mr-2" />Importar Respostas de Perfil
+                    </button>
+                </div>
+            </div>
+
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
                 <h2 className="text-xl font-bold text-slate-700">Importação de Compradores e Análise</h2>
                 <p className="text-sm text-slate-500">Após o fim do lançamento, importe a lista de compradores para marcar os leads e ativar a análise de scores.</p>
@@ -493,7 +595,6 @@ export default function ImportacaoPage() {
                 </div>
             </div>
 
-            {/* Bloco de Ferramentas de Teste */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4 border-t-4 border-amber-400">
                 <h2 className="text-lg font-semibold text-slate-700">Ferramentas de Teste</h2>
                 <p className="text-sm text-slate-500">Use estas ferramentas para preparar o ambiente para testes. A ação será executada no lançamento selecionado abaixo.</p>
@@ -512,13 +613,11 @@ export default function ImportacaoPage() {
                 </div>
             </div>
 
-            {/* Bloco de Log */}
             <div className="bg-white p-6 rounded-lg shadow-lg">
                 <h2 className="text-lg font-semibold text-slate-700 mb-4">Log de Operações</h2>
                 <pre className="bg-slate-900 text-white text-xs p-4 rounded-md h-96 overflow-y-auto font-mono">{log.join('\n')}</pre>
             </div>
 
-            {/* Modal de Análise */}
             {isAnalysisModalOpen && (
                 <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4">
                     <div className="bg-slate-50 rounded-lg shadow-2xl p-4 sm:p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
@@ -569,7 +668,6 @@ export default function ImportacaoPage() {
                 </div>
             )}
 
-            {/* Modal genérico de Alerta/Confirmação */}
             {modal.isOpen && (
                 <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4">
                     <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">

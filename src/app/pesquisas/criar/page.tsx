@@ -1,25 +1,26 @@
 // src/app/pesquisas/criar/page.tsx
 import SurveyForm from "@/components/survey/SurveyForm";
 import { createClient } from "@/utils/supabase/server";
-import { cookies } from 'next/headers'; // 1. Importar a função 'cookies'
+import { cookies } from 'next/headers';
 import { type Question } from "@/lib/types";
 
 export default async function CriarPesquisaPage() {
-    // 2. Obter o cookieStore
     const cookieStore = cookies();
-    // 3. Passar o cookieStore para o createClient
     const supabase = createClient(cookieStore);
 
-    // O restante do código permanece o mesmo...
+    // CORREÇÃO: A consulta foi ajustada para usar a coluna 'classe' em vez de 'tipo_pergunta'.
+    // Agora estamos buscando apenas as perguntas cuja classe é 'score', como a UI sugere.
     const { data: questions, error } = await supabase
         .from('perguntas')
-        .select('id, texto, tipo_pergunta')
-        .eq('tipo_pergunta', 'escala');
+        .select('id, texto, tipo, classe') // Selecionando as colunas corretas
+        .eq('classe', 'score');           // Filtrando pela coluna 'classe'
 
     if (error) {
         console.error("Erro ao buscar perguntas:", error);
+        // Esta mensagem de erro não deve mais aparecer após a correção.
         return <p>Ocorreu um erro ao carregar as perguntas. Tente novamente.</p>;
     }
 
+    // O 'as Question[]' agora funcionará porque vamos corrigir o tipo no próximo passo.
     return <SurveyForm availableQuestions={questions as Question[]} />;
 }

@@ -16,37 +16,57 @@ type AnalysisData = { kpis: KpiSet; pie_data_medium: ChartRow[] | null; pie_data
 type UtmOption = string;
 
 // --- Constantes e Componentes ---
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#4F4FFF', '#4FFF4F'];
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#4F4FFF', '#8B8B8B'];
+
 const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
-  if (!percent || (percent * 100) < 5) return null;
+  if (!percent || (percent * 100) < 3) return null;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
   const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
   return <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="14px" fontWeight="bold">{`${(percent * 100).toFixed(0)}%`}</text>;
 };
 
+// CORREÇÃO: Fontes e ícone do KPI Card ajustados para o novo padrão.
 const KpiCard = ({ title, value, subTitle, icon: Icon }: { title: string; value: string; subTitle: string; icon: React.ElementType; }) => (
-    <div className="p-4 bg-white rounded-lg shadow-md flex items-center gap-4">
-        <div className="bg-blue-100 p-3 rounded-full"><Icon className="text-blue-600 text-xl" /></div>
+    <div className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
+        <div className="bg-blue-100 p-3 rounded-full"><Icon className="text-blue-600 text-2xl" /></div>
         <div>
-            <p className="text-sm text-slate-500">{title}</p>
-            <p className="text-2xl font-bold text-slate-800">{value}</p>
-            <p className="text-xs text-slate-400">{subTitle}</p>
+            <p className="text-base text-slate-500">{title}</p>
+            <p className="text-3xl font-bold text-slate-800">{value}</p>
+            {subTitle && <p className="text-xs text-slate-400">{subTitle}</p>}
         </div>
     </div>
 );
 
+const processPieData = (data: ChartRow[], maxSlices = 7): ChartRow[] => {
+    if (!data || data.length === 0) return [];
+    const sortedData = [...data].sort((a, b) => b.value - a.value);
+    if (sortedData.length <= maxSlices) return sortedData;
+    const topSlices = sortedData.slice(0, maxSlices);
+    const otherSlices = sortedData.slice(maxSlices);
+    const othersSum = otherSlices.reduce((acc, slice) => acc + slice.value, 0);
+    return [...topSlices, { name: 'Outros', value: othersSum }];
+};
+
+const formatLegendText = (value: string) => {
+    const maxLength = 30;
+    if (value.length > maxLength) {
+        return `${value.substring(0, maxLength)}...`;
+    }
+    return value;
+};
+
 const PieChartWithLegend = ({ title, data }: { title: string, data: ChartRow[] }) => (
     <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
         <h2 className="text-lg font-semibold text-slate-700 mb-4">{title}</h2>
-        <div style={{ width: '100%', height: 500 }}>
+        <div style={{ width: '100%', height: 450 }}>
             <ResponsiveContainer>
-                <PieChart>
-                    <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={150} labelLine={false} label={renderCustomizedLabel}>
+                <PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                    <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={130} labelLine={false} label={renderCustomizedLabel}>
                         {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR')} />
-                    <Legend iconSize={10} wrapperStyle={{ fontSize: "12px", lineHeight: "1.5" }} />
+                    <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR')} itemStyle={{ fontSize: '14px' }} />
+                    <Legend iconSize={12} wrapperStyle={{ fontSize: "14px", lineHeight: "1.8" }} formatter={formatLegendText} />
                 </PieChart>
             </ResponsiveContainer>
         </div>
@@ -60,10 +80,10 @@ const PerformanceTable = ({ data }: { data: PerformanceData[] }) => (
             <table className="min-w-full text-base">
                 <thead className="bg-slate-50">
                     <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canal</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa de Check-in</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-500 uppercase tracking-wider">Canal</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-500 uppercase tracking-wider">Inscrições</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-500 uppercase tracking-wider">Check-ins</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-500 uppercase tracking-wider">Taxa de Check-in</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-200">
@@ -121,7 +141,6 @@ export default function PerformanceDashboardPage() {
         if (!selectedLaunch) return;
         setFilters({ source: 'all', medium: 'all', campaign: 'all', content: 'all', term: 'all' });
         const { data } = await supabase.rpc('get_utm_sources', { p_launch_id: selectedLaunch });
-        // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
         setOptions({ sources: data?.map((d: { utm_source: string }) => d.utm_source) || [], mediums: [], campaigns: [], contents: [], terms: [] });
     }, [selectedLaunch, supabase]);
 
@@ -132,7 +151,6 @@ export default function PerformanceDashboardPage() {
         setFilters(prev => ({ ...prev, medium: 'all', campaign: 'all', content: 'all', term: 'all' }));
         const fetchMediums = async () => {
             const { data } = await supabase.rpc('get_utm_mediums', { p_launch_id: selectedLaunch, p_source: filters.source });
-            // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
             setOptions(prev => ({ ...prev, mediums: data?.map((d: { utm_medium: string }) => d.utm_medium) || [], campaigns: [], contents: [], terms: [] }));
         };
         fetchMediums();
@@ -143,7 +161,6 @@ export default function PerformanceDashboardPage() {
         setFilters(prev => ({ ...prev, campaign: 'all', content: 'all', term: 'all' }));
         const fetchCampaigns = async () => {
             const { data } = await supabase.rpc('get_utm_campaigns', { p_launch_id: selectedLaunch, p_source: filters.source, p_medium: filters.medium });
-            // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
             setOptions(prev => ({ ...prev, campaigns: data?.map((d: { utm_campaign: string }) => d.utm_campaign) || [], contents: [], terms: [] }));
         };
         fetchCampaigns();
@@ -154,7 +171,6 @@ export default function PerformanceDashboardPage() {
         setFilters(prev => ({ ...prev, content: 'all', term: 'all' }));
         const fetchContents = async () => {
              const { data } = await supabase.rpc('get_utm_contents', { p_launch_id: selectedLaunch, p_source: filters.source, p_medium: filters.medium, p_campaign: filters.campaign });
-             // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
              setOptions(prev => ({ ...prev, contents: data?.map((d: { utm_content: string }) => d.utm_content) || [], terms: [] }));
         };
         fetchContents();
@@ -165,7 +181,6 @@ export default function PerformanceDashboardPage() {
         setFilters(prev => ({ ...prev, term: 'all' }));
         const fetchTerms = async () => {
             const { data } = await supabase.rpc('get_utm_terms', { p_launch_id: selectedLaunch, p_source: filters.source, p_medium: filters.medium, p_campaign: filters.campaign, p_content: filters.content });
-            // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
             setOptions(prev => ({ ...prev, terms: data?.map((d: { utm_term: string }) => d.utm_term) || [] }));
         };
         fetchTerms();
@@ -192,11 +207,13 @@ export default function PerformanceDashboardPage() {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const kpis = data?.kpis;
-    // CORREÇÃO: Verificação adicionada para garantir que 'kpis' não seja undefined
     const taxaCheckinGeral = (kpis && kpis.total_geral_inscricoes > 0) ? ((kpis.total_geral_checkins / kpis.total_geral_inscricoes) * 100) : 0;
     const taxaCheckinFiltrado = (kpis && kpis.total_filtrado_inscricoes > 0) ? ((kpis.total_filtrado_checkins / kpis.total_filtrado_inscricoes) * 100) : 0;
     
     const handleFilterChange = (level: keyof typeof filters, value: string) => setFilters(prev => ({ ...prev, [level]: value }));
+
+    const processedMediumData = processPieData(data?.pie_data_medium || []);
+    const processedContentData = processPieData(data?.pie_data_content || []);
 
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
@@ -210,7 +227,7 @@ export default function PerformanceDashboardPage() {
             </div>
 
             <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
+                <div className="bg-slate-200 p-4 rounded-lg space-y-3">
                     <h3 className="font-bold text-center text-slate-600">Totais do Lançamento</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <KpiCard title="Inscrições" value={(kpis?.total_geral_inscricoes ?? 0).toLocaleString('pt-BR')} subTitle="Total no lançamento" icon={FaGlobe}/>
@@ -218,7 +235,7 @@ export default function PerformanceDashboardPage() {
                         <KpiCard title="Taxa Check-in" value={`${taxaCheckinGeral.toFixed(1)}%`} subTitle="Inscrições x Check-ins" icon={FaPercent}/>
                     </div>
                 </div>
-                <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
+                <div className="bg-slate-200 p-4 rounded-lg space-y-3">
                     <h3 className="font-bold text-center text-slate-600">Totais da Seleção</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <KpiCard title="Inscrições" value={(kpis?.total_filtrado_inscricoes ?? 0).toLocaleString('pt-BR')} subTitle="Resultado do filtro" icon={FaUsers}/>
@@ -240,7 +257,6 @@ export default function PerformanceDashboardPage() {
                                 className="w-full p-2 text-base border-gray-300 rounded-md" 
                                 disabled={loading || (index > 0 && filters[(Object.keys(filters)[index-1]) as keyof typeof filters] === 'all')}>
                                 <option value="all">Todos</option>
-                                {/* CORREÇÃO: Removido o tipo explícito 'any' */}
                                 {options[`${key}s` as keyof typeof options]?.map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
                         </div>
@@ -251,8 +267,8 @@ export default function PerformanceDashboardPage() {
             {loading ? <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div> : (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <PieChartWithLegend title="Inscrições por Mídia (UTM Medium)" data={data?.pie_data_medium || []} />
-                        <PieChartWithLegend title="Inscrições por Conteúdo (UTM Content)" data={data?.pie_data_content || []} />
+                        <PieChartWithLegend title="Inscrições por Mídia (UTM Medium)" data={processedMediumData} />
+                        <PieChartWithLegend title="Inscrições por Conteúdo (UTM Content)" data={processedContentData} />
                     </div>
                     <PerformanceTable data={data?.table_data || []} />
                 </div>

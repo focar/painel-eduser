@@ -6,7 +6,6 @@
 
 /**
  * Representa um Lançamento, usado nos seletores de dashboard.
- * A versão com status específico é mantida por ser mais segura que uma string genérica.
  */
 export type Launch = {
   id: string;
@@ -23,12 +22,14 @@ export type Survey = {
 };
 
 /**
- * Representa uma Pergunta, usada nos formulários de pesquisa.
+ * CORREÇÃO: Representa uma Pergunta, refletindo as colunas 'tipo' e 'classe'
+ * que existem no seu banco de dados e são usadas nos formulários.
  */
 export type Question = {
   id: string;
   texto: string;
-  tipo_pergunta: 'texto_curto' | 'texto_longo' | 'multipla_escolha' | 'escala';
+  tipo: string;   // Ex: 'Múltipla Escolha', 'Texto'
+  classe: string; // Ex: 'score', 'perfil'
 };
 
 

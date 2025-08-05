@@ -1,8 +1,9 @@
+// src/app/dashboard-analise-score/page.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { FaSpinner, FaUsers, FaUserCheck, FaFilter } from 'react-icons/fa';
+import { FaSpinner, FaUsers, FaUserCheck, FaFilter, FaGlobe, FaBullseye, FaPercent } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
 import { Pie, Cell, Tooltip, Legend } from 'recharts';
@@ -31,18 +32,17 @@ const scoreCategoryConfig = [
 ] as const;
 
 const hashCode = (str: string): number => { let hash = 0; if (!str || str.length === 0) return hash; for (let i = 0; i < str.length; i++) { const char = str.charCodeAt(i); hash = ((hash << 5) - hash) + char; hash = hash & hash; } return Math.abs(hash); };
-const getColorForString = (name: string): string => { const lowerCaseName = (name || 'N/A').toLowerCase(); const predefinedColors: { [key: string]: string } = { 'indefinido': '#BDBDBD', 'outros': '#757575', 'paid': '#d62728' }; if (predefinedColors[lowerCaseName]) return predefinedColors[lowerCaseName]; const index = hashCode(lowerCaseName) % COLOR_PALETTE.length; return COLOR_PALETTE[index]; };
+const getColorForString = (name: string): string => { const lowerCaseName = (name || 'N/A').toLowerCase(); const predefinedColors: { [key: string]: string } = { 'indefinido': '#BDBDBD', 'outros': '#757575', 'não traqueadas': '#A9A9A9', 'paid': '#d62728' }; if (predefinedColors[lowerCaseName]) return predefinedColors[lowerCaseName]; const index = hashCode(lowerCaseName) % COLOR_PALETTE.length; return COLOR_PALETTE[index]; };
 
 // --- Componentes ---
-const KpiCard = ({ title, value, description, icon }: { title: string; value: string; description: string; icon: React.ReactNode }) => (
-    <div className="bg-slate-50 p-4 rounded-lg flex items-center gap-4">
-        <div className="bg-blue-100 text-blue-600 p-3 rounded-full">
-            {icon}
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType; }) => (
+    <div className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
+        <div className="bg-blue-100 p-3 rounded-full">
+            <Icon className="text-blue-600 text-2xl" />
         </div>
         <div>
-            <p className="text-2xl font-bold text-slate-800">{value}</p>
-            <p className="text-sm text-slate-500">{title}</p>
-            <p className="text-xs text-slate-400">{description}</p>
+            <p className="text-base text-slate-500">{title}</p>
+            <p className="text-3xl font-bold text-slate-800">{value}</p>
         </div>
     </div>
 );
@@ -67,19 +67,21 @@ const ScorePieChartCard = ({ title, data, totalLeads }: {
         <div className="bg-white p-4 md:p-6 rounded-lg shadow-md flex flex-col items-center">
             <div className="w-full flex justify-between items-start mb-2">
                 <div>
-                    <h2 className="text-lg font-semibold text-slate-700">{title}</h2>
-                    <p className="text-sm text-slate-500">Total: {totalLeads.toLocaleString('pt-BR')} leads</p>
+                    <h2 className="text-xl font-semibold text-slate-700">{title}</h2>
+                    <p className="text-base text-slate-500">Total: {totalLeads.toLocaleString('pt-BR')} leads</p>
                 </div>
             </div>
             {processedData.length > 0 ? (
-                <PieChart width={350} height={320}>
-                    <Pie data={processedData} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={80} innerRadius={45} labelLine={false}>
+                // CORREÇÃO: Aumentada a altura do container para dar mais espaço vertical.
+                <PieChart width={350} height={350}>
+                    {/* CORREÇÃO: innerRadius diminuído para aumentar a espessura da rosca. */}
+                    <Pie data={processedData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} labelLine={false}>
                         {processedData.map((entry, index) => (<Cell key={`cell-${index}`} fill={getColorForString(entry.name)} />))}
                     </Pie>
                     <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} leads`} />
-                    <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{ paddingTop: '15px' }} formatter={(value) => value.length > 25 ? `${value.substring(0, 25)}...` : value} />
+                    <Legend iconType="circle" verticalAlign="bottom" wrapperStyle={{ paddingTop: '25px' }} formatter={(value) => value.length > 25 ? `${value.substring(0, 25)}...` : value} />
                 </PieChart>
-            ) : (<div className="flex items-center justify-center h-[320px] text-slate-500">Nenhum dado para exibir.</div>)}
+            ) : (<div className="flex items-center justify-center h-[350px] text-slate-500">Nenhum dado para exibir.</div>)}
         </div>
     );
 };
@@ -139,43 +141,62 @@ export default function AnaliseScorePage() {
         loadRawLeadDataWithPagination();
     }, [selectedLaunch, supabase]);
 
+    const getCleanUtm = (value: string | null | undefined): string => {
+        if (!value || value.trim() === '' || value.includes('{') || value.includes('{{')) {
+            return 'Não Traqueadas';
+        }
+        return value;
+    };
+
+    const processedLeads = useMemo(() => {
+        return rawLeads.map(lead => ({
+            ...lead,
+            utm_source: getCleanUtm(lead.utm_source),
+            utm_medium: getCleanUtm(lead.utm_medium),
+            utm_content: getCleanUtm(lead.utm_content),
+        }));
+    }, [rawLeads]);
+
     const filteredLeads = useMemo(() => {
-        if (!Array.isArray(rawLeads)) return [];
-        return rawLeads.filter(lead =>
+        return processedLeads.filter(lead =>
             (selectedSource === 'all' || lead.utm_source === selectedSource) &&
             (selectedMedium === 'all' || lead.utm_medium === selectedMedium) &&
             (selectedContent === 'all' || lead.utm_content === selectedContent)
         );
-    }, [rawLeads, selectedSource, selectedMedium, selectedContent]);
+    }, [processedLeads, selectedSource, selectedMedium, selectedContent]);
     
-    const kpis = useMemo(() => {
-        const totalGeral = rawLeads.length;
-        const checkinGeral = rawLeads.filter(l => l.check_in_at !== null).length;
-        const leadsSelecao = filteredLeads.length;
-        const checkinSelecao = filteredLeads.filter(l => l.check_in_at !== null).length;
-        return { totalGeral, checkinGeral, leadsSelecao, checkinSelecao };
-    }, [rawLeads, filteredLeads]);
+    const generalKpis = useMemo(() => {
+        const inscricoes = processedLeads.length;
+        const checkins = processedLeads.filter(l => l.check_in_at).length;
+        const taxaCheckin = inscricoes > 0 ? (checkins / inscricoes) * 100 : 0;
+        return { inscricoes, checkins, taxaCheckin };
+    }, [processedLeads]);
+
+    const filteredKpis = useMemo(() => {
+        const inscricoes = filteredLeads.length;
+        const checkins = filteredLeads.filter(l => l.check_in_at).length;
+        const taxaCheckin = inscricoes > 0 ? (checkins / inscricoes) * 100 : 0;
+        return { inscricoes, checkins, taxaCheckin };
+    }, [filteredLeads]);
 
     const utmOptions = useMemo(() => {
-        if (!Array.isArray(rawLeads)) return { sources: [], mediums: [], contents: [] };
-        
         const sources = new Set<string>();
-        rawLeads.forEach(l => l.utm_source && sources.add(l.utm_source));
+        processedLeads.forEach(l => sources.add(l.utm_source));
 
-        const sourceFiltered = (selectedSource === 'all') ? rawLeads : rawLeads.filter(l => l.utm_source === selectedSource);
+        const sourceFiltered = (selectedSource === 'all') ? processedLeads : processedLeads.filter(l => l.utm_source === selectedSource);
         const mediums = new Set<string>();
-        sourceFiltered.forEach(l => l.utm_medium && mediums.add(l.utm_medium));
+        sourceFiltered.forEach(l => mediums.add(l.utm_medium));
 
         const mediumFiltered = (selectedMedium === 'all') ? sourceFiltered : sourceFiltered.filter(l => l.utm_medium === selectedMedium);
         const contents = new Set<string>();
-        mediumFiltered.forEach(l => l.utm_content && contents.add(l.utm_content));
+        mediumFiltered.forEach(l => contents.add(l.utm_content));
         
         return {
             sources: Array.from(sources).sort(),
             mediums: Array.from(mediums).sort(),
             contents: Array.from(contents).sort()
         };
-    }, [rawLeads, selectedSource, selectedMedium]);
+    }, [processedLeads, selectedSource, selectedMedium]);
 
     const dashboardData = useMemo((): DashboardData => {
         const scoreConditions = {
@@ -192,7 +213,7 @@ export default function AnaliseScorePage() {
             const categoryKey = key as keyof typeof scoreConditions;
             const leadsInCategory = filteredLeads.filter(l => scoreConditions[categoryKey](l.score));
             const contentCounts = leadsInCategory.reduce((acc, lead) => {
-                const content = lead.utm_content || 'Indefinido';
+                const content = lead.utm_content || 'Não Traqueadas';
                 acc[content] = (acc[content] || 0) + 1;
                 return acc;
             }, {} as Record<string, number>);
@@ -204,7 +225,6 @@ export default function AnaliseScorePage() {
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             
-            {/* ================== INÍCIO DA ALTERAÇÃO DE LAYOUT ================== */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Score por Canal</h1>
                 <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
@@ -214,14 +234,24 @@ export default function AnaliseScorePage() {
                 </div>
             </div>
             
-            <div className="bg-white p-4 rounded-lg shadow-md">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <KpiCard title="Total Geral Inscrições" value={kpis.totalGeral.toLocaleString('pt-BR')} description="Total do Lançamento" icon={<FaUsers size={20} />} />
-                    <KpiCard title="Total Geral Check-ins" value={kpis.checkinGeral.toLocaleString('pt-BR')} description="Total do Lançamento" icon={<FaUserCheck size={20} />} />
-                    <KpiCard title="Inscrições (Filtro)" value={kpis.leadsSelecao.toLocaleString('pt-BR')} description="Resultado do filtro atual" icon={<FaUsers size={20} />} />
-                    <KpiCard title="Check-ins (Filtro)" value={kpis.checkinSelecao.toLocaleString('pt-BR')} description="Resultado do filtro atual" icon={<FaUserCheck size={20} />} />
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-200 p-4 rounded-lg space-y-3">
+                    <h3 className="font-bold text-center text-slate-600">Totais do Lançamento</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <KpiCard title="Inscrições" value={generalKpis.inscricoes.toLocaleString('pt-BR')} icon={FaGlobe}/>
+                        <KpiCard title="Check-ins" value={generalKpis.checkins.toLocaleString('pt-BR')} icon={FaBullseye}/>
+                        <KpiCard title="Taxa Check-in" value={`${generalKpis.taxaCheckin.toFixed(1)}%`} icon={FaPercent}/>
+                    </div>
                 </div>
-            </div>
+                <div className="bg-slate-200 p-4 rounded-lg space-y-3">
+                     <h3 className="font-bold text-center text-slate-600">Totais do Filtro</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <KpiCard title="Inscrições" value={filteredKpis.inscricoes.toLocaleString('pt-BR')} icon={FaUsers}/>
+                        <KpiCard title="Check-ins" value={filteredKpis.checkins.toLocaleString('pt-BR')} icon={FaUserCheck}/>
+                        <KpiCard title="Taxa Check-in" value={`${filteredKpis.taxaCheckin.toFixed(1)}%`} icon={FaPercent}/>
+                    </div>
+                </div>
+            </section>
 
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center gap-2 mb-4">
@@ -252,13 +282,12 @@ export default function AnaliseScorePage() {
                     </div>
                 </div>
             </div>
-            {/* ================== FIM DA ALTERAÇÃO DE LAYOUT ================== */}
-
             
             {isLoading ? (
                 <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                // CORREÇÃO: Layout do grid de gráficos alterado para 2 colunas em telas grandes.
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {scoreCategoryConfig.map((category) => {
                         const dataForChart = dashboardData[category.key as keyof DashboardData] || [];
                         const totalLeads = dataForChart.reduce((acc, item) => acc + item.value, 0);

@@ -1,3 +1,4 @@
+// src/app/dashboard-perfil-score/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -6,7 +7,7 @@ import { Launch } from "@/lib/types";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
 import toast, { Toaster } from 'react-hot-toast';
 import { Users, UserCheck, Percent } from "lucide-react";
-import Papa from 'papaparse'; // Importa a biblioteca para gerar o CSV
+import Papa from 'papaparse';
 
 // --- Tipos de Dados ---
 type AnswerProfile = {
@@ -21,11 +22,11 @@ type ScoreProfileQuestion = {
 };
 
 const scoreCategories = [
-    { key: 'quente', name: 'Quente (>80)', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-500' },
+    { key: 'quente', name: 'Quente (>=80)', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-500' },
     { key: 'quente_morno', name: 'Quente-Morno (65-79)', color: 'text-orange-500', bgColor: 'bg-orange-50', borderColor: 'border-orange-500' },
     { key: 'morno', name: 'Morno (50-64)', color: 'text-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-500' },
     { key: 'morno_frio', name: 'Morno-Frio (35-49)', color: 'text-sky-500', bgColor: 'bg-sky-50', borderColor: 'border-sky-500' },
-    { key: 'frio', name: 'Frio (<35)', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-500' },
+    { key: 'frio', name: 'Frio (1-34)', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-500' },
 ] as const;
 
 type ScoreCategoryKey = typeof scoreCategories[number]['key'];
@@ -52,11 +53,9 @@ const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; i
 
 const ScoreProfileCard = ({ questionData }: { questionData: ScoreProfileQuestion }) => {
     const totalResponses = useMemo(() => {
-        // Garante que 'answers' não é nulo antes de tentar usar o reduce
         return questionData.answers?.reduce((sum, answer) => sum + answer.lead_count, 0) || 0;
     }, [questionData.answers]);
 
-    // Não renderiza o card se não houver respostas
     if (!questionData.answers || totalResponses === 0) {
         return null;
     }
@@ -83,7 +82,7 @@ const ScoreProfileCard = ({ questionData }: { questionData: ScoreProfileQuestion
                                 </div>
                             </li>
                         );
-                })}
+                    })}
             </ul>
         </div>
     );
@@ -98,7 +97,8 @@ export default function PerfilDeScorePage() {
     const [data, setData] = useState<ScoreProfileQuestion[]>([]);
     const [scoreKpiData, setScoreKpiData] = useState<ScoreKpiData | null>(null);
     const [generalKpis, setGeneralKpis] = useState<GeneralKpiData>({ total_inscricoes: 0, total_checkins: 0 });
-    const [loading, setLoading] = useState(true);
+    const [loadingKpis, setLoadingKpis] = useState(true);
+    const [loadingBreakdown, setLoadingBreakdown] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
@@ -118,40 +118,60 @@ export default function PerfilDeScorePage() {
 
     const fetchInitialData = useCallback(async (launchId: string) => {
         if (!launchId) return;
-        setLoading(true);
+        setLoadingKpis(true);
+        try {
+            const [scoreKpiResult, generalKpiResult] = await Promise.all([
+                supabase.rpc('get_score_category_totals', { p_launch_id: launchId }),
+                supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: launchId })
+            ]);
 
-        const [scoreKpiResult, generalKpiResult] = await Promise.all([
-            supabase.rpc('get_score_category_totals', { p_launch_id: launchId }),
-            supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: launchId })
-        ]);
+            const { data: scoreKpis, error: scoreKpiError } = scoreKpiResult;
+            const { data: generalKpisData, error: generalKpiError } = generalKpiResult;
 
-        const { data: scoreKpis, error: scoreKpiError } = scoreKpiResult;
-        const { data: generalKpisData, error: generalKpiError } = generalKpiResult;
+            if (scoreKpiError || generalKpiError) {
+                toast.error("Erro ao carregar os totais.");
+                console.error({ scoreKpiError, generalKpiError });
+                setScoreKpiData(null);
+                setGeneralKpis({ total_inscricoes: 0, total_checkins: 0 });
+            } else {
+                // CORREÇÃO: Lógica robusta para extrair os dados, quer a RPC retorne um objeto ou um array.
+                const finalScoreData = Array.isArray(scoreKpis) ? scoreKpis[0] : scoreKpis;
+                const finalGeneralData = Array.isArray(generalKpisData) ? generalKpisData[0] : generalKpisData;
 
-        if (scoreKpiError || generalKpiError) {
-            toast.error("Erro ao carregar os totais.");
-            console.error({ scoreKpiError, generalKpiError });
-        } else {
-            setScoreKpiData(scoreKpis as unknown as ScoreKpiData);
-            setGeneralKpis(generalKpisData || { total_inscricoes: 0, total_checkins: 0 });
+                setScoreKpiData(finalScoreData || null);
+                setGeneralKpis(finalGeneralData || { total_inscricoes: 0, total_checkins: 0 });
+            }
+        } catch (error) {
+            toast.error("Ocorreu uma falha ao buscar os dados de KPI.");
+            setScoreKpiData(null);
+            setGeneralKpis({ total_inscricoes: 0, total_checkins: 0 });
+        } finally {
+            setLoadingKpis(false);
         }
     }, [supabase]);
 
     const fetchBreakdownData = useCallback(async (launchId: string, scoreCategory: ScoreCategoryKey) => {
-        setLoading(true);
-        const { data: breakdownResult, error: breakdownError } = await supabase.rpc('get_score_profile_by_answers', { 
-            p_launch_id: launchId,
-            p_score_category: scoreCategory
-        });
-        
-        if (breakdownError) {
-            toast.error("Erro ao carregar dados de análise.");
-            console.error(breakdownError);
+        if (!launchId) return;
+        setLoadingBreakdown(true);
+        try {
+            const { data: breakdownResult, error: breakdownError } = await supabase.rpc('get_score_profile_by_answers', { 
+                p_launch_id: launchId,
+                p_score_category: scoreCategory
+            });
+            
+            if (breakdownError) {
+                toast.error("Erro ao carregar dados de análise.");
+                console.error(breakdownError);
+                setData([]);
+            } else {
+                setData((breakdownResult as unknown as ScoreProfileQuestion[]) || []);
+            }
+        } catch (error) {
+            toast.error("Ocorreu uma falha ao buscar os detalhes do perfil.");
             setData([]);
-        } else {
-            setData((breakdownResult as unknown as ScoreProfileQuestion[]) || []);
+        } finally {
+            setLoadingBreakdown(false);
         }
-        setLoading(false);
     }, [supabase]);
 
     useEffect(() => {
@@ -209,7 +229,7 @@ export default function PerfilDeScorePage() {
         }
     };
     
-    const taxaDeConversao = generalKpis.total_inscricoes > 0 
+    const taxaDeCheckin = generalKpis.total_inscricoes > 0 
         ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' 
         : '0.0%';
 
@@ -220,66 +240,74 @@ export default function PerfilDeScorePage() {
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Perfil de Score por Respostas</h1>
                 <div className="flex gap-4">
                     <div className="bg-white p-2 rounded-lg shadow-md">
-                        <select value={selectedLaunch} onChange={(e) => setSelectedLaunch(e.target.value)} disabled={loading} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium">
+                        <select value={selectedLaunch} onChange={(e) => setSelectedLaunch(e.target.value)} disabled={loadingKpis} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium">
                             {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                         </select>
                     </div>
                 </div>
             </header>
 
-            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <KpiCard 
-                    title="Total de Inscrições"
-                    value={generalKpis.total_inscricoes.toLocaleString('pt-BR')}
-                    icon={Users}
-                />
-                <KpiCard 
-                    title="Total de Check-ins"
-                    value={generalKpis.total_checkins.toLocaleString('pt-BR')}
-                    icon={UserCheck}
-                />
-                <KpiCard 
-                    title="Taxa de Conversão"
-                    value={taxaDeConversao}
-                    icon={Percent}
-                />
+            <section className="space-y-6">
+                <div className="bg-slate-200 p-4 rounded-lg shadow-md">
+                    <h3 className="font-bold text-center text-slate-600 mb-3">Totais do Lançamento</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <KpiCard 
+                            title="Total de Inscrições"
+                            value={loadingKpis ? '...' : generalKpis.total_inscricoes.toLocaleString('pt-BR')}
+                            icon={Users}
+                        />
+                        <KpiCard 
+                            title="Total de Check-ins"
+                            value={loadingKpis ? '...' : generalKpis.total_checkins.toLocaleString('pt-BR')}
+                            icon={UserCheck}
+                        />
+                        <KpiCard 
+                            title="Taxa de Check-in"
+                            value={loadingKpis ? '...' : taxaDeCheckin}
+                            icon={Percent}
+                        />
+                    </div>
+                </div>
+
+                <div className="bg-slate-200 p-4 rounded-lg shadow-md">
+                     <div className="flex flex-col md:flex-row gap-4">
+                        <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                            {scoreCategories.map(cat => {
+                                const totalLeadsCategoria = scoreKpiData?.[cat.key] ?? 0;
+                                const percentage = generalKpis.total_checkins > 0 ? (totalLeadsCategoria / generalKpis.total_checkins) * 100 : 0;
+                                return (
+                                    <button
+                                        key={cat.key}
+                                        onClick={() => setSelectedScore(cat.key)}
+                                        className={`p-4 rounded-lg shadow-md text-center transition-all duration-200 border-2 flex flex-col justify-center min-h-[140px] ${
+                                            selectedScore === cat.key
+                                                ? `${cat.bgColor} ${cat.borderColor}`
+                                                : 'bg-white border-transparent hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <p className="text-sm text-slate-500">{cat.name}</p>
+                                        <p className={`text-3xl font-bold ${cat.color}`}>
+                                            {loadingKpis ? '...' : totalLeadsCategoria.toLocaleString('pt-BR')}
+                                        </p>
+                                        <p className="text-lg font-bold text-slate-800 mt-2">
+                                            ({percentage.toFixed(1)}%)
+                                        </p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="flex-shrink-0">
+                            <button onClick={handleExport} disabled={isExporting || loadingKpis || loadingBreakdown} className="w-full h-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 text-base">
+                                {isExporting ? <FaSpinner className="animate-spin" /> : <FaFileCsv />}
+                                Exportar Leads
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </section>
 
-            <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-grow grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                    {!scoreKpiData && loading ? (
-                        Array.from({ length: 5 }).map((_, i) => (
-                            <div key={i} className="bg-white p-4 rounded-lg shadow-md h-20 animate-pulse"></div>
-                        ))
-                    ) : (
-                        scoreCategories.map(cat => (
-                            <button
-                                key={cat.key}
-                                onClick={() => setSelectedScore(cat.key)}
-                                className={`p-4 rounded-lg shadow-md text-center transition-all duration-200 border-2 ${
-                                    selectedScore === cat.key
-                                        ? `${cat.bgColor} ${cat.borderColor}`
-                                        : 'bg-white border-transparent hover:border-slate-300'
-                                }`}
-                            >
-                                <p className="text-sm text-slate-500">{cat.name}</p>
-                                <p className={`text-2xl font-bold ${cat.color}`}>
-                                    {scoreKpiData ? scoreKpiData[cat.key].toLocaleString('pt-BR') : <FaSpinner className="animate-spin mx-auto mt-1" />}
-                                </p>
-                            </button>
-                        ))
-                    )}
-                </div>
-                <div className="flex-shrink-0">
-                    <button onClick={handleExport} disabled={isExporting || loading} className="w-full h-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 text-base">
-                        {isExporting ? <FaSpinner className="animate-spin" /> : <FaFileCsv />}
-                        Exportar Leads
-                    </button>
-                </div>
-            </div>
-
             <main>
-                {loading ? <Spinner /> : (
+                {loadingBreakdown ? <Spinner /> : (
                     data && data.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {data.map(question => (

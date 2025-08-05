@@ -1,9 +1,10 @@
+// src/app/dashboard-lead-scoring/page.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
-import { FaSpinner, FaFileCsv, FaFilter, FaUsers, FaUserCheck, FaGlobe, FaBullseye } from 'react-icons/fa';
+import { FaSpinner, FaFileCsv, FaFilter, FaUsers, FaUserCheck, FaGlobe, FaBullseye, FaPercent } from 'react-icons/fa';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 // --- Tipagens de Dados ---
@@ -33,15 +34,15 @@ type ChartData = { name: string; value: number; fill: string; };
 type DailyEvolutionData = { data: string; inscricoes: number; checkins: number; };
 
 // --- Componentes de UI ---
-const KpiCard = ({ title, value, icon: Icon, subTitle }: { title: string; value: string; icon: React.ElementType; subTitle?: string }) => (
+// CORREÇÃO: Fontes e ícone do KPI Card ajustados para o novo padrão.
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType; }) => (
     <div className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
         <div className="bg-blue-100 p-3 rounded-full">
-            <Icon className="text-blue-600 text-xl" />
+            <Icon className="text-blue-600 text-2xl" />
         </div>
         <div>
-            <p className="text-sm text-slate-500">{title}</p>
-            <p className="text-2xl font-bold text-slate-800">{value}</p>
-            {subTitle && <p className="text-xs text-slate-400">{subTitle}</p>}
+            <p className="text-base text-slate-500">{title}</p>
+            <p className="text-3xl font-bold text-slate-800">{value}</p>
         </div>
     </div>
 );
@@ -162,36 +163,56 @@ export default function LeadScoringPage() {
         loadRawData();
     }, [selectedLaunch, supabase]);
 
+    const getCleanUtm = (value: string | null | undefined): string => {
+        if (!value || value.trim() === '' || value.includes('{') || value.includes('{{')) {
+            return 'Não Traqueadas';
+        }
+        return value;
+    };
+
+    const processedLeads = useMemo(() => {
+        return rawLeads.map(lead => ({
+            ...lead,
+            utm_source: getCleanUtm(lead.utm_source),
+            utm_medium: getCleanUtm(lead.utm_medium),
+            utm_content: getCleanUtm(lead.utm_content),
+        }));
+    }, [rawLeads]);
+
     const filterOptions = useMemo(() => {
-        let leads = rawLeads;
+        let leads = processedLeads;
         const sources = new Set<string>();
         const mediums = new Set<string>();
         const contents = new Set<string>();
-        rawLeads.forEach(lead => { if(lead.utm_source) sources.add(lead.utm_source) });
+        leads.forEach(lead => sources.add(lead.utm_source));
         if (selectedSource !== 'all') leads = leads.filter(l => l.utm_source === selectedSource);
-        leads.forEach(lead => { if(lead.utm_medium) mediums.add(lead.utm_medium) });
+        leads.forEach(lead => mediums.add(lead.utm_medium));
         if (selectedMedium !== 'all') leads = leads.filter(l => l.utm_medium === selectedMedium);
-        leads.forEach(lead => { if(lead.utm_content) contents.add(lead.utm_content) });
+        leads.forEach(lead => contents.add(lead.utm_content));
         return { sources: Array.from(sources).sort(), mediums: Array.from(mediums).sort(), contents: Array.from(contents).sort() };
-    }, [rawLeads, selectedSource, selectedMedium]);
+    }, [processedLeads, selectedSource, selectedMedium]);
 
     const filteredLeads = useMemo(() => {
-        return rawLeads.filter(lead => 
+        return processedLeads.filter(lead => 
             (selectedSource === 'all' || lead.utm_source === selectedSource) &&
             (selectedMedium === 'all' || lead.utm_medium === selectedMedium) &&
             (selectedContent === 'all' || lead.utm_content === selectedContent)
         );
-    }, [rawLeads, selectedSource, selectedMedium, selectedContent]);
+    }, [processedLeads, selectedSource, selectedMedium, selectedContent]);
 
-    const grandTotalKpis = useMemo(() => ({
-        inscricoes: rawLeads.length,
-        checkins: rawLeads.filter(l => l.check_in_at).length,
-    }), [rawLeads]);
+    const generalKpis = useMemo(() => {
+        const inscricoes = processedLeads.length;
+        const checkins = processedLeads.filter(l => l.check_in_at).length;
+        const taxaCheckin = inscricoes > 0 ? (checkins / inscricoes) * 100 : 0;
+        return { inscricoes, checkins, taxaCheckin };
+    }, [processedLeads]);
 
-    const filteredKpis = useMemo(() => ({
-        inscricoes: filteredLeads.length,
-        checkins: filteredLeads.filter(l => l.check_in_at).length,
-    }), [filteredLeads]);
+    const filteredKpis = useMemo(() => {
+        const inscricoes = filteredLeads.length;
+        const checkins = filteredLeads.filter(l => l.check_in_at).length;
+        const taxaCheckin = inscricoes > 0 ? (checkins / inscricoes) * 100 : 0;
+        return { inscricoes, checkins, taxaCheckin };
+    }, [filteredLeads]);
 
     const scoreDistributionChartData = useMemo(() => {
         const totals = filteredLeads.reduce((acc, row) => {
@@ -215,7 +236,7 @@ export default function LeadScoringPage() {
     
     const dailyEvolutionChartData = useMemo(() => {
         const grouped = filteredLeads
-            .filter(lead => lead.created_at) // <-- CORREÇÃO APLICADA AQUI
+            .filter(lead => lead.created_at)
             .reduce((acc, lead) => {
                 const date = new Date(lead.created_at as string).toLocaleDateString('pt-BR');
                 if (!acc[date]) acc[date] = { inscricoes: 0, checkins: 0 };
@@ -241,7 +262,7 @@ export default function LeadScoringPage() {
         };
 
         const grouped = filteredLeads.reduce((acc, lead) => {
-            const key = lead[groupingKey] || 'N/A';
+            const key = lead[groupingKey] || 'Não Traqueadas';
             if (!acc[key]) {
                 acc[key] = { inscricoes: 0, check_ins: 0, quente_mais_80: 0, quente_morno: 0, morno: 0, morno_frio: 0, frio_menos_35: 0 };
             }
@@ -255,7 +276,6 @@ export default function LeadScoringPage() {
         return Object.entries(grouped).map(([canal, data]) => ({ canal, ...data })).sort((a,b) => b.inscricoes - a.inscricoes);
     }, [filteredLeads, selectedSource, selectedMedium]);
 
-
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -267,12 +287,24 @@ export default function LeadScoringPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <KpiCard title="Total Geral Inscrições" value={grandTotalKpis.inscricoes.toLocaleString('pt-BR')} icon={FaGlobe} subTitle="Total do Lançamento" />
-                <KpiCard title="Total Geral Check-ins" value={grandTotalKpis.checkins.toLocaleString('pt-BR')} icon={FaBullseye} subTitle="Total do Lançamento" />
-                <KpiCard title="Inscrições (Filtro)" value={filteredKpis.inscricoes.toLocaleString('pt-BR')} icon={FaUsers} subTitle="Resultado do filtro atual" />
-                <KpiCard title="Check-ins (Filtro)" value={filteredKpis.checkins.toLocaleString('pt-BR')} icon={FaUserCheck} subTitle="Resultado do filtro atual" />
-            </div>
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-200 p-4 rounded-lg space-y-3">
+                    <h3 className="font-bold text-center text-slate-600">Totais do Lançamento</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <KpiCard title="Inscrições" value={generalKpis.inscricoes.toLocaleString('pt-BR')} icon={FaGlobe}/>
+                        <KpiCard title="Check-ins" value={generalKpis.checkins.toLocaleString('pt-BR')} icon={FaBullseye}/>
+                        <KpiCard title="Taxa Check-in" value={`${generalKpis.taxaCheckin.toFixed(1)}%`} icon={FaPercent}/>
+                    </div>
+                </div>
+                <div className="bg-slate-200 p-4 rounded-lg space-y-3">
+                     <h3 className="font-bold text-center text-slate-600">Totais do Filtro</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <KpiCard title="Inscrições" value={filteredKpis.inscricoes.toLocaleString('pt-BR')} icon={FaUsers}/>
+                        <KpiCard title="Check-ins" value={filteredKpis.checkins.toLocaleString('pt-BR')} icon={FaUserCheck}/>
+                        <KpiCard title="Taxa Check-in" value={`${filteredKpis.taxaCheckin.toFixed(1)}%`} icon={FaPercent}/>
+                    </div>
+                </div>
+            </section>
 
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center gap-2 mb-4">
@@ -309,8 +341,8 @@ export default function LeadScoringPage() {
             ) : (
                 <div className="space-y-6">
                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {scoreDistributionChartData.length > 0 && <ScoreDistributionChart data={scoreDistributionChartData} />}
-                        {dailyEvolutionChartData.length > 0 && <DailyEvolutionChart data={dailyEvolutionChartData} />}
+                         {scoreDistributionChartData.length > 0 && <ScoreDistributionChart data={scoreDistributionChartData} />}
+                         {dailyEvolutionChartData.length > 0 && <DailyEvolutionChart data={dailyEvolutionChartData} />}
                     </div>
                     <ScoringTable data={scoringTableData} launchName={launches.find(l => l.id === selectedLaunch)?.nome || 'export'} />
                 </div>

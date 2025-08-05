@@ -1,10 +1,11 @@
+// src/app/dashboard-posicao-final/page.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
-// CORREÇÃO: Adicionado o ícone FaUserCheck que também estava faltando.
-import { FaSpinner, FaUsers, FaCheckCircle, FaShoppingCart, FaGlobe, FaBullseye, FaPercentage, FaUserCheck } from 'react-icons/fa';
+import { FaSpinner, FaUsers, FaCheckCircle, FaShoppingCart, FaGlobe, FaUserCheck, FaPercent, FaFilter } from 'react-icons/fa';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // --- Tipagens de Dados ---
 type Launch = { id: string; nome: string; status: string; };
@@ -24,22 +25,81 @@ type TableRow = {
     qtd_compradores: number;
 };
 
+type DonutChartData = { name: string; value: number; };
+
+// Cliente Supabase inicializado fora do componente para estabilidade.
+const supabase = createClient();
+
 // --- Componentes ---
-const KpiCard = ({ title, value, icon: Icon, subTitle, highlight = false }: { title: string; value: string | number; icon: React.ElementType; subTitle?: string; highlight?: boolean; }) => (
-    <div className={`flex items-center p-4 rounded-lg shadow-md border ${highlight ? "bg-green-50 border-green-200" : "bg-white"}`}>
-        <div className={`text-3xl mr-4 ${highlight ? "text-green-600" : "text-blue-500"}`}>{<Icon />}</div>
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | number; icon: React.ElementType; }) => (
+    <div className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
+        <div className="bg-blue-100 p-3 rounded-full">
+            <Icon className="text-blue-600 text-2xl" />
+        </div>
         <div>
-            <p className={`text-sm font-medium ${highlight ? "text-green-700" : "text-slate-500"}`}>{title}</p>
-            <p className={`text-2xl font-bold mt-1 ${highlight ? "text-green-800" : "text-slate-800"}`}>{value}</p>
-            {subTitle && <p className="text-xs text-slate-400">{subTitle}</p>}
+            <p className="text-base text-slate-500">{title}</p>
+            <p className="text-3xl font-bold text-slate-800">{value}</p>
         </div>
     </div>
 );
 
+const DonutChartCard = ({ title, data }: { title: string; data: DonutChartData[] }) => {
+    const COLORS = ['#4e79a7', '#f28e2c', '#e15759']; // Azul, Laranja, Cinza para Não Traqueadas
+
+    const renderCustomizedDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+        if (!percent || percent < 0.05) return null;
+        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+        const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+        const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+
+        return (
+            <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontWeight="bold" fontSize={16}>
+                {`${(percent * 100).toFixed(0)}%`}
+            </text>
+        );
+    };
+
+    const hasData = data && data.length > 0 && data.some(item => item.value > 0);
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="text-lg font-semibold text-slate-700 text-center mb-4">{title}</h3>
+            <ResponsiveContainer width="100%" height={250}>
+                {hasData ? (
+                    <PieChart>
+                        <Pie 
+                            data={data} 
+                            dataKey="value" 
+                            nameKey="name" 
+                            cx="50%" 
+                            cy="50%" 
+                            innerRadius={50} 
+                            outerRadius={90} 
+                            paddingAngle={5} 
+                            labelLine={false}
+                            label={renderCustomizedDonutLabel}
+                        >
+                            {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR')} />
+                        <Legend />
+                    </PieChart>
+                ) : (
+                    // CORREÇÃO: Layout do placeholder ajustado para não sobrepor.
+                    <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                         <PieChart width={200} height={200}>
+                            <Pie data={[{ value: 1 }]} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={90} fill="#E0E0E0" />
+                         </PieChart>
+                         <p className="font-semibold">DADOS NÃO ENCONTRADOS</p>
+                    </div>
+                )}
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
 // --- Página Principal ---
 export default function PosicaoFinalPage() {
-    const supabase = createClient();
-    
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +122,7 @@ export default function PosicaoFinalPage() {
             setIsLoading(false);
         };
         fetchLaunches();
-    }, [supabase]);
+    }, []);
 
     useEffect(() => {
         const loadRawDataWithPagination = async () => {
@@ -89,45 +149,66 @@ export default function PosicaoFinalPage() {
             setIsLoadingData(false);
         };
         loadRawDataWithPagination();
-    }, [selectedLaunch, supabase]);
+    }, [selectedLaunch]);
+
+    const getCleanUtm = (value: string | null | undefined): string => {
+        if (!value || value.trim() === '' || value.includes('{') || value.includes('{{')) {
+            return 'Não Traqueadas';
+        }
+        return value;
+    };
+
+    const processedLeads = useMemo(() => {
+        return rawLeads.map(lead => ({
+            ...lead,
+            utm_source: getCleanUtm(lead.utm_source),
+            utm_medium: getCleanUtm(lead.utm_medium),
+            utm_content: getCleanUtm(lead.utm_content),
+        }));
+    }, [rawLeads]);
 
     const filterOptions = useMemo(() => {
-        let leads = rawLeads;
+        let leads = processedLeads;
         const sources = new Set<string>();
-        const mediums = new Set<string>();
-        const contents = new Set<string>();
-        rawLeads.forEach(lead => { if(lead.utm_source) sources.add(lead.utm_source) });
+        leads.forEach(lead => sources.add(lead.utm_source));
+
         if (selectedSource !== 'all') leads = leads.filter(l => l.utm_source === selectedSource);
-        leads.forEach(lead => { if(lead.utm_medium) mediums.add(lead.utm_medium) });
+        const mediums = new Set<string>();
+        leads.forEach(lead => mediums.add(lead.utm_medium));
+
         if (selectedMedium !== 'all') leads = leads.filter(l => l.utm_medium === selectedMedium);
-        leads.forEach(lead => { if(lead.utm_content) contents.add(lead.utm_content) });
+        const contents = new Set<string>();
+        leads.forEach(lead => contents.add(lead.utm_content));
+        
         return {
-            sources: Array.from(sources).sort(),
-            mediums: Array.from(mediums).sort(),
-            contents: Array.from(contents).sort(),
+            sources: Array.from(sources).sort((a, b) => a.localeCompare(b)),
+            mediums: Array.from(mediums).sort((a, b) => a.localeCompare(b)),
+            contents: Array.from(contents).sort((a, b) => a.localeCompare(b)),
         };
-    }, [rawLeads, selectedSource, selectedMedium]);
+    }, [processedLeads, selectedSource, selectedMedium]);
 
     const filteredLeads = useMemo(() => {
-        return rawLeads.filter(lead =>
+        return processedLeads.filter(lead =>
             (selectedSource === 'all' || lead.utm_source === selectedSource) &&
             (selectedMedium === 'all' || lead.utm_medium === selectedMedium) &&
             (selectedContent === 'all' || lead.utm_content === selectedContent)
         );
-    }, [rawLeads, selectedSource, selectedMedium, selectedContent]);
+    }, [processedLeads, selectedSource, selectedMedium, selectedContent]);
 
-    const grandTotalKpis = useMemo(() => ({
-        inscricoes: rawLeads.length,
-        checkins: rawLeads.filter(l => l.check_in_at).length,
-    }), [rawLeads]);
+    const kpis = useMemo(() => {
+        const totalInscricoes = processedLeads.length;
+        const totalCheckins = processedLeads.filter(l => l.check_in_at).length;
+        const totalCompradores = processedLeads.filter(l => l.is_buyer).length;
+        const taxaCheckin = totalInscricoes > 0 ? ((totalCheckins / totalInscricoes) * 100).toFixed(1) + '%' : '0.0%';
+        const taxaCompradores = totalInscricoes > 0 ? ((totalCompradores / totalInscricoes) * 100).toFixed(1) + '%' : '0.0%';
 
-    const filteredKpis = useMemo(() => {
-        const inscricoes = filteredLeads.length;
-        const checkins = filteredLeads.filter(l => l.check_in_at).length;
-        const compradores = filteredLeads.filter(l => l.is_buyer).length;
-        const conversao = inscricoes > 0 ? (compradores / inscricoes * 100).toFixed(2) + '%' : '0.00%';
-        return { inscricoes, checkins, compradores, conversao };
-    }, [filteredLeads]);
+        const inscricoesFiltro = filteredLeads.length;
+        const checkinsFiltro = filteredLeads.filter(l => l.check_in_at).length;
+        const compradoresFiltro = filteredLeads.filter(l => l.is_buyer).length;
+        const conversaoFinalFiltro = checkinsFiltro > 0 ? ((compradoresFiltro / checkinsFiltro) * 100).toFixed(1) + '%' : '0.0%';
+
+        return { totalInscricoes, totalCheckins, totalCompradores, taxaCheckin, taxaCompradores, inscricoesFiltro, checkinsFiltro, compradoresFiltro, conversaoFinalFiltro };
+    }, [processedLeads, filteredLeads]);
 
     const tableData = useMemo((): TableRow[] => {
         let groupingKey: keyof RawLead = 'utm_source';
@@ -135,7 +216,7 @@ export default function PosicaoFinalPage() {
         if (selectedMedium !== 'all') groupingKey = 'utm_content';
 
         const grouped = filteredLeads.reduce((acc, lead) => {
-            const key = lead[groupingKey] || 'N/A';
+            const key = lead[groupingKey] as string;
             if (!acc[key]) acc[key] = { qtd_inscricoes: 0, qtd_checkins: 0, qtd_compradores: 0 };
             acc[key].qtd_inscricoes++;
             if (lead.check_in_at) acc[key].qtd_checkins++;
@@ -148,10 +229,36 @@ export default function PosicaoFinalPage() {
             .sort((a, b) => b.qtd_compradores - a.qtd_compradores);
     }, [filteredLeads, selectedSource, selectedMedium]);
 
+    // CORREÇÃO: Lógica dos gráficos agora depende de `filteredLeads` para se atualizar com os filtros.
+    const { totalLeadsChartData, buyerLeadsChartData } = useMemo(() => {
+        const getTrafficOrigin = (source: string) => {
+            if (source === 'Não Traqueadas') return 'Não Traqueadas';
+            if (['google', 'bing', 'organic', 'referral'].includes(source.toLowerCase())) return 'Orgânico';
+            return 'Tráfego Pago';
+        };
+
+        const leadsByOrigin = filteredLeads.reduce((acc, lead) => {
+            const origin = getTrafficOrigin(lead.utm_source);
+            acc[origin] = (acc[origin] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const buyersByOrigin = filteredLeads.filter(l => l.is_buyer).reduce((acc, lead) => {
+            const origin = getTrafficOrigin(lead.utm_source);
+            acc[origin] = (acc[origin] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        return {
+            totalLeadsChartData: Object.entries(leadsByOrigin).map(([name, value]) => ({ name, value })),
+            buyerLeadsChartData: Object.entries(buyersByOrigin).map(([name, value]) => ({ name, value })),
+        };
+    }, [filteredLeads]);
+
     return (
         <div className="space-y-6 p-4 md:p-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Demonstrativo da Posição Final</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Posição Final Compradores</h1>
                 <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
                     <select value={selectedLaunch} onChange={e => setSelectedLaunch(e.target.value)} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent" disabled={isLoading}>
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
@@ -159,45 +266,65 @@ export default function PosicaoFinalPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
-                <KpiCard title="Geral Inscrições" value={grandTotalKpis.inscricoes.toLocaleString('pt-BR')} icon={FaGlobe} subTitle="Total do Lançamento" />
-                <KpiCard title="Geral Check-ins" value={grandTotalKpis.checkins.toLocaleString('pt-BR')} icon={FaUserCheck} subTitle="Total do Lançamento" />
-                <KpiCard title="Inscrições (Filtro)" value={filteredKpis.inscricoes.toLocaleString('pt-BR')} icon={FaUsers} subTitle="Resultado do filtro" />
-                <KpiCard title="Check-ins (Filtro)" value={filteredKpis.checkins.toLocaleString('pt-BR')} icon={FaCheckCircle} subTitle="Resultado do filtro" />
-                <KpiCard title="Compradores (Filtro)" value={filteredKpis.compradores.toLocaleString('pt-BR')} icon={FaShoppingCart} subTitle="Resultado do filtro" />
-                <KpiCard title="Conversão (Filtro)" value={filteredKpis.conversao} icon={FaPercentage} highlight subTitle="Vendas / Inscrições" />
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="flex items-center gap-2 mb-4">
-                    <h2 className="text-lg font-semibold text-slate-700">Filtros de Performance</h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">UTM Source</label>
-                        <select value={selectedSource} onChange={e => { setSelectedSource(e.target.value); setSelectedMedium('all'); setSelectedContent('all'); }} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
-                            <option value="all">Todos</option>
-                            {filterOptions.sources.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">UTM Medium</label>
-                        <select value={selectedMedium} onChange={e => { setSelectedMedium(e.target.value); setSelectedContent('all'); }} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
-                            <option value="all">Todos</option>
-                            {filterOptions.mediums.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">UTM Content</label>
-                        <select value={selectedContent} onChange={e => setSelectedContent(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
-                            <option value="all">Todos</option>
-                            {filterOptions.contents.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                    </div>
-                </div>
-            </div>
-
             {isLoadingData ? (<div className="flex justify-center items-center p-10"><FaSpinner className="animate-spin text-blue-600 text-4xl" /></div>) : (
+            <>
+                <section className="space-y-6">
+                    <div className="bg-slate-200 p-4 rounded-lg space-y-3">
+                        <h3 className="font-bold text-center text-slate-600">Totais do Lançamento (Geral)</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                            <KpiCard title="Total Inscrições" value={kpis.totalInscricoes.toLocaleString('pt-BR')} icon={FaGlobe}/>
+                            <KpiCard title="Total Check-ins" value={kpis.totalCheckins.toLocaleString('pt-BR')} icon={FaUserCheck}/>
+                            <KpiCard title="Taxa de Check-in" value={kpis.taxaCheckin} icon={FaPercent}/>
+                            <KpiCard title="Total Compradores" value={kpis.totalCompradores.toLocaleString('pt-BR')} icon={FaShoppingCart}/>
+                            <KpiCard title="Taxa de Compradores" value={kpis.taxaCompradores} icon={FaPercent}/>
+                        </div>
+                    </div>
+                    <div className="bg-slate-200 p-4 rounded-lg space-y-3">
+                        <h3 className="font-bold text-center text-slate-600">Performance do Lançamento (Filtro)</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                            <KpiCard title="Inscrições no Filtro" value={kpis.inscricoesFiltro.toLocaleString('pt-BR')} icon={FaUsers}/>
+                            <KpiCard title="Check-ins no Filtro" value={kpis.checkinsFiltro.toLocaleString('pt-BR')} icon={FaCheckCircle}/>
+                            <KpiCard title="Compradores no Filtro" value={kpis.compradoresFiltro.toLocaleString('pt-BR')} icon={FaShoppingCart}/>
+                            <KpiCard title="Conversão Final (Filtro)" value={kpis.conversaoFinalFiltro} icon={FaPercent}/>
+                        </div>
+                    </div>
+                </section>
+
+                <div className="bg-white p-6 rounded-lg shadow-md">
+                    <div className="flex items-center gap-2 mb-4">
+                        <FaFilter className="text-blue-600" />
+                        <h2 className="text-lg font-semibold text-slate-700">Filtros de Performance</h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">UTM Source</label>
+                            <select value={selectedSource} onChange={e => { setSelectedSource(e.target.value); setSelectedMedium('all'); setSelectedContent('all'); }} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                                <option value="all">Todos</option>
+                                {filterOptions.sources.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">UTM Medium</label>
+                            <select value={selectedMedium} onChange={e => { setSelectedMedium(e.target.value); setSelectedContent('all'); }} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                                <option value="all">Todos</option>
+                                {filterOptions.mediums.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">UTM Content</label>
+                            <select value={selectedContent} onChange={e => setSelectedContent(e.target.value)} className="w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                                <option value="all">Todos</option>
+                                {filterOptions.contents.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <DonutChartCard title="Inscrições por Origem" data={totalLeadsChartData} />
+                    <DonutChartCard title="Compradores por Origem" data={buyerLeadsChartData} />
+                </div>
+
                 <div className="bg-white p-4 md:p-6 rounded-lg shadow-md">
                     <h2 className="text-lg font-semibold text-slate-700 mb-4">Performance por Canal</h2>
                     <div className="overflow-x-auto">
@@ -213,14 +340,14 @@ export default function PosicaoFinalPage() {
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-200">
                                 {tableData.map((row, index) => {
-                                    const convRate = (row.qtd_inscricoes || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_inscricoes * 100).toFixed(2) : '0.00';
+                                    const convRate = (row.qtd_checkins || 0) > 0 ? ((row.qtd_compradores || 0) / row.qtd_checkins * 100).toFixed(2) : '0.00';
                                     return (
                                         <tr key={index}>
-                                            <td className="px-4 py-4 font-medium text-slate-800 max-w-sm truncate" title={row.canal}>{row.canal || 'N/A'}</td>
-                                            <td className="px-4 py-4 text-sm text-slate-600">{row.qtd_inscricoes.toLocaleString('pt-BR')}</td>
-                                            <td className="px-4 py-4 text-sm text-slate-600">{row.qtd_checkins.toLocaleString('pt-BR')}</td>
-                                            <td className="px-4 py-4 text-sm text-slate-600 font-bold">{row.qtd_compradores.toLocaleString('pt-BR')}</td>
-                                            <td className="px-4 py-4 text-sm font-semibold text-green-600">{convRate}%</td>
+                                            <td className="px-4 py-4 font-medium text-slate-800 max-w-sm truncate text-base" title={row.canal}>{row.canal || 'N/A'}</td>
+                                            <td className="px-4 py-4 text-base text-slate-600">{row.qtd_inscricoes.toLocaleString('pt-BR')}</td>
+                                            <td className="px-4 py-4 text-base text-slate-600">{row.qtd_checkins.toLocaleString('pt-BR')}</td>
+                                            <td className="px-4 py-4 text-base text-slate-600 font-bold">{row.qtd_compradores.toLocaleString('pt-BR')}</td>
+                                            <td className="px-4 py-4 text-base font-semibold text-green-600">{convRate}%</td>
                                         </tr>
                                     )
                                 })}
@@ -228,6 +355,7 @@ export default function PosicaoFinalPage() {
                         </table>
                     </div>
                 </div>
+            </>
             )}
         </div>
     );

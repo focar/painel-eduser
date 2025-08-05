@@ -1,231 +1,145 @@
-"use client";
+// src/components/question/QuestionForm.tsx
+'use client';
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
-import toast from "react-hot-toast";
-// --- CORREÇÃO: A linha abaixo estava faltando ---
-import { FaSpinner } from 'react-icons/fa';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/utils/supabase/client';
+import toast from 'react-hot-toast';
+import { FaPlus, FaTrash } from 'react-icons/fa';
 
 // Tipos de Dados
-type Option = {
-  texto: string;
-  peso: number;
-};
+export type Option = { texto: string; peso: number; };
 
-type QuestionData = {
-  id?: string;
+// CORREÇÃO: O tipo foi definido explicitamente para corresponder à estrutura de dados do formulário,
+// incluindo 'tipo' e 'classe' como strings.
+type QuestionFormData = {
+  id: string;
+  created_at: string;
+  modified_at: string;
   texto: string;
   tipo: string;
+  classe: string;
   opcoes: Option[];
 };
 
-type QuestionFormProps = {
-  initialData?: QuestionData | null;
-};
+type QuestionFormProps = { initialData?: QuestionFormData; };
 
 export default function QuestionForm({ initialData }: QuestionFormProps) {
   const supabase = createClient();
   const router = useRouter();
 
-  const [question, setQuestion] = useState({
-    texto: initialData?.texto || "",
-    tipo: initialData?.tipo || "Texto Aberto",
-  });
-
-  const [options, setOptions] = useState<Option[]>(
-    initialData?.opcoes?.map((opt) => ({
-      texto: opt.texto || "",
-      peso: (opt as any).peso ?? (opt as any).pontos ?? 0,
-    })) || []
+  const [formData, setFormData] = useState<QuestionFormData>(
+    initialData || {
+      id: '', 
+      texto: '', 
+      tipo: 'Múltipla Escolha', 
+      classe: 'score', 
+      opcoes: [{ texto: '', peso: 0 }], 
+      created_at: new Date().toISOString(),
+      modified_at: new Date().toISOString(),
+    }
   );
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (initialData?.tipo === "Sim / Não" && initialData.opcoes) {
-      setOptions(initialData.opcoes);
-    }
-  }, [initialData]);
-
-  const handleTypeChange = (newType: string) => {
-    setQuestion({ ...question, tipo: newType });
-    if (newType === "Sim / Não") {
-      if (
-        options.length !== 2 ||
-        options[0].texto !== "Sim" ||
-        options[1].texto !== "Não"
-      ) {
-        setOptions([
-          { texto: "Sim", peso: 1 },
-          { texto: "Não", peso: 0 },
-        ]);
-      }
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { id, value } = e.target;
+    setFormData(prev => ({ ...prev, [id]: value }));
   };
 
-  const handleOptionChange = (
-    index: number,
-    field: "texto" | "peso",
-    value: string | number
-  ) => {
-    const newOptions = [...options];
-    newOptions[index] = { ...newOptions[index], [field]: value };
-    setOptions(newOptions);
+  const handleOptionChange = (index: number, field: keyof Option, value: string | number) => {
+    const newOptions = [...formData.opcoes];
+    const finalValue = field === 'peso' ? Number(value) || 0 : value;
+    newOptions[index] = { ...newOptions[index], [field]: finalValue };
+    setFormData(prev => ({ ...prev, opcoes: newOptions }));
   };
 
-  const addOption = () => {
-    setOptions([...options, { texto: "", peso: 0 }]);
-  };
-
+  const addOption = () => { setFormData(prev => ({ ...prev, opcoes: [...prev.opcoes, { texto: '', peso: 0 }] })); };
   const removeOption = (index: number) => {
-    setOptions(options.filter((_, i) => i !== index));
+    const newOptions = formData.opcoes.filter((_, i) => i !== index);
+    setFormData(prev => ({ ...prev, opcoes: newOptions }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!formData.texto || !formData.tipo || !formData.classe) {
+      toast.error("Texto, Tipo e Classe são obrigatórios.");
+      return;
+    }
     setIsSubmitting(true);
-    const toastId = toast.loading(initialData ? "Atualizando..." : "Criando...");
-
     try {
-      const questionToSave = {
-        id: initialData?.id,
-        ...question,
-        opcoes:
-          question.tipo === "Múltipla Escolha" || question.tipo === "Sim / Não"
-            ? options
-            : [],
-        modified_at: new Date().toISOString(),
+      const questionToSave = { 
+        ...formData, 
+        modified_at: new Date().toISOString() 
       };
 
-      const { error } = await supabase.from("perguntas").upsert(questionToSave);
-
+      // Se não for um registro existente, o Supabase cuidará do ID.
+      if (!initialData) {
+        delete (questionToSave as any).id;
+      }
+      
+      const { error } = await supabase.from('perguntas').upsert(questionToSave);
       if (error) throw error;
 
-      toast.success("Pergunta salva com sucesso!", { id: toastId });
-      router.push("/perguntas");
+      toast.success('Pergunta salva com sucesso!');
+      router.push('/perguntas');
       router.refresh();
     } catch (err: any) {
-      toast.error(`Erro ao salvar: ${err.message}`, { id: toastId });
+      console.error("Erro ao salvar pergunta:", err);
+      toast.error(`Erro: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-0">
-      <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-slate-800">
-          {initialData ? "Editar Pergunta" : "Criar Nova Pergunta"}
-        </h1>
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="bg-white p-6 md:p-8 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold text-slate-800 mb-6">{initialData?.id ? 'Editar Pergunta' : 'Criar Nova Pergunta'}</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label
-              htmlFor="texto"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Texto da Pergunta
-            </label>
-            <textarea
-              id="texto"
-              value={question.texto}
-              onChange={(e) =>
-                setQuestion({ ...question, texto: e.target.value })
-              }
-              required
-              rows={3}
-              className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm"
+            <label htmlFor="texto" className="block text-sm font-medium text-slate-700">Texto da Pergunta</label>
+            <input 
+              type="text" id="texto" value={formData.texto} onChange={handleChange} required 
+              autoComplete="off"
+              className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" 
             />
           </div>
-          <div>
-            <label htmlFor="tipo" className="block text-sm font-medium text-slate-700">
-              Tipo de Resposta
-            </label>
-            <select
-              id="tipo"
-              value={question.tipo}
-              onChange={(e) => handleTypeChange(e.target.value)}
-              className="mt-1 w-full p-2 border border-slate-300 rounded-md bg-white"
-            >
-              <option>Texto Aberto</option>
-              <option>Múltipla Escolha</option>
-              <option>Sim / Não</option>
-            </select>
-          </div>
-          {(question.tipo === "Múltipla Escolha" ||
-            question.tipo === "Sim / Não") && (
-            <div className="pt-4 border-t">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-slate-700">
-                  Opções de Resposta
-                </label>
-                <label className="block text-sm font-medium text-slate-500 pr-12">
-                  Pontos
-                </label>
-              </div>
-              <div className="space-y-3">
-                {options.map((opt, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Texto da opção"
-                      value={opt.texto}
-                      onChange={(e) =>
-                        handleOptionChange(index, "texto", e.target.value)
-                      }
-                      className="flex-grow p-2 border rounded-md"
-                      disabled={question.tipo === "Sim / Não"}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Pontos"
-                      value={opt.peso}
-                      onChange={(e) =>
-                        handleOptionChange(
-                          index,
-                          "peso",
-                          parseInt(e.target.value, 10) || 0
-                        )
-                      }
-                      className="w-24 p-2 border rounded-md text-center"
-                    />
-                    {question.tipo === "Múltipla Escolha" && (
-                      <button
-                        type="button"
-                        onClick={() => removeOption(index)}
-                        className="text-red-500 hover:text-red-700 font-bold text-xl"
-                      >
-                        &times;
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {question.tipo === "Múltipla Escolha" && (
-                <button
-                  type="button"
-                  onClick={addOption}
-                  className="mt-3 text-sm text-blue-600 font-semibold hover:text-blue-800"
-                >
-                  + Adicionar Opção
-                </button>
-              )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="tipo" className="block text-sm font-medium">Tipo (Formato)</label>
+              <select id="tipo" value={formData.tipo ?? ''} onChange={handleChange} required className="mt-1 w-full border-slate-300 rounded-md">
+                <option value="Múltipla Escolha">Múltipla Escolha</option>
+                <option value="Texto">Texto</option>
+                <option value="Número">Número</option>
+              </select>
             </div>
-          )}
-          <div className="flex justify-end pt-4 gap-4 border-t mt-6">
-            <button
-              type="button"
-              onClick={() => router.push("/perguntas")}
-              className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg hover:bg-gray-300"
-            >
-              Cancelar
+            <div>
+              <label htmlFor="classe" className="block text-sm font-medium">Classe (Uso)</label>
+              <select id="classe" value={formData.classe ?? 'score'} onChange={handleChange} required className="mt-1 w-full border-slate-300 rounded-md">
+                <option value="score">Score</option>
+                <option value="perfil">Perfil</option>
+              </select>
+            </div>
+          </div>
+          <div className="pt-4 border-t">
+            <label className="block text-sm font-medium">Opções de Resposta</label>
+            <div className="mt-2 space-y-3">
+              {formData.opcoes.map((option, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input type="text" placeholder="Texto da opção" value={option.texto} onChange={(e) => handleOptionChange(index, 'texto', e.target.value)} className="flex-grow px-3 py-2 border border-slate-300 rounded-md" />
+                  <input type="number" placeholder="Peso" value={option.peso} onChange={(e) => handleOptionChange(index, 'peso', e.target.value)} className="w-24 px-3 py-2 border border-slate-300 rounded-md" />
+                  <button type="button" onClick={() => removeOption(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-full"><FaTrash /></button>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={addOption} className="mt-3 inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-slate-600 hover:bg-slate-700">
+              <FaPlus className="mr-2" /> Adicionar Opção
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-slate-800 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50 hover:bg-slate-700"
-            >
-              {isSubmitting ? <FaSpinner className="animate-spin mx-auto"/> : "Salvar"}
+          </div>
+          <div className="flex flex-col sm:flex-row justify-end pt-4 gap-4">
+            <button type="button" onClick={() => router.push('/perguntas')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300">Cancelar</button>
+            <button type="submit" disabled={isSubmitting} className="px-6 py-2 bg-slate-800 text-white rounded-lg font-semibold disabled:opacity-50">
+              {isSubmitting ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </form>

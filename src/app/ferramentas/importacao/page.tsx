@@ -1,14 +1,15 @@
-// --- CÓDIGO 100% COMPLETO E FINAL ---
+// ferramenta/importacao/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Papa from 'papaparse';
 import { FaSpinner, FaUpload, FaTrash, FaClock, FaExclamationTriangle, FaCheckCircle, FaUserCheck, FaMagic, FaSave, FaFileCsv } from 'react-icons/fa';
+import toast from 'react-hot-toast';
 
 // --- Tipos ---
 type Launch = { id: string; nome: string; status: string; };
-type Question = { id: string; texto: string; tipo: string; opcoes: { texto: string; peso: number; }[] | null; };
+type Question = { id: string; texto: string; tipo: string | null; classe: string | null; opcoes: { texto: string; peso: number; }[] | null; };
 type CsvRow = { [key: string]: string };
 type ModalState = { isOpen: boolean; type: 'alert' | 'confirmation'; title: string; message: string; onConfirm?: () => void; };
 type AnalysisResult = {
@@ -89,7 +90,7 @@ export default function ImportacaoPage() {
             try {
                 const [launchResult, questionResult] = await Promise.all([
                     supabase.from("lancamentos").select('id, nome, status'),
-                    supabase.from("perguntas").select('id, texto, tipo, opcoes')
+                    supabase.from("perguntas").select('id, texto, tipo, classe, opcoes')
                 ]);
 
                 if (launchResult.error) throw launchResult.error;
@@ -100,8 +101,7 @@ export default function ImportacaoPage() {
                     .sort((a, b) => {
                         if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
                         if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
-                        if (a.status === 'Concluído' && b.status === 'Concluído') return b.nome.localeCompare(a.nome);
-                        return a.nome.localeCompare(b.nome);
+                        return b.nome.localeCompare(a.nome);
                     });
 
                 setLaunches(sorted);
@@ -156,7 +156,7 @@ export default function ImportacaoPage() {
                 else if (hasCampaignColumn && !hasQuestionColumns) importType = 'INSCRICAO';
 
                 if (importType === 'INVALIDO') {
-                    showAlertModal("Erro de Formato", "Não foi possível determinar o tipo do arquivo de leads. Verifique se contém 'utm_campaign' e/ou colunas de perguntas.");
+                    showAlertModal("Erro de Formato", "Não foi possível determinar o tipo do arquivo. Verifique se contém 'utm_campaign' e/ou colunas de perguntas.");
                     setIsProcessing(false);
                     return;
                 }
@@ -333,80 +333,59 @@ export default function ImportacaoPage() {
 
     const handleProfileSurveyImport = () => {
         if (!profileFile || !selectedLaunchForProfile) {
-            showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV para as respostas de perfil.");
+            showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV.");
             return;
         }
         setIsProcessing(true);
-        setLog(['--- INICIANDO IMPORTAÇÃO DE PERFIL ---']);
+        setLog(['--- INICIANDO IMPORTAÇÃO APENAS DE PERFIL ---']);
 
         Papa.parse(profileFile, {
             header: true,
             skipEmptyLines: true,
             delimiter: ";",
             transformHeader: header => header.trim().replace(/["\n\r]/g, ''),
-
             complete: async (results) => {
-                const rows = results.data as CsvRow[];
-                const cleanedHeaders = results.meta.fields || [];
-                addLog(`[INFO] Leitura do CSV concluída. ${rows.length} linhas e ${cleanedHeaders.length} cabeçalhos encontrados.`);
-                
-                const emailColumnName = cleanedHeaders.find(h => h.toLowerCase().includes('email'));
+                const rows = results.data as any[];
+                addLog(`[INFO] Leitura do CSV concluída. ${rows.length} linhas encontradas.`);
+
+                const emailColumnName = Object.keys(rows[0] || {}).find(h => h.toLowerCase().includes('email'));
                 if (!emailColumnName) {
-                    addLog("[ERRO FATAL] Coluna de 'email' não encontrada nos cabeçalhos.");
+                    addLog("[ERRO FATAL] Coluna de 'email' não encontrada.");
                     showAlertModal("Erro de Formato", "Não foi possível encontrar uma coluna de 'email' no ficheiro.");
                     setIsProcessing(false);
                     return;
                 }
 
-                const questionHeaders = cleanedHeaders.filter(h =>
-                    h &&
-                    !['email', 'nome', 'telefone'].includes(h.toLowerCase()) &&
-                    !h.toLowerCase().includes('data')
-                );
+                const payload = rows.map(row => ({
+                    email: row[emailColumnName] ? String(row[emailColumnName]).trim().toLowerCase() : null,
+                    respostas_raw: row,
+                })).filter(item => item.email && item.email.includes('@'));
+
+                if (payload.length === 0) {
+                    addLog("[AVISO] Nenhuma linha com email válido foi encontrada.");
+                    showAlertModal("Nenhum Dado Válido", "Nenhuma linha com um email válido foi encontrada.");
+                    setIsProcessing(false);
+                    return;
+                }
+                
+                addLog(`[INFO] Enviando ${payload.length} registos para processamento (apenas perfil)...`);
 
                 try {
-                    addLog(`[FASE 1] Verificando e registando ${questionHeaders.length} perguntas no banco de dados...`);
-                    
-                    // Verificação de segurança para evitar enviar um array vazio
-                    if (questionHeaders.length > 0) {
-                        const { error: registerError } = await supabase.rpc('register_new_questions_from_headers', {
-                            p_question_headers: questionHeaders
-                        });
-                        if (registerError) throw new Error(`Falha ao registrar novas perguntas: ${registerError.message}`);
-                    } else {
-                        addLog("[FASE 1] Nenhuma pergunta nova para registrar. Pulando.");
-                    }
-                    addLog("[FASE 1] Verificação de perguntas concluída com sucesso.");
-                    
-                    const payload = rows.map(row => ({
-                        email: row[emailColumnName] ? String(row[emailColumnName]).trim().toLowerCase() : null,
-                        respostas_raw: row,
-                    })).filter(item => item.email && item.email.includes('@'));
-
-                    if (payload.length === 0) {
-                        addLog("[AVISO] Nenhuma linha com email válido (@) foi encontrada para processar.");
-                        showAlertModal("Nenhum Dado Válido", "Nenhuma linha com um email válido foi encontrada no ficheiro.");
-                        setIsProcessing(false);
-                        return;
-                    }
-
-                    addLog(`[FASE 2] Enviando ${payload.length} registos válidos para a função 'process_smart_profile_upload'...`);
-                    const { data, error: processError } = await supabase.rpc('process_smart_profile_upload', {
+                    const { data, error } = await supabase.rpc('process_profile_only_import', {
                         p_launch_id: selectedLaunchForProfile,
                         p_payload: payload,
                     });
 
-                    if (processError) throw processError;
+                    if (error) throw error;
 
-                    const updatedCount = data.leads_com_perfil_atualizado || 0;
-                    const summaryMessage = `Importação de Perfil Concluída!\n\n- ${updatedCount} leads tiveram as suas respostas de perfil atualizadas/inseridas.`;
+                    const updatedCount = data.leads_atualizados || 0;
+                    const summaryMessage = `Importação Concluída!\n\n- ${updatedCount} leads tiveram as suas respostas de perfil atualizadas/inseridas.`;
                     showAlertModal("Importação Concluída", summaryMessage);
                     addLog(`[SUCESSO] Operação finalizada. ${updatedCount} perfis atualizados.`);
 
-                } catch (err: unknown) {
-                    const error = err as Error;
-                    addLog(`[ERRO GERAL] A operação falhou: ${error.message}`);
-                    showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${error.message}`);
+                } catch (err: any) {
+                    addLog(`[ERRO GERAL] A operação falhou: ${err.message}`);
+                    showAlertModal("Erro na Importação", `Ocorreu um erro. Verifique o log. Mensagem: ${err.message}`);
                 } finally {
                     setIsProcessing(false);
                 }
@@ -425,7 +404,7 @@ export default function ImportacaoPage() {
             const { data, error } = await supabase.rpc('propor_novos_pesos_respostas', { p_launch_id: selectedLaunchForBuyers });
             if (error) throw error;
             if (!data || data.length === 0) {
-                showAlertModal("Análise Concluída", "A análise foi executada, mas não encontrou dados de respostas suficientes para gerar propostas.");
+                showAlertModal("Análise Concluída", "A análise foi executada, mas não encontrou dados suficientes para gerar propostas.");
                 addLog("Análise não gerou propostas. Verifique se os leads responderam às pesquisas.");
                 setIsProcessing(false);
                 return;
@@ -529,14 +508,13 @@ export default function ImportacaoPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
 
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
-                <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação de Leads (Score)</h2>
+                <h2 className="text-xl font-bold text-slate-700 border-b pb-2">Importação Geral de Lançamento</h2>
                 <LaunchSelector
                     id="launch-select-leads" label="1. Selecione o Lançamento de Destino" launches={launches}
                     selectedValue={selectedLaunchForLeads} onChange={e => setSelectedLaunchForLeads(e.target.value)}
-                    disabled={isProcessing} isLoading={isDataLoading}
-                />
+                    disabled={isProcessing} isLoading={isDataLoading} />
                 <div>
-                    <label htmlFor="file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Leads (delimitado por &apos;;&apos;)</label>
+                    <label htmlFor="file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV (delimitado por &apos;;&apos;)</label>
                     <input id="file-upload" type="file" accept=".csv" onChange={e => setFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                 </div>
                 {isProcessing && progress > 0 && (
@@ -550,32 +528,30 @@ export default function ImportacaoPage() {
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-teal-500">
-                <h2 className="text-xl font-bold text-slate-700">Importação de Respostas de Perfil (Sem Score)</h2>
-                <p className="text-sm text-slate-500">Use esta ferramenta para carregar as respostas de perfil (sem score) a partir da sua planilha de check-in. Isto irá popular o dashboard "Análise de Respostas".</p>
+                <h2 className="text-xl font-bold text-slate-700">Importação Apenas de Respostas de Perfil</h2>
+                <p className="text-sm text-slate-500">Use esta ferramenta para carregar **apenas** as respostas de perguntas cadastradas como 'Perfil'. Respostas de 'Score' serão ignoradas.</p>
                 <LaunchSelector
                     id="launch-select-profile" label="1. Selecione o Lançamento" launches={launches}
                     selectedValue={selectedLaunchForProfile} onChange={e => setSelectedLaunchForProfile(e.target.value)}
-                    disabled={isProcessing} isLoading={isDataLoading}
-                />
+                    disabled={isProcessing} isLoading={isDataLoading} />
                 <div>
                     <label htmlFor="profile-file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Check-in</label>
                     <input id="profile-file-upload" type="file" accept=".csv" onChange={e => setProfileFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
                 </div>
                 <div className="text-right pt-4">
                     <button onClick={handleProfileSurveyImport} disabled={isProcessing || isDataLoading || !selectedLaunchForProfile || !profileFile} className="inline-flex items-center bg-teal-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-teal-700 disabled:opacity-50">
-                        <FaFileCsv className="mr-2" />Importar Respostas de Perfil
+                        <FaFileCsv className="mr-2" />Importar Apenas Respostas de Perfil
                     </button>
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
+             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
                 <h2 className="text-xl font-bold text-slate-700">Importação de Compradores e Análise</h2>
                 <p className="text-sm text-slate-500">Após o fim do lançamento, importe a lista de compradores para marcar os leads e ativar a análise de scores.</p>
                 <LaunchSelector
                     id="launch-select-buyers" label="1. Selecione o Lançamento" launches={launches}
                     selectedValue={selectedLaunchForBuyers} onChange={e => setSelectedLaunchForBuyers(e.target.value)}
-                    disabled={isProcessing} isLoading={isDataLoading}
-                />
+                    disabled={isProcessing} isLoading={isDataLoading}/>
                 <div>
                     <label htmlFor="buyer-file-upload" className="block text-sm font-medium text-slate-700 mb-1">2. Selecione o Ficheiro CSV de Compradores</label>
                     <input id="buyer-file-upload" type="file" accept=".csv" onChange={e => setBuyerFile(e.target.files?.[0] || null)} disabled={isProcessing} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
@@ -588,21 +564,19 @@ export default function ImportacaoPage() {
                         onClick={handleAnalyzeLaunch}
                         disabled={isProcessing || isDataLoading || !selectedLaunchForBuyers || buyersImportedForLaunch !== selectedLaunchForBuyers}
                         className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={buyersImportedForLaunch !== selectedLaunchForBuyers ? "Importe os compradores para este lançamento primeiro" : "Analisar Lançamento"}
-                    >
+                        title={buyersImportedForLaunch !== selectedLaunchForBuyers ? "Importe os compradores para este lançamento primeiro" : "Analisar Lançamento"}>
                         <FaMagic className="mr-2" />Analisar e Propor Scores
                     </button>
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-4 border-t-4 border-amber-400">
+             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4 border-t-4 border-amber-400">
                 <h2 className="text-lg font-semibold text-slate-700">Ferramentas de Teste</h2>
                 <p className="text-sm text-slate-500">Use estas ferramentas para preparar o ambiente para testes. A ação será executada no lançamento selecionado abaixo.</p>
                 <LaunchSelector
                     id="launch-select-testing" label="Selecione o Lançamento para a Ação" launches={launches}
                     selectedValue={selectedLaunchForTesting} onChange={e => setSelectedLaunchForTesting(e.target.value)}
-                    disabled={isProcessing} isLoading={isDataLoading}
-                />
+                    disabled={isProcessing} isLoading={isDataLoading}/>
                 <div className="flex flex-col sm:flex-row gap-4 pt-2">
                     <button onClick={handleClearLeads} disabled={isProcessing || isDataLoading || !selectedLaunchForTesting} className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
                         <FaTrash className="mr-2" /> Limpar Leads do Lançamento
@@ -612,7 +586,7 @@ export default function ImportacaoPage() {
                     </button>
                 </div>
             </div>
-
+            
             <div className="bg-white p-6 rounded-lg shadow-lg">
                 <h2 className="text-lg font-semibold text-slate-700 mb-4">Log de Operações</h2>
                 <pre className="bg-slate-900 text-white text-xs p-4 rounded-md h-96 overflow-y-auto font-mono">{log.join('\n')}</pre>
@@ -653,13 +627,10 @@ export default function ImportacaoPage() {
                                     ))}
                                 </tbody>
                             </table>
-                            {analysisResults.length === 0 && (
-                                <p className="text-center text-slate-500 py-8">Nenhum resultado de análise encontrado para exibir.</p>
-                            )}
                         </div>
                         <div className="mt-6 flex justify-end gap-3 border-t pt-4">
-                            <button onClick={() => setIsAnalysisModalOpen(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 disabled:opacity-50" disabled={isProcessing}>Cancelar</button>
-                            <button onClick={handleUpdateWeights} className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50" disabled={isProcessing}>
+                            <button onClick={() => setIsAnalysisModalOpen(false)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300" disabled={isProcessing}>Cancelar</button>
+                            <button onClick={handleUpdateWeights} className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" disabled={isProcessing}>
                                 {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaSave className="mr-2" />}
                                 Salvar Pesos
                             </button>
@@ -680,9 +651,7 @@ export default function ImportacaoPage() {
                         </div>
                         <p className="text-slate-700 mb-6 whitespace-pre-line">{modal.message}</p>
                         <div className="flex justify-end gap-3">
-                            {modal.type === 'confirmation' && (
-                                <button onClick={handleCloseModal} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300">Cancelar</button>
-                            )}
+                            {modal.type === 'confirmation' && (<button onClick={handleCloseModal} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300">Cancelar</button>)}
                             <button onClick={handleConfirmModal} className={`px-4 py-2 rounded-md font-bold ${modal.type === 'alert' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'}`}>
                                 {modal.type === 'alert' ? 'OK' : 'Confirmar'}
                             </button>

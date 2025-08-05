@@ -1,3 +1,4 @@
+// src/app/perguntas/editar/[id]/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -5,40 +6,49 @@ import { createClient } from '@/utils/supabase/client';
 import { notFound } from 'next/navigation';
 import QuestionForm from '@/components/question/QuestionForm';
 import { FaSpinner } from 'react-icons/fa';
-import type { Tables } from '@/types/database';
 
-type QuestionData = Tables<'perguntas'>;
-
-// ================== INÍCIO DA CORREÇÃO ==================
-// 1. Definimos o tipo 'Option' que o componente QuestionForm espera.
-//    Este tipo deve corresponder à estrutura de cada objeto dentro do JSON 'opcoes'.
-type Option = {
-    texto: string;
-    peso: number;
+// O tipo precisa corresponder exatamente ao que o QuestionForm espera
+type QuestionFormData = {
+  id: string;
+  created_at: string;
+  modified_at: string;
+  texto: string;
+  tipo: string;
+  classe: string;
+  opcoes: { texto: string; peso: number; }[];
 };
-// ================== FIM DA CORREÇÃO ====================
 
-export default function EditQuestionPage({ params }: { params: { id: string } }) {
+
+export default function EditarPerguntaPage({ params }: { params: { id: string } }) {
     const supabase = createClient();
     
-    const [initialData, setInitialData] = useState<QuestionData | null>(null);
+    const [initialData, setInitialData] = useState<QuestionFormData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchQuestion = async () => {
+        const fetchInitialData = async (id: string) => {
             try {
+                // CORREÇÃO: O campo 'classe' foi adicionado à consulta select abaixo.
+                // Isso garante que os dados buscados do banco de dados correspondam
+                // ao formato esperado pelo componente QuestionForm.
                 const { data, error } = await supabase
                     .from('perguntas')
-                    .select('*')
-                    .eq('id', params.id)
+                    .select('id, texto, tipo, classe, opcoes, created_at, modified_at')
+                    .eq('id', id)
                     .single();
 
                 if (error || !data) {
-                    throw new Error('Pergunta não encontrada ou erro ao buscar.');
+                    throw new Error("Pergunta não encontrada ou erro ao buscar.");
                 }
                 
-                setInitialData(data);
+                // Garantir que os dados correspondem ao tipo esperado pelo formulário
+                setInitialData({
+                    ...data,
+                    // Garante que 'opcoes' seja sempre um array, mesmo que venha nulo do banco.
+                    opcoes: data.opcoes || [{ texto: '', peso: 0 }] 
+                });
+
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -46,7 +56,7 @@ export default function EditQuestionPage({ params }: { params: { id: string } })
             }
         };
 
-        fetchQuestion();
+        fetchInitialData(params.id);
     }, [params.id, supabase]);
 
     if (loading) {
@@ -65,13 +75,6 @@ export default function EditQuestionPage({ params }: { params: { id: string } })
         notFound();
     }
 
-    // 2. Preparamos os dados para o formulário, convertendo 'opcoes' para o tipo correto.
-    const formInitialData = {
-        ...initialData,
-        // Garantimos que 'opcoes' seja um array de 'Option' antes de passá-lo para o componente
-        opcoes: (Array.isArray(initialData.opcoes) ? initialData.opcoes : []) as Option[],
-    };
-
-    // 3. Passamos os dados já formatados para o formulário.
-    return <QuestionForm initialData={formInitialData} />;
+    // Passa os dados completos para o formulário, incluindo a 'classe'.
+    return <QuestionForm initialData={initialData} />;
 }

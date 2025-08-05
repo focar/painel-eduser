@@ -15,8 +15,8 @@ const menuItems = [
         links: [
             { name: "Análise de Campanha", href: "/dashboard-analise-campanha" },
             { name: "Evolução de Canal", href: "/dashboard-evolucao-por-hora" },
-            { name: "Resumo Diário", href: "/dashboard-resumo" },
-            { name: "Performance e Controle", href: "/dashboard-performance" },
+            { name: "Resumo Diário", href: "/dashboard-resumo-diario" },
+            { name: "Performance e Controle", href: "/dashboard-performance-canais" },
             { name: "Lead Scoring", href: "/dashboard-lead-scoring" },
             { name: "Análise de Score", href: "/dashboard-analise-score" },
             { name: "Perfil de Score", href: "/dashboard-perfil-score" },
@@ -25,7 +25,7 @@ const menuItems = [
             { name: "Posição Final", href: "/dashboard-posicao-final" },
             { name: "Campanhas e Criativos", href: "/dashboard-campanhas-criativos" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
-            { name: "Análise de Respostas", href: "/dashboard-score-por-resposta" },
+            { name: "Análise de Respostas", href: "/dashboard-analise-resposta" },
         ],
     },
     {

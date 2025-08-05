@@ -1,52 +1,63 @@
+// src/app/pesquisas/editar/[id]/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { notFound } from 'next/navigation';
-import SurveyForm from '@/components/survey/SurveyForm';
+import SurveyForm from '@/components/survey/SurveyForm'; // Assumindo que este componente existe
 import { FaSpinner } from 'react-icons/fa';
-// 1. Importamos o tipo 'Tables' do arquivo gerado pelo Supabase.
 import type { Tables } from '@/types/database';
 
-// 2. Inferimos o tipo diretamente da tabela 'pesquisas'.
-//    Agora, SurveyData é um espelho perfeito da sua tabela.
+// Tipos de Dados para esta página
 type SurveyData = Tables<'pesquisas'> & {
     associated_question_ids: string[];
 };
-
+type Question = {
+    id: string;
+    texto: string;
+};
 
 export default function EditarPesquisaPage({ params }: { params: { id: string } }) {
     const supabase = createClient();
     
     const [initialData, setInitialData] = useState<SurveyData | null>(null);
+    const [availableQuestions, setAvailableQuestions] = useState<Question[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const getSurveyById = async (id: string) => {
+        const fetchInitialData = async (id: string) => {
             try {
-                const { data, error } = await supabase
-                    .from('pesquisas')
-                    .select(`
-                        *,
-                        pesquisas_perguntas ( pergunta_id )
-                    `)
-                    .eq('id', id)
-                    .single();
-                
-                if (error || !data) {
-                    throw new Error("Pesquisa não encontrada ou erro ao buscar.");
-                }
+                // Usamos Promise.all para buscar os dados da pesquisa e a lista de perguntas de score em paralelo
+                const [surveyResult, questionsResult] = await Promise.all([
+                    supabase
+                        .from('pesquisas')
+                        .select(`*, pesquisas_perguntas ( pergunta_id )`)
+                        .eq('id', id)
+                        .single(),
+                    supabase
+                        .from('perguntas')
+                        .select('id, texto')
+                        .eq('classe', 'score') // Filtra apenas perguntas de score
+                        .order('texto')
+                ]);
+
+                const { data: surveyData, error: surveyError } = surveyResult;
+                const { data: questionsData, error: questionsError } = questionsResult;
+
+                if (surveyError || !surveyData) throw new Error("Pesquisa não encontrada ou erro ao buscar.");
+                if (questionsError) throw new Error("Erro ao buscar a lista de perguntas de score.");
         
-                const associated_ids = Array.isArray(data.pesquisas_perguntas) 
-                    ? data.pesquisas_perguntas.map((pq: any) => pq.pergunta_id) 
+                const associated_ids = Array.isArray(surveyData.pesquisas_perguntas) 
+                    ? surveyData.pesquisas_perguntas.map((pq: any) => pq.pergunta_id) 
                     : [];
                 
-                // Agora os tipos são 100% compatíveis
                 setInitialData({
-                    ...data,
+                    ...surveyData,
                     associated_question_ids: associated_ids
                 });
+
+                setAvailableQuestions(questionsData || []);
 
             } catch (err: any) {
                 setError(err.message);
@@ -55,7 +66,7 @@ export default function EditarPesquisaPage({ params }: { params: { id: string } 
             }
         };
 
-        getSurveyById(params.id);
+        fetchInitialData(params.id);
     }, [params.id, supabase]);
 
     if (loading) {
@@ -74,5 +85,5 @@ export default function EditarPesquisaPage({ params }: { params: { id: string } 
         notFound();
     }
 
-    return <SurveyForm initialData={initialData} />;
+    return <SurveyForm initialData={initialData} availableQuestions={availableQuestions} />;
 }

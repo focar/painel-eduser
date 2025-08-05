@@ -1,15 +1,14 @@
-// src/app/dashboard-resumo/page.tsx (VERSÃO FINAL E OTIMIZADA)
+// src/app/dashboard-resumo/page.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { createClient } from '../../utils/supabase/client'; // Caminho relativo para evitar erros de build
+import { createClient } from '../../utils/supabase/client';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FaSpinner } from 'react-icons/fa';
 import toast, { Toaster } from 'react-hot-toast';
 
 // --- Tipos de Dados ---
 type Launch = { id: string; nome: string; status: string; };
-
 type KpiData = {
     totalInscricoes: number;
     totalCheckins: number;
@@ -17,7 +16,6 @@ type KpiData = {
     trafegoOrganico: number;
     trafegoNaoTraqueado: number;
 };
-
 type DailyData = {
     full_date: string;
     inscricoes: number;
@@ -29,6 +27,7 @@ type DailyData = {
 
 // --- Componentes ---
 const LoadingSpinner = () => <div className="flex justify-center items-center h-64"><FaSpinner className="animate-spin text-blue-600 text-3xl" /></div>;
+
 const KpiCard = ({ title, value, description }: { title: string; value: number; description: string; }) => (
     <div className="p-4 bg-slate-50 rounded-lg text-center h-full flex flex-col justify-center">
         <p className="text-3xl font-bold text-slate-800 mt-1">{value.toLocaleString('pt-BR')}</p>
@@ -36,6 +35,16 @@ const KpiCard = ({ title, value, description }: { title: string; value: number; 
         <p className="text-xs text-slate-400">{description}</p>
     </div>
 );
+
+// Componente KpiCard para a taxa de Check-in (para lidar com a percentagem)
+const KpiRateCard = ({ title, value, description }: { title: string; value: number; description: string; }) => (
+     <div className="p-4 bg-slate-50 rounded-lg text-center h-full flex flex-col justify-center">
+        <p className="text-3xl font-bold text-slate-800 mt-1">{`${value.toFixed(1)}%`}</p>
+        <h3 className="text-sm font-medium text-slate-500 truncate mt-1">{title}</h3>
+        <p className="text-xs text-slate-400">{description}</p>
+    </div>
+);
+
 
 export default function ResumoDiarioPage() {
     const supabase = createClient();
@@ -46,7 +55,6 @@ export default function ResumoDiarioPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Busca inicial de lançamentos
     useEffect(() => {
         const fetchLaunches = async () => {
             const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído', 'Planejado']);
@@ -62,22 +70,14 @@ export default function ResumoDiarioPage() {
         fetchLaunches();
     }, [supabase]);
 
-    // Busca TODOS os dados do dashboard com uma ÚNICA chamada à nova função RPC
     useEffect(() => {
         if (!selectedLaunchId) return;
-
-        let isActive = true;
-
         const fetchDashboardData = async () => {
             setIsLoading(true);
             setError(null);
-            
             const { data, error } = await supabase.rpc('get_resumo_diario_dashboard', {
                 launch_id_param: selectedLaunchId
             });
-
-            if (!isActive) return;
-
             if (error) {
                 toast.error('Erro ao carregar dados do resumo.');
                 setError("Erro ao carregar dados do resumo.");
@@ -85,22 +85,15 @@ export default function ResumoDiarioPage() {
                 setIsLoading(false);
                 return;
             }
-
             if (data) {
                 setKpis(data.kpis || { totalInscricoes: 0, totalCheckins: 0, trafegoPago: 0, trafegoOrganico: 0, trafegoNaoTraqueado: 0 });
                 setDailyData(data.dailyData || []);
             }
             setIsLoading(false);
         };
-
         fetchDashboardData();
-
-        return () => {
-            isActive = false;
-        };
     }, [selectedLaunchId, supabase]);
 
-    // Prepara os dados para os gráficos
     const chartData = useMemo(() => {
         if (!dailyData) return [];
         return [...dailyData]
@@ -110,6 +103,11 @@ export default function ResumoDiarioPage() {
             }))
             .reverse();
     }, [dailyData]);
+
+    const taxaCheckin = (kpis.totalInscricoes > 0) ? (kpis.totalCheckins / kpis.totalInscricoes) * 100 : 0;
+    const percPago = (kpis.totalInscricoes > 0) ? (kpis.trafegoPago / kpis.totalInscricoes) * 100 : 0;
+    const percOrganico = (kpis.totalInscricoes > 0) ? (kpis.trafegoOrganico / kpis.totalInscricoes) * 100 : 0;
+    const percNaoTraqueado = (kpis.totalInscricoes > 0) ? (kpis.trafegoNaoTraqueado / kpis.totalInscricoes) * 100 : 0;
 
     if (error) return <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg">{error}</div>;
 
@@ -127,19 +125,37 @@ export default function ResumoDiarioPage() {
                 {isLoading ? <LoadingSpinner /> : (
                     <main className="space-y-6">
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                            <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                                <h2 className="text-lg font-semibold text-slate-700 mb-4">Visão Geral</h2>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                             <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md h-full flex flex-col justify-between">
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4 text-center">Visão Geral</h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <KpiCard title="TOTAL INSCRIÇÕES" value={kpis.totalInscricoes} description="Total do Lançamento" />
                                     <KpiCard title="TOTAL CHECK-INS" value={kpis.totalCheckins} description="Total do Lançamento" />
+                                    <KpiRateCard title="TAXA DE CHECK-IN" value={taxaCheckin} description="Inscrições x Check-ins" />
                                 </div>
                             </div>
                             <div className="lg:col-span-3 bg-white p-6 rounded-lg shadow-md">
-                                <h2 className="text-lg font-semibold text-slate-700 mb-4">Origem do Tráfego</h2>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <KpiCard title="TRÁFEGO PAGO" value={kpis.trafegoPago} description="Todas as outras fontes" />
-                                    <KpiCard title="TRÁFEGO ORGÂNICO" value={kpis.trafegoOrganico} description="utm_source = organic" />
-                                    <KpiCard title="NÃO TRAQUEADO" value={kpis.trafegoNaoTraqueado} description="Fonte vazia ou placeholders" />
+                                <h2 className="text-lg font-semibold text-slate-700 mb-4 text-center">Origem do Tráfego</h2>
+                                <div className="space-y-4">
+                                    {/* Linha de cima com TOTAIS */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <KpiCard title="TRÁFEGO PAGO" value={kpis.trafegoPago} description="Valores Absolutos" />
+                                        <KpiCard title="TRÁFEGO ORGÂNICO" value={kpis.trafegoOrganico} description="Valores Absolutos" />
+                                        <KpiCard title="NÃO TRAQUEADO" value={kpis.trafegoNaoTraqueado} description="Valores Absolutos" />
+                                    </div>
+                                    {/* Linha de baixo com a BARRA DE PERCENTAGEM */}
+                                    <div className="pt-2">
+                                        <div className="w-full flex rounded-md h-10 bg-slate-200 overflow-hidden" title="Distribuição Percentual do Tráfego">
+                                            <div className="flex items-center justify-center bg-blue-500" style={{ width: `${percPago}%` }}>
+                                                <span className="text-sm font-bold text-white">{percPago.toFixed(0)}%</span>
+                                            </div>
+                                            <div className="flex items-center justify-center bg-green-500" style={{ width: `${percOrganico}%` }}>
+                                                <span className="text-sm font-bold text-white">{percOrganico.toFixed(0)}%</span>
+                                            </div>
+                                            <div className="flex items-center justify-center bg-gray-400" style={{ width: `${percNaoTraqueado}%` }}>
+                                                <span className="text-sm font-bold text-white">{percNaoTraqueado.toFixed(0)}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

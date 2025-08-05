@@ -1,269 +1,254 @@
+// src/app/dashboard-evolucao-canal/page.tsx
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { subDays, startOfDay, endOfDay, format, parseISO, isWithinInterval } from 'date-fns';
+import { subDays, startOfDay, endOfDay, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FaSpinner, FaFilter, FaUsers, FaUserCheck, FaChevronDown } from 'react-icons/fa';
+import { FaSpinner, FaFilter, FaUsers, FaUserCheck, FaChevronDown, FaChevronRight, FaGlobe, FaBullseye, FaPercent } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+import type { Launch } from "@/lib/types";
 
 // --- Tipos de Dados ---
-type Launch = { id: string; nome: string; status: string; };
-type RawLead = {
-    created_at: string | null;
-    check_in_at: string | null;
-    utm_source: string | null;
-    utm_medium: string | null;
-    utm_content: string | null;
-};
-type ChartDataPoint = { name: string; Inscrições: number; 'Check-ins': number; originalDate?: Date };
+type KpiSet = { total_geral_inscricoes: number; total_geral_checkins: number; total_filtrado_inscricoes: number; total_filtrado_checkins: number; };
+type ChartDataPoint = { name: string; Inscrições: number; 'Check-ins': number; };
+type HourlyDetail = { hora: number; inscricoes: number; checkins: number; };
+type TableRow = { dia: string; total_inscricoes: number; total_checkins: number; hourly_details: HourlyDetail[]; };
+type AnalysisData = { kpis: KpiSet; overview_chart_data: ChartDataPoint[] | null; period_chart_data: any[] | null; table_data: TableRow[] | null; };
 type Period = 'Hoje' | 'Ontem' | '7 Dias' | '14 Dias' | '30 Dias' | '45 Dias' | 'Todos';
-type HourlyData = { hour: number; inscricoes: number; checkins: number; };
-type DailyData = Record<string, HourlyData[]>;
-type GroupedDataForTable = Record<string, DailyData>;
+type UtmOption = string;
 
 // --- Componentes ---
-const KpiCard = ({ title, value, description }: { title: string; value: number; description: string; }) => (
-    <div className="p-4 bg-white rounded-lg shadow-md">
-        <h3 className="text-sm font-medium text-slate-500 truncate">{title}</h3>
-        <p className="text-2xl font-bold text-slate-800 mt-1">{value.toLocaleString('pt-BR')}</p>
-        <p className="text-xs text-slate-400">{description}</p>
+const KpiCard = ({ title, value, subTitle, icon: Icon }: { title: string; value: string; subTitle: string; icon: React.ElementType; }) => (
+    <div className="p-4 bg-white rounded-lg shadow-md flex items-center gap-4">
+        <div className="bg-blue-100 p-3 rounded-full"><Icon className="text-blue-600 text-xl" /></div>
+        <div>
+            <p className="text-sm text-slate-500">{title}</p>
+            <p className="text-2xl font-bold text-slate-800">{value}</p>
+            <p className="text-xs text-slate-400">{subTitle}</p>
+        </div>
     </div>
 );
 
-// --- Página Principal ---
 export default function EvolucaoCanalPage() {
     const supabase = createClient();
     const [launches, setLaunches] = useState<Launch[]>([]);
-    const [selectedLaunchId, setSelectedLaunchId] = useState<string | null>(null);
+    const [selectedLaunchId, setSelectedLaunchId] = useState<string>('');
     const [period, setPeriod] = useState<Period>('Hoje');
-    const [rawLeads, setRawLeads] = useState<RawLead[]>([]);
-    
-    const [selectedSource, setSelectedSource] = useState('Todos');
-    const [selectedMedium, setSelectedMedium] = useState('Todos');
-    const [selectedContent, setSelectedContent] = useState('Todos');
-
-    const [isLoading, setIsLoading] = useState({ launches: true, data: true });
-    // RESTAURADO: Estado para controlar as linhas expansíveis da tabela
+    const [data, setData] = useState<AnalysisData | null>(null);
+    const [loadingLaunches, setLoadingLaunches] = useState(true);
+    const [loadingData, setLoadingData] = useState(true);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    
+    const [filters, setFilters] = useState({ source: 'all', medium: 'all', campaign: 'all', content: 'all', term: 'all' });
+    const [options, setOptions] = useState<{sources: UtmOption[], mediums: UtmOption[], campaigns: UtmOption[], contents: UtmOption[], terms: UtmOption[]}>({ sources: [], mediums: [], campaigns: [], contents: [], terms: [] });
 
-    // RESTAURADO: Função para abrir/fechar as linhas da tabela
-    const toggleRow = (key: string) => {
-        setExpandedRows(prev => {
-            const newSet = new Set(prev);
-            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
-            return newSet;
-        });
-    };
+    const toggleRow = (key: string) => setExpandedRows(prev => {
+        const newSet = new Set(prev);
+        newSet.has(key) ? newSet.delete(key) : newSet.add(key);
+        return newSet;
+    });
 
     useEffect(() => {
         const fetchLaunches = async () => {
-            setIsLoading(prev => ({ ...prev, launches: true }));
-            const { data } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            setLoadingLaunches(true);
+            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
             if (data) {
-                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
-                const sorted = data.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
-                setLaunches(sorted);
-                if (sorted.length > 0) setSelectedLaunchId(sorted[0].id);
-            }
-            setIsLoading(prev => ({ ...prev, launches: false }));
+                const sorted = [...data].sort((a, b) => {
+                    if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
+                    if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
+                    return b.nome.localeCompare(a.nome);
+                });
+                setLaunches(sorted as Launch[]);
+                const inProgress = sorted.find(l => l.status === 'Em Andamento');
+                setSelectedLaunchId(inProgress ? inProgress.id : (sorted[0] ? sorted[0].id : ''));
+            } else if (error) { toast.error("Erro ao buscar lançamentos."); }
+            setLoadingLaunches(false);
         };
         fetchLaunches();
     }, [supabase]);
 
-    useEffect(() => {
+    const resetAndFetchSources = useCallback(async () => {
         if (!selectedLaunchId) return;
-        const loadAllLeadsForLaunch = async () => {
-            setIsLoading(prev => ({ ...prev, data: true }));
-            let allLeads: RawLead[] = [];
-            let page = 0;
-            const pageSize = 1000;
-            let keepFetching = true;
-
-            while (keepFetching) {
-                const { data, error } = await supabase
-                    .from('leads')
-                    .select('created_at, check_in_at, utm_source, utm_medium, utm_content')
-                    .eq('launch_id', selectedLaunchId)
-                    .range(page * pageSize, (page + 1) * pageSize - 1);
-
-                if (error) { toast.error("Erro ao carregar dados dos leads."); keepFetching = false; break; }
-                if (data) allLeads = [...allLeads, ...data];
-                if (!data || data.length < pageSize) keepFetching = false;
-                else page++;
-            }
-            setRawLeads(allLeads);
-            setIsLoading(prev => ({ ...prev, data: false }));
-        };
-        loadAllLeadsForLaunch();
+        setFilters({ source: 'all', medium: 'all', campaign: 'all', content: 'all', term: 'all' });
+        const { data } = await supabase.rpc('get_utm_sources', { p_launch_id: selectedLaunchId });
+        // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
+        setOptions({ sources: data?.map((d: { utm_source: string }) => d.utm_source) || [], mediums: [], campaigns: [], contents: [], terms: [] });
     }, [selectedLaunchId, supabase]);
 
-    const leadsInPeriod = useMemo(() => {
-        if (period === 'Todos') return rawLeads;
-        if (!Array.isArray(rawLeads)) return [];
-        const now = new Date();
-        let interval;
-        switch (period) {
-            case 'Hoje': interval = { start: startOfDay(now), end: endOfDay(now) }; break;
-            case 'Ontem': interval = { start: startOfDay(subDays(now, 1)), end: endOfDay(subDays(now, 1)) }; break;
-            case '7 Dias': interval = { start: startOfDay(subDays(now, 6)), end: endOfDay(now) }; break;
-            case '14 Dias': interval = { start: startOfDay(subDays(now, 13)), end: endOfDay(now) }; break;
-            case '30 Dias': interval = { start: startOfDay(subDays(now, 29)), end: endOfDay(now) }; break;
-            case '45 Dias': interval = { start: startOfDay(subDays(now, 44)), end: endOfDay(now) }; break;
-            default: return [];
-        }
-        return rawLeads.filter(lead => lead.created_at && isWithinInterval(parseISO(lead.created_at), interval));
-    }, [rawLeads, period]);
+    useEffect(() => { resetAndFetchSources(); }, [resetAndFetchSources]);
     
-    const utmOptions = useMemo(() => {
-        const sources = new Set<string>();
-        const mediums = new Set<string>();
-        const contents = new Set<string>();
-        leadsInPeriod.forEach(l => l.utm_source && sources.add(l.utm_source));
-        const leadsForMediums = selectedSource === 'Todos' ? leadsInPeriod : leadsInPeriod.filter(l => l.utm_source === selectedSource);
-        leadsForMediums.forEach(l => l.utm_medium && mediums.add(l.utm_medium));
-        const leadsForContents = selectedMedium === 'Todos' ? leadsForMediums : leadsForMediums.filter(l => l.utm_medium === selectedMedium);
-        leadsForContents.forEach(l => l.utm_content && contents.add(l.utm_content));
-        return {
-            sources: Array.from(sources).sort(),
-            mediums: Array.from(mediums).sort(),
-            contents: Array.from(contents).sort()
+    useEffect(() => {
+        if (!selectedLaunchId || filters.source === 'all') { setOptions(prev => ({ ...prev, mediums: [], campaigns: [], contents: [], terms: [] })); return; }
+        setFilters(prev => ({ ...prev, medium: 'all', campaign: 'all', content: 'all', term: 'all' }));
+        const fetchMediums = async () => {
+            const { data } = await supabase.rpc('get_utm_mediums', { p_launch_id: selectedLaunchId, p_source: filters.source });
+            // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
+            setOptions(prev => ({ ...prev, mediums: data?.map((d: { utm_medium: string }) => d.utm_medium) || [], campaigns: [], contents: [], terms: [] }));
         };
-    }, [leadsInPeriod, selectedSource, selectedMedium]);
+        fetchMediums();
+    }, [filters.source, selectedLaunchId, supabase]);
 
-    const filteredLeadsInPeriod = useMemo(() => {
-        return leadsInPeriod.filter(lead =>
-            (selectedSource === 'Todos' || lead.utm_source === selectedSource) &&
-            (selectedMedium === 'Todos' || lead.utm_medium === selectedMedium) &&
-            (selectedContent === 'Todos' || lead.utm_content === selectedContent)
-        );
-    }, [leadsInPeriod, selectedSource, selectedMedium, selectedContent]);
+    useEffect(() => {
+        if (!selectedLaunchId || filters.medium === 'all') { setOptions(prev => ({ ...prev, campaigns: [], contents: [], terms: [] })); return; }
+        setFilters(prev => ({ ...prev, campaign: 'all', content: 'all', term: 'all' }));
+        const fetchCampaigns = async () => {
+            const { data } = await supabase.rpc('get_utm_campaigns', { p_launch_id: selectedLaunchId, p_source: filters.source, p_medium: filters.medium });
+            // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
+            setOptions(prev => ({ ...prev, campaigns: data?.map((d: { utm_campaign: string }) => d.utm_campaign) || [], contents: [], terms: [] }));
+        };
+        fetchCampaigns();
+    }, [filters.medium, filters.source, selectedLaunchId, supabase]);
 
-    const kpis = useMemo(() => ({
-        totalGeralInscritos: rawLeads.length,
-        totalGeralCheckins: rawLeads.filter(l => l.check_in_at !== null).length,
-        periodoInscritos: filteredLeadsInPeriod.length,
-        periodoCheckins: filteredLeadsInPeriod.filter(l => l.check_in_at !== null).length,
-    }), [rawLeads, filteredLeadsInPeriod]);
+    useEffect(() => {
+        if (!selectedLaunchId || filters.campaign === 'all') { setOptions(prev => ({ ...prev, contents: [], terms: [] })); return; }
+        setFilters(prev => ({ ...prev, content: 'all', term: 'all' }));
+        const fetchContents = async () => {
+             const { data } = await supabase.rpc('get_utm_contents', { p_launch_id: selectedLaunchId, p_source: filters.source, p_medium: filters.medium, p_campaign: filters.campaign });
+             // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
+             setOptions(prev => ({ ...prev, contents: data?.map((d: { utm_content: string }) => d.utm_content) || [], terms: [] }));
+        };
+        fetchContents();
+    }, [filters.campaign, filters.medium, filters.source, selectedLaunchId, supabase]);
 
-    const fullLaunchChartData = useMemo((): ChartDataPoint[] => {
-        if (!rawLeads || rawLeads.length === 0) return [];
-        const dailyTotals: Record<string, { inscricoes: number; checkins: number }> = {};
-        rawLeads.forEach(item => {
-            if (item.created_at) {
-                const day = format(parseISO(item.created_at), 'yyyy-MM-dd');
-                if (!dailyTotals[day]) dailyTotals[day] = { inscricoes: 0, checkins: 0 };
-                dailyTotals[day].inscricoes++;
-                if (item.check_in_at) dailyTotals[day].checkins++;
+    useEffect(() => {
+        if (!selectedLaunchId || filters.content === 'all') { setOptions(prev => ({ ...prev, terms: [] })); return; }
+        setFilters(prev => ({ ...prev, term: 'all' }));
+        const fetchTerms = async () => {
+            const { data } = await supabase.rpc('get_utm_terms', { p_launch_id: selectedLaunchId, p_source: filters.source, p_medium: filters.medium, p_campaign: filters.campaign, p_content: filters.content });
+            // CORREÇÃO: Adicionada a tipagem para o parâmetro 'd'
+            setOptions(prev => ({ ...prev, terms: data?.map((d: { utm_term: string }) => d.utm_term) || [] }));
+        };
+        fetchTerms();
+    }, [filters.content, filters.campaign, filters.medium, filters.source, selectedLaunchId, supabase]);
+
+    const fetchData = useCallback(async () => {
+        if (!selectedLaunchId) return;
+        setLoadingData(true);
+        try {
+            const now = new Date();
+            let startDate: Date, endDate: Date = endOfDay(now);
+            switch (period) {
+                case 'Hoje': startDate = startOfDay(now); break;
+                case 'Ontem': startDate = startOfDay(subDays(now, 1)); endDate = endOfDay(subDays(now, 1)); break;
+                case '7 Dias': startDate = startOfDay(subDays(now, 6)); break;
+                case '14 Dias': startDate = startOfDay(subDays(now, 13)); break;
+                case '30 Dias': startDate = startOfDay(subDays(now, 29)); break;
+                case '45 Dias': startDate = startOfDay(subDays(now, 44)); break;
+                case 'Todos': startDate = new Date(2000, 0, 1); break;
             }
-        });
-        return Object.entries(dailyTotals).map(([day, totals]) => ({ name: format(parseISO(day), 'dd/MM', { locale: ptBR }), Inscrições: totals.inscricoes, 'Check-ins': totals.checkins, originalDate: parseISO(day) })).sort((a, b) => a.originalDate.getTime() - b.originalDate.getTime());
-    }, [rawLeads]);
+            const { data: result, error } = await supabase.rpc('get_evolution_dashboard_data', {
+                p_launch_id: selectedLaunchId, p_start_date: startDate.toISOString(), p_end_date: endDate.toISOString(),
+                p_utm_source: filters.source === 'all' ? null : filters.source,
+                p_utm_medium: filters.medium === 'all' ? null : filters.medium,
+                p_utm_campaign: filters.campaign === 'all' ? null : filters.campaign,
+                p_utm_content: filters.content === 'all' ? null : filters.content,
+                p_utm_term: filters.term === 'all' ? null : filters.term,
+            });
+            if (error) throw error;
+            setData(result);
+        } catch (err: any) { toast.error(`Erro ao carregar dados: ${err.message}`); } 
+        finally { setLoadingData(false); }
+    }, [selectedLaunchId, period, filters, supabase]);
 
-    // RESTAURADO: Memo para o gráfico de linha por hora
-    const periodHourlyChartData = useMemo((): ChartDataPoint[] => {
-        if (!filteredLeadsInPeriod || filteredLeadsInPeriod.length === 0) return [];
-        const hourlyTotals: Record<number, { inscricoes: number; checkins: number }> = {};
-        filteredLeadsInPeriod.forEach(item => {
-            if (item.created_at) {
-                const hour = parseISO(item.created_at).getHours();
-                if (!hourlyTotals[hour]) hourlyTotals[hour] = { inscricoes: 0, checkins: 0 };
-                hourlyTotals[hour].inscricoes++;
-                if (item.check_in_at) hourlyTotals[hour].checkins++;
-            }
-        });
-        return Array.from({ length: 24 }, (_, i) => ({ name: `${i.toString().padStart(2, '0')}:00`, Inscrições: hourlyTotals[i]?.inscricoes || 0, 'Check-ins': hourlyTotals[i]?.checkins || 0 }));
-    }, [filteredLeadsInPeriod]);
+    useEffect(() => { fetchData(); }, [fetchData]);
+    
+    const kpis = data?.kpis;
+    // CORREÇÃO: Verificação adicionada para garantir que 'kpis' não seja undefined
+    const taxaCheckinGeral = (kpis && kpis.total_geral_inscricoes > 0) ? ((kpis.total_geral_checkins / kpis.total_geral_inscricoes) * 100) : 0;
+    const taxaCheckinFiltrado = (kpis && kpis.total_filtrado_inscricoes > 0) ? ((kpis.total_filtrado_checkins / kpis.total_filtrado_inscricoes) * 100) : 0;
 
-    // RESTAURADO: Memo para a tabela detalhada
-    const groupedDataForTable = useMemo(() => {
-        return filteredLeadsInPeriod.reduce((acc: GroupedDataForTable, item) => {
-            if (!item.created_at) return acc;
-            const utm = item.utm_content || 'Sem UTM';
-            const day = format(parseISO(item.created_at), 'yyyy-MM-dd');
-            const hour = parseISO(item.created_at).getHours();
-            if (!acc[utm]) acc[utm] = {};
-            if (!acc[utm][day]) acc[utm][day] = [];
-            const hourEntry = acc[utm][day].find(h => h.hour === hour);
-            if (hourEntry) {
-                hourEntry.inscricoes++;
-                if (item.check_in_at) hourEntry.checkins++;
-            } else {
-                acc[utm][day].push({ hour, inscricoes: 1, checkins: item.check_in_at ? 1 : 0 });
-            }
-            return acc;
-        }, {});
-    }, [filteredLeadsInPeriod]);
-
+    const handleFilterChange = (level: keyof typeof filters, value: string) => setFilters(prev => ({ ...prev, [level]: value }));
+    
     return (
         <div className="p-4 md:p-6 space-y-6 bg-slate-50 min-h-screen">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h1 className="text-2xl md:text-3xl font-bold text-slate-800">Evolução de Canal</h1>
                 <div className="bg-white p-2 rounded-lg shadow-md w-full md:w-auto">
-                    <select value={selectedLaunchId || ''} onChange={(e) => { setSelectedLaunchId(e.target.value); setPeriod('Hoje'); }} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent" disabled={isLoading.launches}>
+                    <select value={selectedLaunchId || ''} onChange={(e) => setSelectedLaunchId(e.target.value)} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent" disabled={loadingLaunches}>
                         {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                     </select>
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard title="Total Inscrições (Geral)" value={kpis.totalGeralInscritos} description="Total do Lançamento" />
-                <KpiCard title="Total Check-ins (Geral)" value={kpis.totalGeralCheckins} description="Total do Lançamento" />
-                <KpiCard title="Inscrições no Período" value={kpis.periodoInscritos} description={`Filtro: ${period}`} />
-                <KpiCard title="Check-ins no Período" value={kpis.periodoCheckins} description={`Filtro: ${period}`} />
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="flex items-center gap-2 mb-4">
-                    <FaFilter className="text-blue-600"/>
-                    <h2 className="text-lg font-semibold text-slate-700">Filtros</h2>
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
+                    <h3 className="font-bold text-center text-slate-600">Totais do Lançamento</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <KpiCard title="Inscrições" value={(kpis?.total_geral_inscricoes ?? 0).toLocaleString('pt-BR')} subTitle="Total no lançamento" icon={FaGlobe}/>
+                        <KpiCard title="Check-ins" value={(kpis?.total_geral_checkins ?? 0).toLocaleString('pt-BR')} subTitle="Total no lançamento" icon={FaBullseye}/>
+                        <KpiCard title="Taxa Check-in" value={`${taxaCheckinGeral.toFixed(1)}%`} subTitle="Inscrições x Check-ins" icon={FaPercent}/>
+                    </div>
                 </div>
-                <div className="flex flex-col gap-4">
+                <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
+                    <h3 className="font-bold text-center text-slate-600">Totais do Filtro</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <KpiCard title="Inscrições" value={(kpis?.total_filtrado_inscricoes ?? 0).toLocaleString('pt-BR')} subTitle="Resultado do filtro" icon={FaUsers}/>
+                        <KpiCard title="Check-ins" value={(kpis?.total_filtrado_checkins ?? 0).toLocaleString('pt-BR')} subTitle="Resultado do filtro" icon={FaUserCheck}/>
+                        <KpiCard title="Taxa Check-in" value={`${taxaCheckinFiltrado.toFixed(1)}%`} subTitle="Filtro x Check-ins" icon={FaPercent}/>
+                    </div>
+                </div>
+            </section>
+            
+            <div className="bg-white p-6 rounded-lg shadow-md space-y-4">
+                <div className="flex items-center gap-2"><FaFilter className="text-blue-600"/><h2 className="text-lg font-semibold text-slate-700">Filtros</h2></div>
+                <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Período</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
                         <div className="flex flex-wrap items-center gap-2">
                             {(['Hoje', 'Ontem', '7 Dias', '14 Dias', '30 Dias', '45 Dias', 'Todos'] as Period[]).map(p => (
-                                <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-2 rounded-md text-sm font-semibold transition-colors ${period === p ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
-                                    {p}
-                                </button>
+                                <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-2 rounded-md text-sm font-semibold transition-colors ${period === p ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{p}</button>
                             ))}
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">UTM Source</label>
-                            <select value={selectedSource} onChange={e => { setSelectedSource(e.target.value); setSelectedMedium('Todos'); setSelectedContent('Todos'); }} className="w-full p-2 border border-gray-300 rounded-md">
-                                <option value="Todos">Todos</option>
-                                {utmOptions.sources.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">UTM Medium</label>
-                            <select value={selectedMedium} onChange={e => { setSelectedMedium(e.target.value); setSelectedContent('Todos'); }} className="w-full p-2 border border-gray-300 rounded-md">
-                                <option value="Todos">Todos</option>
-                                {utmOptions.mediums.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">UTM Content</label>
-                            <select value={selectedContent} onChange={e => setSelectedContent(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md">
-                                <option value="Todos">Todos</option>
-                                {utmOptions.contents.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full pt-4 border-t mt-4">
+                        {Object.keys(filters).map((key, index) => (
+                            <div key={key}>
+                                <label className="block text-sm font-medium text-slate-700 mb-1 capitalize">{`UTM ${key}`}</label>
+                                <select 
+                                    value={filters[key as keyof typeof filters]} 
+                                    onChange={e => handleFilterChange(key as keyof typeof filters, e.target.value)} 
+                                    className="w-full p-2 text-base border-gray-300 rounded-md" 
+                                    disabled={loadingData || (index > 0 && filters[(Object.keys(filters)[index-1]) as keyof typeof filters] === 'all')}>
+                                    <option value="all">Todos</option>
+                                    {/* CORREÇÃO: Removido o tipo explícito 'any' */}
+                                    {options[`${key}s` as keyof typeof options]?.map(o => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
 
-            {isLoading.data ? (
-                <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div>
-            ) : (
+            {loadingData ? <div className="text-center py-10"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div> : (
                 <div className="space-y-6">
-                    {/* RESTAURADO: Gráficos e Tabelas */}
-                    <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-lg font-semibold text-gray-700 mb-4">Visão Geral do Lançamento (por Dia)</h3><div style={{height: '400px'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={fullLaunchChartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Bar dataKey="Inscrições" fill="#4e79a7" /><Bar dataKey="Check-ins" fill="#59a14f" /></BarChart></ResponsiveContainer></div></div>
-                    <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-lg font-semibold text-gray-700 mb-4">Evolução no Período por Hora ({period})</h3><div style={{height: '400px'}}><ResponsiveContainer width="100%" height="100%"><LineChart data={periodHourlyChartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Line type="monotone" dataKey="Inscrições" stroke="#4e79a7" strokeWidth={2} /><Line type="monotone" dataKey="Check-ins" stroke="#59a14f" strokeWidth={2} /></LineChart></ResponsiveContainer></div></div>
-                    <div className="bg-white p-4 rounded-lg shadow overflow-x-auto"><h3 className="text-lg font-semibold text-gray-700 mb-4">Detalhes por Dia e Hora</h3>{filteredLeadsInPeriod.length === 0 ? (<p className="text-center text-gray-500 py-4">Nenhum dado encontrado para o filtro selecionado.</p>) : (<div className="space-y-4">{Object.entries(groupedDataForTable).map(([utm, days]) => {const utmTotal = Object.values(days).flat().reduce((acc, curr) => ({inscricoes: acc.inscricoes + curr.inscricoes, checkins: acc.checkins + curr.checkins}), {inscricoes: 0, checkins: 0});return (<div key={utm} className="border rounded-lg"><h4 className="flex justify-between items-center font-bold bg-gray-200 p-2 text-slate-800 rounded-t-lg"><span>{utm}</span><span className="font-normal text-sm">Total: <strong>{utmTotal.inscricoes}</strong> Inscrições / <strong>{utmTotal.checkins}</strong> Check-ins</span></h4><table className="min-w-full"><tbody>{Object.entries(days).sort(([dayA], [dayB]) => new Date(dayB).getTime() - new Date(dayA).getTime()).map(([day, hours]) => {const dailyTotal = hours.reduce((acc, curr) => ({inscricoes: acc.inscricoes + curr.inscricoes, checkins: acc.checkins + curr.checkins}), {inscricoes: 0, checkins: 0});const key = `${utm}-${day}`;const isExpanded = expandedRows.has(key);return (<React.Fragment key={key}><tr onClick={() => toggleRow(key)} className="cursor-pointer hover:bg-gray-50 border-t"><td className="px-4 py-3 font-medium flex items-center gap-2 w-1/3"><FaChevronDown className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} size={12} />{format(parseISO(day), 'dd/MM/yyyy', { locale: ptBR })}</td><td className="px-4 py-3 text-center w-1/3">{dailyTotal.inscricoes}</td><td className="px-4 py-3 text-center w-1/3">{dailyTotal.checkins}</td></tr>{isExpanded && (<tr><td colSpan={3} className="p-0"><div className="pl-10 pr-4 py-2 bg-gray-50"><table className="min-w-full text-sm"><thead><tr className="bg-gray-100"><th className="p-2 text-left font-medium text-gray-600 w-1/3">Hora</th><th className="p-2 text-center font-medium text-gray-600 w-1/3">Inscrições</th><th className="p-2 text-center font-medium text-gray-600 w-1/3">Check-ins</th></tr></thead><tbody className="divide-y divide-gray-200">{hours.sort((a,b) => b.hour - a.hour).map((item, index) => (<tr key={index}><td className="p-2">{`${item.hour.toString().padStart(2, '0')}:00`}</td><td className="p-2 text-center">{item.inscricoes}</td><td className="p-2 text-center">{item.checkins}</td></tr>))}</tbody></table></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>);})}</div>)}</div>
+                    <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-lg font-semibold text-gray-700 mb-4">Visão Geral do Lançamento (por Dia)</h3><div style={{height: '400px'}}><ResponsiveContainer width="100%" height="100%"><BarChart data={data?.overview_chart_data || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Bar dataKey="Inscrições" fill="#4e79a7" /><Bar dataKey="Check-ins" fill="#59a14f" /></BarChart></ResponsiveContainer></div></div>
+                    <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-lg font-semibold text-gray-700 mb-4">Evolução no Período por Hora ({period})</h3><div style={{height: '400px'}}><ResponsiveContainer width="100%" height="100%"><LineChart data={data?.period_chart_data || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Line type="monotone" dataKey="Inscrições" stroke="#4e79a7" strokeWidth={2} /><Line type="monotone" dataKey="Check-ins" stroke="#59a14f" strokeWidth={2} /></LineChart></ResponsiveContainer></div></div>
+                    <div className="bg-white p-4 rounded-lg shadow overflow-x-auto"><h3 className="text-lg font-semibold text-gray-700 mb-4">Detalhes por Dia e Hora</h3>
+                        <table className="min-w-full">
+                            <thead className="bg-slate-100"><tr><th className="w-8"></th><th className="p-2 text-left">Data</th><th className="p-2 text-left">Inscrições</th><th className="p-2 text-left">Check-ins</th><th className="p-2 text-left">Taxa de Check-in</th></tr></thead>
+                            <tbody>
+                            {(data?.table_data ?? []).map(row => {
+                                const dayKey = format(parseISO(row.dia), 'yyyy-MM-dd');
+                                const isExpanded = expandedRows.has(dayKey);
+                                const dailyCheckinRate = row.total_inscricoes > 0 ? (row.total_checkins / row.total_inscricoes) * 100 : 0;
+                                return (<React.Fragment key={dayKey}><tr onClick={() => toggleRow(dayKey)} className="cursor-pointer hover:bg-slate-50 border-t">
+                                    <td className="p-3 text-slate-500"><FaChevronDown className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} size={12} /></td>
+                                    <td className="p-3 font-medium">{format(parseISO(row.dia), 'dd/MM/yyyy', {locale: ptBR})}</td>
+                                    <td className="p-3">{row.total_inscricoes.toLocaleString('pt-BR')}</td>
+                                    <td className="p-3">{row.total_checkins.toLocaleString('pt-BR')}</td>
+                                    <td className="p-3 font-semibold text-blue-600">{dailyCheckinRate.toFixed(1)}%</td>
+                                </tr>
+                                {isExpanded && <tr><td colSpan={5} className="p-0 bg-slate-50"><div className="pl-10 pr-4 py-2"><table className="min-w-full text-sm">
+                                    <thead><tr className="bg-slate-200"><th className="p-2 text-left">Hora</th><th className="p-2 text-left">Inscrições</th><th className="p-2 text-left">Check-ins</th></tr></thead>
+                                    <tbody>{row.hourly_details?.map(item => (<tr key={item.hora}><td className="p-2">{`${item.hora.toString().padStart(2, '0')}:00`}</td><td className="p-2">{item.inscricoes}</td><td className="p-2">{item.checkins}</td></tr>))}</tbody>
+                                </table></div></td></tr>}
+                                </React.Fragment>)
+                            })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
         </div>

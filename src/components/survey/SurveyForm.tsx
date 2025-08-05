@@ -1,46 +1,38 @@
+// src/components/survey/SurveyForm.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
-// ================== INÍCIO DAS CORREÇÕES ==================
-// 1. Importamos o tipo 'Tables' para ter acesso aos tipos do banco de dados
 import type { Tables } from '@/types/database';
 
-// 2. Definimos os tipos com base na estrutura real do banco de dados
-type Question = Tables<'perguntas'>;
+// Tipos de Dados
+type Question = Pick<Tables<'perguntas'>, 'id' | 'texto'>;
 type SurveyData = Tables<'pesquisas'>;
 
-// 3. As props do formulário agora usam o tipo correto e esperam a propriedade adicional
+// As props do formulário agora esperam a lista de perguntas disponíveis
 type SurveyFormProps = { 
-    initialData?: SurveyData & { associated_question_ids: string[] } | null 
+    initialData?: SurveyData & { associated_question_ids: string[] } | null;
+    availableQuestions: Question[]; 
 };
-// ================== FIM DAS CORREÇÕES ====================
 
-export default function SurveyForm({ initialData }: SurveyFormProps) {
+export default function SurveyForm({ initialData, availableQuestions }: SurveyFormProps) {
     const supabase = createClient();
     const router = useRouter();
     
     const [survey, setSurvey] = useState({
-        // 4. Lidamos com possíveis valores nulos dos dados iniciais
         nome: initialData?.nome || '',
         categoria_pesquisa: initialData?.categoria_pesquisa || '',
         status: initialData?.status || 'Ativo',
     });
-    const [allQuestions, setAllQuestions] = useState<Pick<Question, 'id' | 'texto'>[]>([]);
+    
     const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(
         new Set(initialData?.associated_question_ids || [])
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(() => {
-        const fetchQuestions = async () => {
-            const { data } = await supabase.from('perguntas').select('id, texto').order('created_at', { ascending: false });
-            if (data) setAllQuestions(data);
-        };
-        fetchQuestions();
-    }, [supabase]);
+    // O useEffect que buscava as perguntas foi removido.
 
     const handleCheckboxChange = (questionId: string) => {
         const newSelection = new Set(selectedQuestions);
@@ -138,9 +130,9 @@ export default function SurveyForm({ initialData }: SurveyFormProps) {
                         </div>
                     </div>
                     <div className="pt-4 border-t">
-                        <label className="block text-sm font-medium">Perguntas Associadas</label>
+                        <label className="block text-sm font-medium">Perguntas Associadas (Apenas de Score)</label>
                         <div className="mt-2 space-y-2 max-h-60 overflow-y-auto border p-4 rounded-md">
-                            {allQuestions.length > 0 ? allQuestions.map(q => (
+                            {availableQuestions.length > 0 ? availableQuestions.map(q => (
                                 <div key={q.id} className="flex items-center">
                                     <input 
                                         id={`q-${q.id}`}
@@ -151,7 +143,7 @@ export default function SurveyForm({ initialData }: SurveyFormProps) {
                                     />
                                     <label htmlFor={`q-${q.id}`} className="ml-3 text-sm text-slate-700">{q.texto}</label>
                                 </div>
-                            )) : <p className="text-sm text-slate-500">Nenhuma pergunta cadastrada.</p>}
+                            )) : <p className="text-sm text-slate-500">Nenhuma pergunta de score cadastrada.</p>}
                         </div>
                     </div>
                     <div className="flex flex-col sm:flex-row justify-end pt-4 gap-4">

@@ -181,7 +181,7 @@ export default function DetalhamentoCanaisPage() {
     }, [filteredLeads, selectedLaunch, trafficType, launches]);
 
     const trafficTypeLabels: Record<TrafficType, string> = {
-        paid: 'Pago',
+        paid: 'Tráfego Pago',
         organic: 'Orgânico',
         untracked: 'Não Traqueadas'
     };
@@ -214,7 +214,7 @@ export default function DetalhamentoCanaisPage() {
                                 </div>
                             </div>
                             <div className="bg-slate-200 p-4 rounded-lg space-y-3">
-                                <h3 className="font-bold text-center text-slate-600">Performance do Tráfego {trafficTypeLabels[trafficType]}</h3>
+                                <h3 className="font-bold text-center text-slate-600">Performance do {trafficTypeLabels[trafficType]}</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <KpiCard title="Inscrições" value={kpis.leadsSelecao.toLocaleString('pt-BR')} icon={FaUsers}/>
                                     <KpiCard title="Check-ins" value={kpis.checkinsSelecao.toLocaleString('pt-BR')} icon={FaUserCheck}/>
@@ -226,7 +226,7 @@ export default function DetalhamentoCanaisPage() {
                         <div className="bg-white p-4 rounded-lg shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div className="flex items-center gap-2 rounded-lg p-1 bg-slate-200">
                                 <button onClick={() => setTrafficType('paid')} disabled={isLoading} className={`px-4 py-2 text-base font-semibold rounded-md transition-colors ${trafficType === 'paid' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Tráfego Pago</button>
-                                <button onClick={() => setTrafficType('organic')} disabled={isLoading} className={`px-4 py-2 text-base font-semibold rounded-md transition-colors ${trafficType === 'organic' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Tráfego Orgânico</button>
+                                <button onClick={() => setTrafficType('organic')} disabled={isLoading} className={`px-4 py-2 text-base font-semibold rounded-md transition-colors ${trafficType === 'organic' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-300'}`}> Orgânico</button>
                                 <button onClick={() => setTrafficType('untracked')} disabled={isLoading} className={`px-4 py-2 text-base font-semibold rounded-md transition-colors ${trafficType === 'untracked' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-300'}`}>Não Traqueadas</button>
                             </div>
                             <button onClick={handleExport} disabled={isLoading || filteredLeads.length === 0} className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 text-sm inline-flex items-center gap-2 disabled:opacity-50">

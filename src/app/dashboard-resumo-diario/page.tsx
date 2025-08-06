@@ -139,7 +139,7 @@ export default function ResumoDiarioPage() {
                                     {/* Linha de cima com TOTAIS */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <KpiCard title="TRÁFEGO PAGO" value={kpis.trafegoPago} description="Valores Absolutos" />
-                                        <KpiCard title="TRÁFEGO ORGÂNICO" value={kpis.trafegoOrganico} description="Valores Absolutos" />
+                                        <KpiCard title="ORGÂNICO" value={kpis.trafegoOrganico} description="Valores Absolutos" />
                                         <KpiCard title="NÃO TRAQUEADO" value={kpis.trafegoNaoTraqueado} description="Valores Absolutos" />
                                     </div>
                                     {/* Linha de baixo com a BARRA DE PERCENTAGEM */}
@@ -172,7 +172,7 @@ export default function ResumoDiarioPage() {
                                                     <th className="px-4 py-3 text-right">LEADS</th>
                                                     <th className="px-4 py-3 text-right">CHECK-IN</th>
                                                     <th className="px-4 py-3 text-right">TRF PAGO</th>
-                                                    <th className="px-4 py-3 text-right">TRF ORGÂNICO</th>
+                                                    <th className="px-4 py-3 text-right">ORGÂNICO</th>
                                                     <th className="px-4 py-3 text-right">NÃO TRAQ.</th>
                                                 </tr>
                                             </thead>

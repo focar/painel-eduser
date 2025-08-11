@@ -127,7 +127,7 @@ export default function AnaliseRespostasPorScorePage() {
                     <div className="grid grid-cols-3 gap-4">
                         <KpiCard title="Total Compradores" value={(kpis?.total_buyers ?? 0).toLocaleString('pt-BR')} icon={ShoppingCart} />
                         <KpiCard title="Check-ins (Compradores)" value={(kpis?.total_buyer_checkins ?? 0).toLocaleString('pt-BR')} icon={UserCheck} />
-                        <KpiCard title="Taxa de Conversão" value={`${taxaConversaoCompradores.toFixed(1)}%`} icon={Percent} />
+                        <KpiCard title="Taxa de Respostas" value={`${taxaConversaoCompradores.toFixed(1)}%`} icon={Percent} />
                     </div>
                 </button>
             </section>

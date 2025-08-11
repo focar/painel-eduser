@@ -1,149 +1,171 @@
 // src/components/question/QuestionForm.tsx
+// VERSÃO FINAL: Agora funciona para CRIAR e EDITAR.
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, FormEvent } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import toast from 'react-hot-toast';
-import { FaPlus, FaTrash } from 'react-icons/fa';
+import { FaSave, FaSpinner, FaTrash } from 'react-icons/fa';
+import { Question } from '@/types/question'; 
+import { useRouter } from 'next/navigation';
 
-// Tipos de Dados
-export type Option = { texto: string; peso: number; };
-
-// CORREÇÃO: O tipo foi definido explicitamente para corresponder à estrutura de dados do formulário,
-// incluindo 'tipo' e 'classe' como strings.
-type QuestionFormData = {
-  id: string;
-  created_at: string;
-  modified_at: string;
-  texto: string;
-  tipo: string;
-  classe: string;
-  opcoes: Option[];
+// A prop 'initialData' agora é OPCIONAL (note o '?').
+type QuestionFormProps = {
+  initialData?: Question;
 };
 
-type QuestionFormProps = { initialData?: QuestionFormData; };
+// Define um estado inicial em branco para quando estamos criando uma nova pergunta.
+const blankQuestion: Question = {
+  texto: '',
+  tipo: 'multipla_escolha',
+  classe: 'Score',
+  opcoes: [{ texto: '', peso: 0 }],
+  created_at: new Date().toISOString(),
+  modified_at: new Date().toISOString(),
+};
 
 export default function QuestionForm({ initialData }: QuestionFormProps) {
   const supabase = createClient();
   const router = useRouter();
+  
+  const [formData, setFormData] = useState<Question>(initialData || blankQuestion);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const [formData, setFormData] = useState<QuestionFormData>(
-    initialData || {
-      id: '', 
-      texto: '', 
-      tipo: 'Múltipla Escolha', 
-      classe: 'score', 
-      opcoes: [{ texto: '', peso: 0 }], 
-      created_at: new Date().toISOString(),
-      modified_at: new Date().toISOString(),
+  const isEditing = !!initialData; // Define se estamos no modo de edição.
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData);
     }
-  );
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  }, [initialData]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { id, value } = e.target;
-    setFormData(prev => ({ ...prev, [id]: value }));
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleOptionChange = (index: number, field: keyof Option, value: string | number) => {
+  // --- CORREÇÃO ESTÁ AQUI ---
+  // A função foi reescrita para ser mais explícita para o TypeScript.
+  const handleOptionChange = (index: number, field: 'texto' | 'peso', value: string) => {
+    // Criamos uma cópia do array de opções para não modificar o estado diretamente.
     const newOptions = [...formData.opcoes];
-    const finalValue = field === 'peso' ? Number(value) || 0 : value;
-    newOptions[index] = { ...newOptions[index], [field]: finalValue };
+    
+    // Verificamos qual campo está a ser alterado.
+    if (field === 'peso') {
+      // Se for 'peso', convertemos o valor para número.
+      newOptions[index].peso = parseInt(value, 10) || 0;
+    } else {
+      // Se for 'texto', simplesmente atribuímos o valor.
+      newOptions[index].texto = value;
+    }
+    
+    // Atualizamos o estado com o novo array de opções.
     setFormData(prev => ({ ...prev, opcoes: newOptions }));
   };
+  
+  const addOption = () => {
+    setFormData(prev => ({ ...prev, opcoes: [...prev.opcoes, { texto: '', peso: 0 }]}));
+  };
 
-  const addOption = () => { setFormData(prev => ({ ...prev, opcoes: [...prev.opcoes, { texto: '', peso: 0 }] })); };
   const removeOption = (index: number) => {
+    if (formData.opcoes.length <= 1) return;
     const newOptions = formData.opcoes.filter((_, i) => i !== index);
     setFormData(prev => ({ ...prev, opcoes: newOptions }));
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!formData.texto || !formData.tipo || !formData.classe) {
-      toast.error("Texto, Tipo e Classe são obrigatórios.");
-      return;
+    setIsSaving(true);
+    setMessage(null);
+
+    let error = null;
+
+    if (isEditing) {
+      // MODO EDITAR: Usa o método update()
+      const { error: updateError } = await supabase
+        .from('perguntas')
+        .update({
+          texto: formData.texto,
+          tipo: formData.tipo,
+          classe: formData.classe,
+          opcoes: formData.opcoes,
+          modified_at: new Date().toISOString(),
+        })
+        .eq('id', formData.id!);
+      error = updateError;
+    } else {
+      // MODO CRIAR: Usa o método insert()
+      const { error: insertError } = await supabase
+        .from('perguntas')
+        .insert([
+          {
+            texto: formData.texto,
+            tipo: formData.tipo,
+            classe: formData.classe,
+            opcoes: formData.opcoes,
+          }
+        ]);
+      error = insertError;
     }
-    setIsSubmitting(true);
-    try {
-      const questionToSave = { 
-        ...formData, 
-        modified_at: new Date().toISOString() 
-      };
 
-      // Se não for um registro existente, o Supabase cuidará do ID.
-      if (!initialData) {
-        delete (questionToSave as any).id;
-      }
-      
-      const { error } = await supabase.from('perguntas').upsert(questionToSave);
-      if (error) throw error;
+    setIsSaving(false);
 
-      toast.success('Pergunta salva com sucesso!');
-      router.push('/perguntas');
-      router.refresh();
-    } catch (err: any) {
-      console.error("Erro ao salvar pergunta:", err);
-      toast.error(`Erro: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
+    if (error) {
+      setMessage({ type: 'error', text: `Erro ao salvar: ${error.message}` });
+    } else {
+      setMessage({ type: 'success', text: `Pergunta ${isEditing ? 'atualizada' : 'criada'} com sucesso!` });
+      // router.push('/perguntas'); 
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
-      <div className="bg-white p-6 md:p-8 rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-slate-800 mb-6">{initialData?.id ? 'Editar Pergunta' : 'Criar Nova Pergunta'}</h1>
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto">
+      <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-6">
+        {isEditing ? 'Editar Pergunta' : 'Criar Nova Pergunta'}
+      </h1>
+      <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-lg shadow-lg space-y-8">
+        <div>
+          <label htmlFor="texto" className="block text-base font-medium text-slate-700 mb-1">Texto da Pergunta</label>
+          <textarea id="texto" name="texto" value={formData.texto} onChange={handleChange} rows={4} required className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label htmlFor="texto" className="block text-sm font-medium text-slate-700">Texto da Pergunta</label>
-            <input 
-              type="text" id="texto" value={formData.texto} onChange={handleChange} required 
-              autoComplete="off"
-              className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" 
-            />
+            <label htmlFor="tipo" className="block text-base font-medium text-slate-700 mb-1">Tipo</label>
+            <select id="tipo" name="tipo" value={formData.tipo} onChange={handleChange} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+              <option value="multipla_escolha">Múltipla Escolha</option>
+              <option value="texto_livre">Texto Livre</option>
+            </select>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="tipo" className="block text-sm font-medium">Tipo (Formato)</label>
-              <select id="tipo" value={formData.tipo ?? ''} onChange={handleChange} required className="mt-1 w-full border-slate-300 rounded-md">
-                <option value="Múltipla Escolha">Múltipla Escolha</option>
-                <option value="Texto">Texto</option>
-                <option value="Número">Número</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="classe" className="block text-sm font-medium">Classe (Uso)</label>
-              <select id="classe" value={formData.classe ?? 'score'} onChange={handleChange} required className="mt-1 w-full border-slate-300 rounded-md">
-                <option value="score">Score</option>
-                <option value="perfil">Perfil</option>
-              </select>
-            </div>
+          <div>
+            <label htmlFor="classe" className="block text-base font-medium text-slate-700 mb-1">Classe</label>
+            <select id="classe" name="classe" value={formData.classe} onChange={handleChange} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+              <option value="Score">Score</option>
+              <option value="Perfil">Perfil</option>
+              <option value="Nenhum">Nenhum</option>
+            </select>
           </div>
-          <div className="pt-4 border-t">
-            <label className="block text-sm font-medium">Opções de Resposta</label>
-            <div className="mt-2 space-y-3">
-              {formData.opcoes.map((option, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <input type="text" placeholder="Texto da opção" value={option.texto} onChange={(e) => handleOptionChange(index, 'texto', e.target.value)} className="flex-grow px-3 py-2 border border-slate-300 rounded-md" />
-                  <input type="number" placeholder="Peso" value={option.peso} onChange={(e) => handleOptionChange(index, 'peso', e.target.value)} className="w-24 px-3 py-2 border border-slate-300 rounded-md" />
-                  <button type="button" onClick={() => removeOption(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-full"><FaTrash /></button>
-                </div>
-              ))}
-            </div>
-            <button type="button" onClick={addOption} className="mt-3 inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-slate-600 hover:bg-slate-700">
-              <FaPlus className="mr-2" /> Adicionar Opção
-            </button>
+        </div>
+        {formData.tipo === 'multipla_escolha' && (
+          <div className="space-y-4 border-t pt-6">
+            <h3 className="text-lg font-medium text-slate-700">Opções de Resposta</h3>
+            {formData.opcoes.map((option, index) => (
+              <div key={index} className="flex items-center gap-2 flex-wrap">
+                <input type="text" placeholder="Texto da opção" value={option.texto} onChange={(e) => handleOptionChange(index, 'texto', e.target.value)} className="flex-grow px-3 py-2 border border-slate-300 rounded-md" />
+                <input type="number" placeholder="Peso" value={option.peso} onChange={(e) => handleOptionChange(index, 'peso', e.target.value)} className="w-24 px-3 py-2 border border-slate-300 rounded-md" />
+                <button type="button" onClick={() => removeOption(index)} disabled={formData.opcoes.length <= 1} className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"><FaTrash /></button>
+              </div>
+            ))}
+            <button type="button" onClick={addOption} className="text-sm font-medium text-blue-600 hover:text-blue-800 mt-2">+ Adicionar Opção</button>
           </div>
-          <div className="flex flex-col sm:flex-row justify-end pt-4 gap-4">
-            <button type="button" onClick={() => router.push('/perguntas')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300">Cancelar</button>
-            <button type="submit" disabled={isSubmitting} className="px-6 py-2 bg-slate-800 text-white rounded-lg font-semibold disabled:opacity-50">
-              {isSubmitting ? 'Salvando...' : 'Salvar'}
-            </button>
-          </div>
-        </form>
-      </div>
+        )}
+        <div className="flex items-center justify-end gap-4 border-t pt-6">
+          {message && (<p className={`text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>{message.text}</p>)}
+          <button type="submit" disabled={isSaving} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait">
+            {isSaving ? <FaSpinner className="animate-spin mr-2" /> : <FaSave className="mr-2" />}
+            {isSaving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

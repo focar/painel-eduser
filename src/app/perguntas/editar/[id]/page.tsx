@@ -1,80 +1,37 @@
 // src/app/perguntas/editar/[id]/page.tsx
-'use client';
+// Este é um Componente de SERVIDOR. A sua única responsabilidade
+// é buscar os dados da pergunta e entregar para o componente de formulário.
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import QuestionForm from '@/components/question/QuestionForm';
-import { FaSpinner } from 'react-icons/fa';
+import QuestionForm from '@/components/question/QuestionForm'; // Importa o formulário
+import { Question } from '@/types/question'; // Importa o tipo
 
-// O tipo precisa corresponder exatamente ao que o QuestionForm espera
-type QuestionFormData = {
-  id: string;
-  created_at: string;
-  modified_at: string;
-  texto: string;
-  tipo: string;
-  classe: string;
-  opcoes: { texto: string; peso: number; }[];
-};
+// A página de edição é um componente assíncrono
+export default async function EditarPerguntaPage({ params }: { params: { id: string } }) {
+  const supabase = createServerComponentClient({ cookies });
 
+  // Busca os dados da pergunta específica usando o ID da URL.
+  const { data, error } = await supabase
+    .from('perguntas')
+    .select('id, texto, tipo, classe, opcoes, created_at, modified_at')
+    .eq('id', params.id)
+    .single(); // .single() busca um único resultado
 
-export default function EditarPerguntaPage({ params }: { params: { id: string } }) {
-    const supabase = createClient();
-    
-    const [initialData, setInitialData] = useState<QuestionFormData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  // Se a pergunta não for encontrada, exibe a página de erro 404 do Next.js.
+  if (error || !data) {
+    console.error('Erro ao buscar pergunta ou não encontrada:', error?.message);
+    notFound();
+  }
 
-    useEffect(() => {
-        const fetchInitialData = async (id: string) => {
-            try {
-                // CORREÇÃO: O campo 'classe' foi adicionado à consulta select abaixo.
-                // Isso garante que os dados buscados do banco de dados correspondam
-                // ao formato esperado pelo componente QuestionForm.
-                const { data, error } = await supabase
-                    .from('perguntas')
-                    .select('id, texto, tipo, classe, opcoes, created_at, modified_at')
-                    .eq('id', id)
-                    .single();
+  // Prepara os dados iniciais, garantindo que 'opcoes' seja sempre um array.
+  const initialData: Question = {
+    ...data,
+    opcoes: data.opcoes || [{ texto: '', peso: 0 }],
+  };
 
-                if (error || !data) {
-                    throw new Error("Pergunta não encontrada ou erro ao buscar.");
-                }
-                
-                // Garantir que os dados correspondem ao tipo esperado pelo formulário
-                setInitialData({
-                    ...data,
-                    // Garante que 'opcoes' seja sempre um array, mesmo que venha nulo do banco.
-                    opcoes: data.opcoes || [{ texto: '', peso: 0 }] 
-                });
-
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchInitialData(params.id);
-    }, [params.id, supabase]);
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-screen">
-                <FaSpinner className="animate-spin text-4xl text-blue-600" />
-            </div>
-        );
-    }
-
-    if (error) {
-        return <div className="text-center p-8 text-red-500">{error}</div>;
-    }
-
-    if (!initialData) {
-        notFound();
-    }
-
-    // Passa os dados completos para o formulário, incluindo a 'classe'.
-    return <QuestionForm initialData={initialData} />;
+  // Renderiza o formulário (QuestionForm) e passa os dados para ele.
+  // Esta é a linha que causava o erro. Agora vai funcionar.
+  return <QuestionForm initialData={initialData} />;
 }

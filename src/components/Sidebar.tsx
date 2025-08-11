@@ -26,6 +26,8 @@ const menuItems = [
             { name: "Campanhas e Criativos", href: "/dashboard-campanhas-criativos" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Análise de Respostas", href: "/dashboard-analise-resposta" },
+            { name: "Análise de MQL", href: "/dashboard-analise-resposta-perfil" },
+            { name: "Traqueamento", href: "/dashboard-traqueamento" },
         ],
     },
     {

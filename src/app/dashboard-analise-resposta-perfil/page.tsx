@@ -7,21 +7,11 @@ import { Launch } from "@/lib/types";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
 import toast, { Toaster } from 'react-hot-toast';
 import { Users, UserCheck, Percent } from "lucide-react";
-import Papa from 'papaparse';
 
 // --- Tipos de Dados ---
-type AnswerProfile = {
-    answer_text: string;
-    lead_count: number;
-};
+type AnswerProfile = { answer_text: string; lead_count: number; };
+type MqlQuestion = { question_id: string; question_text: string; answers: AnswerProfile[]; };
 
-type MqlQuestion = {
-    question_id: string;
-    question_text: string;
-    answers: AnswerProfile[];
-};
-
-// --- CONFIGURAÇÃO DAS NOVAS CATEGORIAS MQL ---
 const mqlCategories = [
     { key: 'a', letter: 'A', name: '(>= 20)', color: 'text-emerald-500', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-500' },
     { key: 'b', letter: 'B', name: '(14-19)', color: 'text-sky-500', bgColor: 'bg-sky-50', borderColor: 'border-sky-500' },
@@ -31,10 +21,7 @@ const mqlCategories = [
 
 type MqlCategoryKey = typeof mqlCategories[number]['key'];
 type MqlKpiData = { a: number, b: number, c: number, d: number };
-type GeneralKpiData = {
-    total_inscricoes: number;
-    total_checkins: number;
-};
+type GeneralKpiData = { total_inscricoes: number; total_checkins: number; };
 
 // --- Componentes ---
 const Spinner = () => ( <div className="flex justify-center items-center h-40"> <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /> </div> );
@@ -46,7 +33,7 @@ const AnswerBreakdownCard = ({ questionData }: { questionData: MqlQuestion }) =>
         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
             <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
             <ul className="space-y-3 flex-grow">
-                {questionData.answers.sort((a, b) => b.lead_count - a.lead_count).map((answer, index) => {
+                {questionData.answers.map((answer, index) => {
                     const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
                     return (
                         <li key={index}>
@@ -54,9 +41,7 @@ const AnswerBreakdownCard = ({ questionData }: { questionData: MqlQuestion }) =>
                                 <span className="text-slate-600">{answer.answer_text}</span>
                                 <span className="font-medium text-slate-700">{answer.lead_count.toLocaleString('pt-BR')} <span className="text-slate-400 ml-2">({percentage.toFixed(1)}%)</span></span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2.5">
-                                <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div>
-                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2.5"><div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div></div>
                         </li>
                     );
                 })}
@@ -104,24 +89,14 @@ export default function AnaliseMqlPage() {
                 supabase.rpc('get_mql_category_totals', { p_launch_id: launchId }),
                 supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: launchId })
             ]);
-
             const { data: mqlKpis, error: mqlKpiError } = mqlKpiResult;
             const { data: generalKpisData, error: generalKpiError } = generalKpiResult;
-
             if (mqlKpiError || generalKpiError) {
                 toast.error("Erro ao carregar os totais.");
                 console.error({ mqlKpiError, generalKpiError });
             } else {
-                if (Array.isArray(mqlKpis) && mqlKpis.length > 0) {
-                    setMqlKpiData(mqlKpis[0]);
-                } else {
-                    setMqlKpiData(null); 
-                }
-                if (Array.isArray(generalKpisData) && generalKpisData.length > 0) {
-                    setGeneralKpis(generalKpisData[0]);
-                } else {
-                    setGeneralKpis({ total_inscricoes: 0, total_checkins: 0 });
-                }
+                if (Array.isArray(mqlKpis) && mqlKpis.length > 0) setMqlKpiData(mqlKpis[0]); else setMqlKpiData(null);
+                if (Array.isArray(generalKpisData) && generalKpisData.length > 0) setGeneralKpis(generalKpisData[0]); else setGeneralKpis({ total_inscricoes: 0, total_checkins: 0 });
             }
         } catch (error) {
             toast.error("Ocorreu uma falha ao buscar os dados de KPI.");
@@ -134,10 +109,7 @@ export default function AnaliseMqlPage() {
         if (!launchId) return;
         setLoadingBreakdown(true);
         try {
-            const { data: result, error } = await supabase.rpc('get_mql_answers_by_category', { 
-                p_launch_id: launchId,
-                p_mql_category: mqlCategory
-            });
+            const { data: result, error } = await supabase.rpc('get_mql_answers_by_category', { p_launch_id: launchId, p_mql_category: mqlCategory });
             if (error) {
                 toast.error("Erro ao carregar dados de análise.");
                 console.error(error);
@@ -161,11 +133,15 @@ export default function AnaliseMqlPage() {
         setIsExporting(true);
         const exportToast = toast.loading("A preparar a exportação...");
         try {
-            const { data: exportData, error } = await supabase.rpc('export_leads_by_mql_category', { p_launch_id: selectedLaunch, p_mql_category: selectedMql });
+            // --- ALTERAÇÃO AQUI: Chamando a nova função unificada ---
+            const { data: csvText, error } = await supabase.rpc('exportar_perfil_csv', {
+                p_launch_id: selectedLaunch,
+                p_score_category: selectedMql,
+                p_score_type: 'mql' // Informa à função que queremos filtrar por MQL
+            });
             if (error) throw error;
-            if (!exportData || exportData.length === 0) { toast.success("Não há leads para exportar nesta categoria.", { id: exportToast }); return; }
-            const csv = Papa.unparse(exportData);
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            if (!csvText) { toast.success("Não há leads para exportar nesta categoria.", { id: exportToast }); return; }
+            const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
@@ -183,10 +159,7 @@ export default function AnaliseMqlPage() {
         }
     };
     
-    // CORRIGIDO: Fórmula da taxa de check-in
-    const taxaDeCheckin = generalKpis.total_inscricoes > 0 
-        ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' 
-        : '0.0%';
+    const taxaDeCheckin = generalKpis.total_inscricoes > 0 ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' : '0.0%';
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 min-h-screen space-y-6">
@@ -195,19 +168,12 @@ export default function AnaliseMqlPage() {
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de MQL por Respostas</h1>
                 <div className="flex items-center gap-4">
                     <div className="bg-white p-2 rounded-lg shadow-md">
-                        <select 
-                            value={selectedLaunch} 
-                            onChange={(e) => setSelectedLaunch(e.target.value)} 
-                            disabled={loadingKpis} 
-                            className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium text-base"
-                        >
+                        <select value={selectedLaunch} onChange={(e) => setSelectedLaunch(e.target.value)} disabled={loadingKpis} className="w-full px-3 py-2 border-none rounded-md focus:ring-0 bg-transparent text-slate-700 font-medium text-base">
                             {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                         </select>
                     </div>
-                    {/* Botão de cálculo foi movido para a página de ferramentas */}
                 </div>
             </header>
-
             <section className="space-y-6">
                 <div className="bg-slate-200 p-4 rounded-lg shadow-md">
                     <h3 className="font-bold text-center text-slate-600 mb-3">Totais do Lançamento</h3>
@@ -217,7 +183,6 @@ export default function AnaliseMqlPage() {
                         <KpiCard title="Taxa de Check-in" value={loadingKpis ? '...' : taxaDeCheckin} icon={Percent} />
                     </div>
                 </div>
-
                 <div className="bg-slate-200 p-4 rounded-lg shadow-md">
                     <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-grow grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -245,7 +210,6 @@ export default function AnaliseMqlPage() {
                     </div>
                 </div>
             </section>
-
             <main>
                 {loadingBreakdown ? <Spinner /> : (
                     breakdownData && breakdownData.length > 0 ? (

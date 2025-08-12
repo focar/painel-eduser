@@ -1,46 +1,57 @@
 // src/components/charts/OrganicTrafficBarChart.tsx
-// VERSÃO DE TESTE - ULTRA SIMPLIFICADA
+// VERSÃO FINAL - Altura personalizável
 'use client';
 
-// Importamos apenas os componentes mais básicos do recharts
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
 // Definimos o tipo de dados que o gráfico espera
-type MediumData = {
-    utm_medium: string;
+type ChartData = {
+    utm_medium: string; // Usamos um nome genérico para reutilização
     total_leads: number;
-    total_checkins: number; // Mantemos o tipo completo por consistência
 };
 
-export default function OrganicTrafficBarChart({ data }: { data: MediumData[] }) {
-    
-    // Se não houver dados, mostra uma mensagem
-    if (!data || data.length === 0) {
+// Props que o componente aceita
+type ChartProps = {
+    data: ChartData[];
+    height?: string; // Altura agora é opcional
+};
+
+// Componente customizado para o Tooltip
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
         return (
-            <div className="w-full h-[30rem] bg-[#2a3a5a] p-4 sm:p-6 rounded-lg shadow-lg flex justify-center items-center">
-                <p className="text-slate-400">Sem dados para exibir no gráfico.</p>
+            <div className="bg-[#1e2b41] p-3 border border-[#6ce5e8] rounded-lg shadow-lg">
+                <p className="font-bold text-white">{`${label}`}</p>
+                <p className="text-[#6ce5e8]">{`Leads: ${payload[0].value.toLocaleString('pt-BR')}`}</p>
             </div>
         );
     }
+    return null;
+};
+
+export default function OrganicTrafficBarChart({ data, height = '30rem' }: ChartProps) {
+    // Garante que os dados estão ordenados do maior para o menor
+    const sortedData = [...data].sort((a, b) => b.total_leads - a.total_leads);
 
     return (
-        <div className="w-full h-[30rem] bg-[#2a3a5a] p-4 sm:p-6 rounded-lg shadow-lg">
+        // Usamos um estilo inline para definir a altura dinamicamente
+        <div className="w-full bg-[#2a3a5a] p-4 sm:p-6 rounded-lg shadow-lg" style={{ height: height }}>
             <ResponsiveContainer width="100%" height="100%">
-                {/* Este é o gráfico mais simples possível com a biblioteca */}
                 <BarChart 
-                    data={data}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }} // Aumenta a margem inferior para o texto
+                    data={sortedData} 
+                    margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#4a5a7a" />
                     <XAxis 
                         dataKey="utm_medium" 
-                        angle={-45} 
+                        angle={-45}
                         textAnchor="end"
                         stroke="#a0aec0"
-                        interval={0} // Garante que todos os labels apareçam
+                        interval={0}
                         tick={{ fontSize: 12 }}
                     />
-                    <YAxis stroke="#a0aec0" allowDecimals={false} />
+                    <YAxis stroke="#a0aec0" allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(108, 229, 232, 0.1)' }} />
                     <Bar dataKey="total_leads" fill="#6ce5e8" />
                 </BarChart>
             </ResponsiveContainer>

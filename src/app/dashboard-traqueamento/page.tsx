@@ -10,10 +10,8 @@ import { ArrowRight, Percent } from "lucide-react";
 import toast, { Toaster } from 'react-hot-toast';
 import dynamic from 'next/dynamic';
 
-// Cliente Supabase criado fora do componente para estabilidade
 const supabase = createClient();
 
-// Importação dinâmica do gráfico para evitar erros de compilação no servidor
 const TrafficDonutChart = dynamic(
     () => import('@/components/charts/TrafficDonutChart'),
     { 
@@ -22,7 +20,6 @@ const TrafficDonutChart = dynamic(
     }
 );
 
-// --- Tipos de Dados ---
 type TrackingKpis = {
     total_leads: number;
     total_checkins: number;
@@ -34,7 +31,6 @@ type TrackingKpis = {
     untracked_checkins: number;
 };
 
-// --- Componentes ---
 const KpiCard = ({ title, value, percentage, icon: Icon }: { title: string; value: string; percentage: string; icon: React.ElementType; }) => (
     <div className="bg-[#2a3a5a] p-6 rounded-lg shadow-lg">
         <div className="flex items-center justify-between">
@@ -139,13 +135,15 @@ export default function TraqueamentoPage() {
         if (!selectedLaunch) { toast.error("Por favor, selecione um lançamento primeiro."); return; }
         const launchName = launches.find(l => l.id === selectedLaunch)?.nome || '';
         const queryParams = new URLSearchParams({ launchId: selectedLaunch, launchName: launchName }).toString();
+        
         switch (type) {
             case 'organic':
                 router.push(`/dashboard-traqueamento/detalhe-organico?${queryParams}`);
                 break;
+            // --- ALTERAÇÃO PRINCIPAL AQUI ---
+            // A navegação para a página de detalhe pago está agora ativada.
             case 'paid':
-                toast.success(`Navegando para Tráfego Pago... (a implementar)`);
-                // router.push(`/dashboard-traqueamento/detalhe-pago?${queryParams}`);
+                router.push(`/dashboard-traqueamento/detalhe-pago?${queryParams}`);
                 break;
             case 'untracked':
                 toast.success(`Navegando para Não Traqueado... (a implementar)`);

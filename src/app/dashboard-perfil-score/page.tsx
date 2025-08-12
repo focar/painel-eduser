@@ -1,3 +1,4 @@
+// src/app/dashboard-profil-score/page.tsx (ou o caminho correto)
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -6,26 +7,17 @@ import { Launch } from "@/lib/types";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
 import toast, { Toaster } from 'react-hot-toast';
 import { Users, UserCheck, Percent } from "lucide-react";
-import Papa from 'papaparse';
 
 // --- Tipos de Dados ---
-type AnswerProfile = {
-    answer_text: string;
-    lead_count: number;
-};
-
-type ScoreProfileQuestion = {
-    question_id: string;
-    question_text: string;
-    answers: AnswerProfile[];
-};
+type AnswerProfile = { answer_text: string; lead_count: number; };
+type ScoreProfileQuestion = { question_id: string; question_text: string; answers: AnswerProfile[]; };
 
 const scoreCategories = [
-    { key: 'quente', name: 'Quente (>=80)', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-500' },
-    { key: 'quente_morno', name: 'Quente-Morno (65-79)', color: 'text-orange-500', bgColor: 'bg-orange-50', borderColor: 'border-orange-500' },
-    { key: 'morno', name: 'Morno (50-64)', color: 'text-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-500' },
-    { key: 'morno_frio', name: 'Morno-Frio (35-49)', color: 'text-sky-500', bgColor: 'bg-sky-50', borderColor: 'border-sky-500' },
-    { key: 'frio', name: 'Frio (1-34)', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-500' },
+    { key: 'quente', name: 'Quente (>=80)', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-500' },
+    { key: 'quente_morno', name: 'Quente-Morno (65-79)', color: 'text-orange-500', bgColor: 'bg-orange-50', borderColor: 'border-orange-500' },
+    { key: 'morno', name: 'Morno (50-64)', color: 'text-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-500' },
+    { key: 'morno_frio', name: 'Morno-Frio (35-49)', color: 'text-sky-500', bgColor: 'bg-sky-50', borderColor: 'border-sky-500' },
+    { key: 'frio', name: 'Frio (1-34)', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-500' },
 ] as const;
 
 const customQuestionOrder = [
@@ -34,10 +26,7 @@ const customQuestionOrder = [
 
 type ScoreCategoryKey = typeof scoreCategories[number]['key'];
 type ScoreKpiData = Record<ScoreCategoryKey, number>;
-type GeneralKpiData = {
-    total_inscricoes: number;
-    total_checkins: number;
-};
+type GeneralKpiData = { total_inscricoes: number; total_checkins: number; };
 
 // --- Componentes ---
 const Spinner = () => ( <div className="flex justify-center items-center h-40"><FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /></div> );
@@ -67,7 +56,6 @@ export default function PerfilDeScorePage() {
     const [loadingKpis, setLoadingKpis] = useState(true);
     const [loadingBreakdown, setLoadingBreakdown] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
-    // REMOVIDO: const [isCalculatingScore, setIsCalculatingScore] = useState(false);
 
     useEffect(() => {
         const fetchLaunches = async () => {
@@ -140,8 +128,6 @@ export default function PerfilDeScorePage() {
         }
     }, [supabase]);
     
-    // REMOVIDO: const handleCalculateScore = async () => { ... };
-    
     useEffect(() => { if (selectedLaunch) { fetchInitialData(selectedLaunch); } }, [selectedLaunch, fetchInitialData]);
     useEffect(() => { if (selectedLaunch && selectedScore) { fetchBreakdownData(selectedLaunch, selectedScore); } }, [selectedLaunch, selectedScore, fetchBreakdownData]);
 
@@ -150,7 +136,11 @@ export default function PerfilDeScorePage() {
         setIsExporting(true);
         const exportToast = toast.loading("A preparar a exportação completa...");
         try {
-            const { data: csvText, error } = await supabase.rpc('exportar_csv_completo', { p_launch_id: selectedLaunch, p_score_category: selectedScore });
+            const { data: csvText, error } = await supabase.rpc('exportar_perfil_csv', {
+                p_launch_id: selectedLaunch,
+                p_score_category: selectedScore,
+                p_score_type: 'score'
+            });
             if (error) throw error;
             if (!csvText) { toast.success("Não há leads para exportar neste perfil de score.", { id: exportToast }); return; }
             const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
@@ -171,7 +161,7 @@ export default function PerfilDeScorePage() {
         }
     };
     
-    const taxaDeCheckin = generalKpis.total_inscricoes > 0 ? ((generalKpis.total_checkins / generalKpis.total_checkins) * 100).toFixed(1) + '%' : '0.0%';
+    const taxaDeCheckin = generalKpis.total_inscricoes > 0 ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' : '0.0%';
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 min-h-screen space-y-6">
@@ -184,7 +174,6 @@ export default function PerfilDeScorePage() {
                             {launches.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.status})</option>)}
                         </select>
                     </div>
-                    {/* --- REMOVIDO: O botão de recálculo ficava aqui --- */}
                 </div>
             </header>
 
@@ -230,7 +219,7 @@ export default function PerfilDeScorePage() {
                                     const indexA = customQuestionOrder.indexOf(a.question_text);
                                     const indexB = customQuestionOrder.indexOf(b.question_text);
                                     if (indexA === -1) return 1;
-                                    if (indexB === -1) return 1;
+                                    if (indexB === -1) return -1;
                                     return indexA - indexB;
                                 })
                                 .map(question => (

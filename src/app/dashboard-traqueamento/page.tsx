@@ -1,4 +1,3 @@
-// src/app/dashboard-traqueamento/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -134,15 +133,14 @@ export default function TraqueamentoPage() {
     const handleNavigate = (type: 'organic' | 'paid' | 'untracked') => {
         if (!selectedLaunch) { toast.error("Por favor, selecione um lançamento primeiro."); return; }
         const launchName = launches.find(l => l.id === selectedLaunch)?.nome || '';
-        const queryParams = new URLSearchParams({ launchId: selectedLaunch, launchName: launchName }).toString();
+        const queryParams = new URLSearchParams({ launchId: selectedLaunch, launchName }).toString();
         
         switch (type) {
             case 'organic':
                 router.push(`/dashboard-traqueamento/detalhe-organico?${queryParams}`);
                 break;
-            // --- ALTERAÇÃO PRINCIPAL AQUI ---
-            // A navegação para a página de detalhe pago está agora ativada.
             case 'paid':
+                // ✅ Rota corrigida para a página de detalhes
                 router.push(`/dashboard-traqueamento/detalhe-pago?${queryParams}`);
                 break;
             case 'untracked':

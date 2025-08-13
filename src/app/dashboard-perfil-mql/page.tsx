@@ -1,4 +1,4 @@
-// src/app/dashboard-analise-mql/page.tsx
+// src/app/dashboard-perfil-mql/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -33,7 +33,7 @@ const AnswerBreakdownCard = ({ questionData }: { questionData: MqlQuestion }) =>
         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
             <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
             <ul className="space-y-3 flex-grow">
-                {questionData.answers.map((answer, index) => {
+                {questionData.answers.sort((a,b) => b.lead_count - a.lead_count).map((answer, index) => {
                     const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
                     return (
                         <li key={index}>
@@ -84,6 +84,8 @@ export default function AnaliseMqlPage() {
     const fetchInitialData = useCallback(async (launchId: string) => {
         if (!launchId) return;
         setLoadingKpis(true);
+        // Reset a seleção para 'a' temporariamente para evitar piscar de dados antigos
+        setSelectedMql('a');
         try {
             const [mqlKpiResult, generalKpiResult] = await Promise.all([
                 supabase.rpc('get_mql_category_totals', { p_launch_id: launchId }),
@@ -91,12 +93,28 @@ export default function AnaliseMqlPage() {
             ]);
             const { data: mqlKpis, error: mqlKpiError } = mqlKpiResult;
             const { data: generalKpisData, error: generalKpiError } = generalKpiResult;
+
             if (mqlKpiError || generalKpiError) {
                 toast.error("Erro ao carregar os totais.");
                 console.error({ mqlKpiError, generalKpiError });
             } else {
-                if (Array.isArray(mqlKpis) && mqlKpis.length > 0) setMqlKpiData(mqlKpis[0]); else setMqlKpiData(null);
-                if (Array.isArray(generalKpisData) && generalKpisData.length > 0) setGeneralKpis(generalKpisData[0]); else setGeneralKpis({ total_inscricoes: 0, total_checkins: 0 });
+                const finalMqlData = (Array.isArray(mqlKpis) && mqlKpis.length > 0) ? mqlKpis[0] : null;
+                const finalGeneralData = (Array.isArray(generalKpisData) && generalKpisData.length > 0) ? generalKpisData[0] : { total_inscricoes: 0, total_checkins: 0 };
+                
+                setMqlKpiData(finalMqlData);
+                setGeneralKpis(finalGeneralData);
+
+                // --- [A CORREÇÃO ESTÁ AQUI] ---
+                // Após receber os dados, verificamos a primeira categoria com valor
+                // e atualizamos o estado da categoria selecionada.
+                if (finalMqlData) {
+                    const firstNonZeroCategory = mqlCategories.find(cat => finalMqlData[cat.key] > 0);
+                    if (firstNonZeroCategory) {
+                        setSelectedMql(firstNonZeroCategory.key);
+                    }
+                }
+                // ------------------------------------
+
             }
         } catch (error) {
             toast.error("Ocorreu uma falha ao buscar os dados de KPI.");
@@ -133,11 +151,10 @@ export default function AnaliseMqlPage() {
         setIsExporting(true);
         const exportToast = toast.loading("A preparar a exportação...");
         try {
-            // --- ALTERAÇÃO AQUI: Chamando a nova função unificada ---
             const { data: csvText, error } = await supabase.rpc('exportar_perfil_csv', {
                 p_launch_id: selectedLaunch,
                 p_score_category: selectedMql,
-                p_score_type: 'mql' // Informa à função que queremos filtrar por MQL
+                p_score_type: 'mql'
             });
             if (error) throw error;
             if (!csvText) { toast.success("Não há leads para exportar nesta categoria.", { id: exportToast }); return; }

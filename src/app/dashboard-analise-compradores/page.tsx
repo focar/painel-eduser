@@ -1,13 +1,12 @@
 // =================================================================
 // ARQUIVO: app/dashboard-analise-compradores/page.tsx
-// VERSÃO FINAL CORRIGIDA: Garante que o ID do lançamento seja
-// passado corretamente para a função RPC.
+// VERSÃO FINAL CORRIGIDA: Adiciona a asserção non-null (!) para
+// satisfazer o compilador TypeScript rigoroso da Vercel.
 // =================================================================
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-// A importação deve corresponder ao nome do ficheiro que criámos
 import { Database } from '@/types/database'; 
 
 // --- TIPAGEM DOS DADOS ---
@@ -17,8 +16,6 @@ type Lancamento = {
   status: string | null;
 };
 
-// Estes tipos vêm da nossa função SQL, o TypeScript irá inferi-los
-// mas mantê-los aqui pode ajudar na clareza do código.
 type Kpis = Database['public']['Functions']['get_analise_compradores_dashboard']['Returns']['kpis'];
 type RespostaAgregada = Database['public']['Functions']['get_analise_compradores_dashboard']['Returns']['respostas'][number];
 
@@ -59,7 +56,6 @@ export default function AnaliseCompradoresPage() {
       
       setLancamentos(data as Lancamento[] || []);
       if (data && data.length > 0) {
-        // Define o primeiro lançamento da lista como o selecionado por padrão
         setSelectedLancamentoId(data[0].id);
       } else {
         setLoading(false);
@@ -69,9 +65,7 @@ export default function AnaliseCompradoresPage() {
   }, [supabase]);
 
   // --- EFEITO PARA BUSCAR DADOS DO DASHBOARD ---
-  // Roda quando o lançamento ou o filtro de score mudam
   useEffect(() => {
-    // Apenas executa se um lançamento estiver selecionado
     if (!selectedLancamentoId) return;
 
     async function getDashboardData() {
@@ -82,11 +76,11 @@ export default function AnaliseCompradoresPage() {
       }
       setError(null);
 
-      // --- AQUI ESTÁ A LÓGICA CORRETA ---
-      // A variável `selectedLancamentoId` contém o UUID correto e é passada
-      // como o parâmetro `p_launch_id`.
+      // --- CORREÇÃO APLICADA AQUI ---
+      // Adicionamos '!' para garantir ao TypeScript que selectedLancamentoId não é nulo,
+      // pois a linha 'if (!selectedLancamentoId) return;' já fez essa verificação.
       const { data, error } = await supabase.rpc('get_analise_compradores_dashboard', {
-        p_launch_id: selectedLancamentoId, // Passa a variável do estado
+        p_launch_id: selectedLancamentoId!, 
         p_score_tier: activeScoreFilter,
       });
 
@@ -96,11 +90,9 @@ export default function AnaliseCompradoresPage() {
         setKpis(null);
         setRespostas([]);
       } else if (data) {
-        // Se o filtro for 'todos', atualizamos os KPIs principais
         if (activeScoreFilter === 'todos') {
             setKpis(data.kpis);
         }
-        // Sempre atualizamos a lista de respostas
         setRespostas(data.respostas);
       }
 
@@ -118,7 +110,6 @@ export default function AnaliseCompradoresPage() {
     setActiveScoreFilter('todos');
     setSelectedLancamentoId(lancamentoId);
   };
-
 
   // --- RENDERIZAÇÃO ---
   const renderContent = () => {

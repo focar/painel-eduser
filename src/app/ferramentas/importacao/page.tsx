@@ -17,6 +17,16 @@ const LaunchSelector = ({ id, label, launches, selectedValue, onChange, disabled
 
 const supabase = createClient();
 
+// --- NOVA FUNÇÃO AUXILIAR ---
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+    });
+};
+
 export default function ImportacaoPage() {
     const [launches, setLaunches] = useState<Launch[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
@@ -37,10 +47,8 @@ export default function ImportacaoPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const buyerFileInputRef = useRef<HTMLInputElement>(null);
     const profileFileInputRef = useRef<HTMLInputElement>(null);
-
-    // --- ADICIONADO: Estados para os botões de recálculo ---
-    const [isCalculatingMql, setIsCalculatingMql] = useState(false);
-    const [isCalculatingScore, setIsCalculatingScore] = useState(false);
+    const [isCalculatingMql, setIsCalculatingMql] = useState(false);
+    const [isCalculatingScore, setIsCalculatingScore] = useState(false);
 
     const showAlertModal = (title: string, message: string) => setModal({ isOpen: true, type: 'alert', title, message });
     const showConfirmationModal = (title: string, message: string, onConfirm: () => void) => setModal({ isOpen: true, type: 'confirmation', title, message, onConfirm });
@@ -64,47 +72,46 @@ export default function ImportacaoPage() {
         fetchData();
     }, []);
 
-    // --- ADICIONADO: Funções de Recálculo de Score e MQL ---
-    const handleCalculateMql = async () => {
-        if (!selectedLaunchForProfile) { showAlertModal("Atenção", "Selecione um lançamento na secção 'Importação Apenas de Respostas de Perfil' para recalcular o MQL Score."); return; }
-        setIsCalculatingMql(true);
-        addLog(`[RECALC MQL] Iniciando para o lançamento ID: ${selectedLaunchForProfile}...`);
-        try {
-            const { data, error } = await supabase.rpc('calcular_mql_score_lancamento', { p_launch_id: selectedLaunchForProfile });
-            if (error) throw error;
-            addLog(`[SUCESSO MQL] ${data}`);
-            showAlertModal("Recálculo Concluído", data);
-        } catch (err: any) {
-            addLog(`[ERRO MQL] Falha no recálculo: ${err.message}`);
-            showAlertModal("Erro no Recálculo", `Falha ao recalcular MQL Score: ${err.message}`);
-        } finally {
-            setIsCalculatingMql(false);
-        }
-    };
+    const handleCalculateMql = async () => {
+        if (!selectedLaunchForProfile) { showAlertModal("Atenção", "Selecione um lançamento na secção 'Importação Apenas de Respostas de Perfil' para recalcular o MQL Score."); return; }
+        setIsCalculatingMql(true);
+        addLog(`[RECALC MQL] Iniciando para o lançamento ID: ${selectedLaunchForProfile}...`);
+        try {
+            const { data, error } = await supabase.rpc('calcular_mql_score_lancamento', { p_launch_id: selectedLaunchForProfile });
+            if (error) throw error;
+            addLog(`[SUCESSO MQL] ${data}`);
+            showAlertModal("Recálculo Concluído", data);
+        } catch (err: any) {
+            addLog(`[ERRO MQL] Falha no recálculo: ${err.message}`);
+            showAlertModal("Erro no Recálculo", `Falha ao recalcular MQL Score: ${err.message}`);
+        } finally {
+            setIsCalculatingMql(false);
+        }
+    };
 
-    const handleCalculateScore = async () => {
-        if (!selectedLaunchForLeads) { showAlertModal("Atenção", "Selecione um lançamento na secção 'Importação Geral' para recalcular o Score Geral."); return; }
-        setIsCalculatingScore(true);
-        addLog(`[RECALC SCORE] Iniciando para o lançamento ID: ${selectedLaunchForLeads}...`);
-        try {
-            const { data, error } = await supabase.rpc('calcular_score_lancamento', { p_launch_id: selectedLaunchForLeads });
-            if (error) throw error;
-            addLog(`[SUCESSO SCORE] ${data}`);
-            showAlertModal("Recálculo Concluído", data);
-        } catch (err: any) {
-            addLog(`[ERRO SCORE] Falha no recálculo: ${err.message}`);
-            showAlertModal("Erro no Recálculo", `Falha ao recalcular Score Geral: ${err.message}`);
-        } finally {
-            setIsCalculatingScore(false);
-        }
-    };
+    const handleCalculateScore = async () => {
+        if (!selectedLaunchForLeads) { showAlertModal("Atenção", "Selecione um lançamento na secção 'Importação Geral' para recalcular o Score Geral."); return; }
+        setIsCalculatingScore(true);
+        addLog(`[RECALC SCORE] Iniciando para o lançamento ID: ${selectedLaunchForLeads}...`);
+        try {
+            const { data, error } = await supabase.rpc('calcular_score_lancamento', { p_launch_id: selectedLaunchForLeads });
+            if (error) throw error;
+            addLog(`[SUCESSO SCORE] ${data}`);
+            showAlertModal("Recálculo Concluído", data);
+        } catch (err: any) {
+            addLog(`[ERRO SCORE] Falha no recálculo: ${err.message}`);
+            showAlertModal("Erro no Recálculo", `Falha ao recalcular Score Geral: ${err.message}`);
+        } finally {
+            setIsCalculatingScore(false);
+        }
+    };
 
     const invokeCsvProcessor = async (file: File, launch_id: string, import_type: ImportType) => {
         setIsProcessing(true);
         addLog(`[INFO] Iniciando importação do tipo: ${import_type}`);
         try {
-            const csvContent = await file.text();
-            addLog('[INFO] Ficheiro lido. A enviar para o servidor para processamento...');
+            const csvContent = await fileToBase64(file);
+            addLog('[INFO] Ficheiro lido e codificado. A enviar para o servidor para processamento...');
             const { data, error } = await supabase.functions.invoke('process-csv-import', { body: { csvContent, launch_id: launch_id, import_type } });
             if (error) { const errorBody = error.context ? await error.context.json() : { message: error.message }; throw new Error(errorBody.message || error.message); }
             if (data.status === 'error') throw new Error(data.message);
@@ -117,8 +124,8 @@ export default function ImportacaoPage() {
                 if(data.details.unmappedHeaders) addLog(`COLUNAS NÃO MAPEADAS (${data.details.unmappedHeaders.length}): ${data.details.unmappedHeaders.join('; ') || 'Nenhuma'}`);
                 addLog(`--- FIM DO RELATÓRIO ---`);
             }
-            if (data.debug && Array.isArray(data.debug)) {
-                data.debug.forEach((logLine: string) => addLog(logLine));
+            if (data.debug_log && Array.isArray(data.debug_log)) {
+                data.debug_log.forEach((logLine: string) => addLog(logLine));
             }
             return data;
         } catch (err: any) {
@@ -276,81 +283,81 @@ export default function ImportacaoPage() {
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 p-6 md:p-10">
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
+        <div className="max-w-7xl mx-auto space-y-8 p-6 md:p-10">
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-800">Módulo de Importação e Ferramentas</h1>
 
-            {(isProcessing || isCalculatingMql || isCalculatingScore) && (
-                <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-lg my-6" role="alert">
-                    <p className="font-bold flex items-center"><FaSpinner className="animate-spin mr-3" /> Processamento em Andamento</p>
-                    <p>A sua operação está a ser processada. Por favor, não feche ou atualize esta página.</p>
-                </div>
-            )}
+            {(isProcessing || isCalculatingMql || isCalculatingScore) && (
+                <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-lg my-6" role="alert">
+                    <p className="font-bold flex items-center"><FaSpinner className="animate-spin mr-3" /> Processamento em Andamento</p>
+                    <p>A sua operação está a ser processada. Por favor, não feche ou atualize esta página.</p>
+                </div>
+            )}
 
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
-                <h2 className="text-2xl font-bold text-slate-700 border-b pb-3">Importação Geral de Lançamento</h2>
-                <LaunchSelector id="launch-select-leads" label="1. Selecione o Lançamento de Destino" launches={launches} selectedValue={selectedLaunchForLeads} onChange={e => setSelectedLaunchForLeads(e.target.value)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} isLoading={isDataLoading} />
-                <div>
-                    <label htmlFor="file-upload" className="block text-base font-medium text-slate-700 mb-2">2. Selecione o Ficheiro CSV</label>
-                    <input ref={fileInputRef} id="file-upload" type="file" accept=".csv" onChange={e => setFile(e.target.files?.[0] || null)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} className="block w-full text-base text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
-                    <button
-                        onClick={handleCalculateScore}
-                        disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForLeads}
-                        className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 disabled:opacity-50 text-base">
-                        {isCalculatingScore ? <FaSpinner className="animate-spin mr-2" /> : <FaCalculator className="mr-2" />}
-                        {isCalculatingScore ? 'A Calcular...' : 'Calcular Score'}
-                    </button>
-                    <button onClick={handleImport} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForLeads || !file} className="w-full sm:w-auto inline-flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-base">
-                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaUpload className="mr-2" />}
-                        {isProcessing ? 'A Processar...' : 'Importar Leads'}
-                    </button>
-                </div>
-            </div>
+            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6">
+                <h2 className="text-2xl font-bold text-slate-700 border-b pb-3">Importação Geral de Lançamento</h2>
+                <LaunchSelector id="launch-select-leads" label="1. Selecione o Lançamento de Destino" launches={launches} selectedValue={selectedLaunchForLeads} onChange={e => setSelectedLaunchForLeads(e.target.value)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} isLoading={isDataLoading} />
+                <div>
+                    <label htmlFor="file-upload" className="block text-base font-medium text-slate-700 mb-2">2. Selecione o Ficheiro CSV</label>
+                    <input ref={fileInputRef} id="file-upload" type="file" accept=".csv" onChange={e => setFile(e.target.files?.[0] || null)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} className="block w-full text-base text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
+                    <button
+                        onClick={handleCalculateScore}
+                        disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForLeads}
+                        className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 disabled:opacity-50 text-base">
+                        {isCalculatingScore ? <FaSpinner className="animate-spin mr-2" /> : <FaCalculator className="mr-2" />}
+                        {isCalculatingScore ? 'A Calcular...' : 'Calcular Score'}
+                    </button>
+                    <button onClick={handleImport} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForLeads || !file} className="w-full sm:w-auto inline-flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-base">
+                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaUpload className="mr-2" />}
+                        {isProcessing ? 'A Processar...' : 'Importar Leads'}
+                    </button>
+                </div>
+            </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-teal-500">
-                <h2 className="text-2xl font-bold text-slate-700">Importação Apenas de Respostas de Perfil</h2>
-                <p className="text-base text-slate-600">Use esta ferramenta para carregar **apenas** as respostas de perguntas cadastradas como 'Perfil'. Respostas de 'Score' serão ignoradas.</p>
-                <LaunchSelector id="launch-select-profile" label="1. Selecione o Lançamento" launches={launches} selectedValue={selectedLaunchForProfile} onChange={e => setSelectedLaunchForProfile(e.target.value)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} isLoading={isDataLoading} />
-                <div>
-                    <label htmlFor="profile-file-upload" className="block text-base font-medium text-slate-700 mb-2">2. Selecione o Ficheiro CSV de Check-in</label>
-                    <input ref={profileFileInputRef} id="profile-file-upload" type="file" accept=".csv" onChange={e => setProfileFile(e.target.files?.[0] || null)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} className="block w-full text-base text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
-                    <button
-                        onClick={handleCalculateMql}
-                        disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForProfile}
-                        className="w-full sm:w-auto inline-flex items-center justify-center bg-sky-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-sky-700 disabled:opacity-50 text-base">
-                        {isCalculatingMql ? <FaSpinner className="animate-spin mr-2" /> : <FaCalculator className="mr-2" />}
-                        {isCalculatingMql ? 'A Calcular...' : 'Calcular MQL'}
-                    </button>
-                    <button onClick={handleProfileSurveyImport} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForProfile || !profileFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-teal-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-teal-700 disabled:opacity-50 text-base">
-                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaFileCsv className="mr-2" />}
-                        {isProcessing ? 'A Processar...' : 'Importar Apenas Respostas de Perfil'}
-                    </button>
-                </div>
-            </div>
+            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-teal-500">
+                <h2 className="text-2xl font-bold text-slate-700">Importação Apenas de Respostas de Perfil</h2>
+                <p className="text-base text-slate-600">Use esta ferramenta para carregar **apenas** as respostas de perguntas cadastradas como 'Perfil'. Respostas de 'Score' serão ignoradas.</p>
+                <LaunchSelector id="launch-select-profile" label="1. Selecione o Lançamento" launches={launches} selectedValue={selectedLaunchForProfile} onChange={e => setSelectedLaunchForProfile(e.target.value)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} isLoading={isDataLoading} />
+                <div>
+                    <label htmlFor="profile-file-upload" className="block text-base font-medium text-slate-700 mb-2">2. Selecione o Ficheiro CSV de Check-in</label>
+                    <input ref={profileFileInputRef} id="profile-file-upload" type="file" accept=".csv" onChange={e => setProfileFile(e.target.files?.[0] || null)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} className="block w-full text-base text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
+                    <button
+                        onClick={handleCalculateMql}
+                        disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForProfile}
+                        className="w-full sm:w-auto inline-flex items-center justify-center bg-sky-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-sky-700 disabled:opacity-50 text-base">
+                        {isCalculatingMql ? <FaSpinner className="animate-spin mr-2" /> : <FaCalculator className="mr-2" />}
+                        {isCalculatingMql ? 'A Calcular...' : 'Calcular MQL'}
+                    </button>
+                    <button onClick={handleProfileSurveyImport} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForProfile || !profileFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-teal-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-teal-700 disabled:opacity-50 text-base">
+                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaFileCsv className="mr-2" />}
+                        {isProcessing ? 'A Processar...' : 'Importar Apenas Respostas de Perfil'}
+                    </button>
+                </div>
+            </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
-                <h2 className="text-2xl font-bold text-slate-700">Importação de Compradores e Análise</h2>
-                <p className="text-base text-slate-600">Após o fim do lançamento, importe a lista de compradores para marcar os leads e ativar a análise de scores.</p>
-                <LaunchSelector id="launch-select-buyers" label="1. Selecione o Lançamento" launches={launches} selectedValue={selectedLaunchForBuyers} onChange={e => setSelectedLaunchForBuyers(e.target.value)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} isLoading={isDataLoading}/>
-                <div>
-                    <label htmlFor="buyer-file-upload" className="block text-base font-medium text-slate-700 mb-2">2. Selecione o Ficheiro CSV de Compradores</label>
-                    <input ref={buyerFileInputRef} id="buyer-file-upload" type="file" accept=".csv" onChange={e => setBuyerFile(e.target.files?.[0] || null)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} className="block w-full text-base text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
-                    <button onClick={handleBuyerImport} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForBuyers || !buyerFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 disabled:opacity-50 text-base">
-                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaUserCheck className="mr-2" />}
-                        {isProcessing ? 'A Processar...' : 'Importar Compradores'}
-                    </button>
-                    <button onClick={handleAnalyzeLaunch} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForBuyers || buyersImportedForLaunch !== selectedLaunchForBuyers} className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed" title={buyersImportedForLaunch !== selectedLaunchForBuyers ? "Importe os compradores para este lançamento primeiro" : "Analisar Lançamento"}>
-                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaMagic className="mr-2" />}
-                        {isProcessing ? 'A Analisar...' : 'Analisar e Propor Scores'}
-                    </button>
-                </div>
-            </div>
-            
+            <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-green-500">
+                <h2 className="text-2xl font-bold text-slate-700">Importação de Compradores e Análise</h2>
+                <p className="text-base text-slate-600">Após o fim do lançamento, importe a lista de compradores para marcar os leads e ativar a análise de scores.</p>
+                <LaunchSelector id="launch-select-buyers" label="1. Selecione o Lançamento" launches={launches} selectedValue={selectedLaunchForBuyers} onChange={e => setSelectedLaunchForBuyers(e.target.value)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} isLoading={isDataLoading}/>
+                <div>
+                    <label htmlFor="buyer-file-upload" className="block text-base font-medium text-slate-700 mb-2">2. Selecione o Ficheiro CSV de Compradores</label>
+                    <input ref={buyerFileInputRef} id="buyer-file-upload" type="file" accept=".csv" onChange={e => setBuyerFile(e.target.files?.[0] || null)} disabled={isProcessing || isCalculatingMql || isCalculatingScore} className="block w-full text-base text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
+                    <button onClick={handleBuyerImport} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForBuyers || !buyerFile} className="w-full sm:w-auto inline-flex items-center justify-center bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 disabled:opacity-50 text-base">
+                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaUserCheck className="mr-2" />}
+                        {isProcessing ? 'A Processar...' : 'Importar Compradores'}
+                    </button>
+                    <button onClick={handleAnalyzeLaunch} disabled={isProcessing || isCalculatingMql || isCalculatingScore || !selectedLaunchForBuyers || buyersImportedForLaunch !== selectedLaunchForBuyers} className="w-full sm:w-auto inline-flex items-center justify-center bg-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed" title={buyersImportedForLaunch !== selectedLaunchForBuyers ? "Importe os compradores para este lançamento primeiro" : "Analisar Lançamento"}>
+                        {isProcessing ? <FaSpinner className="animate-spin mr-2" /> : <FaMagic className="mr-2" />}
+                        {isProcessing ? 'A Analisar...' : 'Analisar e Propor Scores'}
+                    </button>
+                </div>
+            </div>
+            
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-6 border-t-4 border-amber-400">
                 <h2 className="text-xl font-semibold text-slate-700">Ferramentas de Teste</h2>
                 <p className="text-base text-slate-600">Use estas ferramentas para preparar o ambiente para testes. A ação será executada no lançamento selecionado abaixo.</p>
@@ -401,7 +408,7 @@ export default function ImportacaoPage() {
                                         <tr key={`${result.pergunta_id}-${result.resposta_dada}`} className="hover:bg-slate-50">
                                             <td className="px-4 py-3 text-sm text-slate-600">{result.texto_pergunta}</td>
                                             <td className="px-4 py-3 text-sm font-medium text-slate-800">{result.resposta_dada}</td>
-                                            <td className="px-4 py-3 text-sm text-slate-600">{result.indice_impacto}</td>
+                    _                       <td className="px-4 py-3 text-sm text-slate-600">{result.indice_impacto}</td>
                                             <td className="px-4 py-3">
                                                 <input type="number" value={result.peso_proposto} onChange={(e) => handleWeightChange(result.pergunta_id, result.resposta_dada, e.target.value)} className="w-20 px-2 py-1 border border-slate-300 rounded-md text-sm text-center" />
                                             </td>

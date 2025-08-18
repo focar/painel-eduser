@@ -696,24 +696,7 @@ export type Database = {
         Args:
           | { p_launch_id: string }
           | { p_launch_id: string; p_score_tier?: string }
-        Returns: {
-            kpis: {
-              total_compradores: number
-              total_checkins: number
-              score_tier_i: number
-              score_tier_ii: number
-              score_tier_iii: number
-              score_tier_iv: number
-              score_tier_v: number
-              score_tier_vi: number
-              score_tier_vii: number
-              score_tier_viii: number
-            }
-            respostas: {
-              pergunta: string
-              respostas: { [key: string]: number }
-            }[]
-          }
+        Returns: Json
       }
       get_answer_analysis: {
         Args: { p_filter_by_buyers: boolean; p_launch_id: string }

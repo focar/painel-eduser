@@ -22,7 +22,10 @@ const menuItems = [
             { name: "Perfil de Score", href: "/dashboard-perfil-score" },
             { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/dashboard-detalhamento-canais" },
+            { name: "Análise de Compradores", href: "/dashboard-analise-compradores" },
+
             { name: "Posição Final Compradores", href: "/dashboard-posicao-final" },
+
             { name: "Campanhas e Criativos", href: "/dashboard-campanhas-criativos" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Análise de Respostas", href: "/dashboard-analise-resposta" },

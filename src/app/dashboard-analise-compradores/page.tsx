@@ -1,6 +1,7 @@
 // =================================================================
 // ARQUIVO: app/dashboard-analise-compradores/page.tsx
-// VERSÃO FINAL CORRIGIDA: Remove a tipagem genérica redundante do RPC.
+// VERSÃO FINAL CORRIGIDA: Garante que o ID do lançamento seja
+// passado corretamente para a função RPC.
 // =================================================================
 'use client';
 
@@ -58,6 +59,7 @@ export default function AnaliseCompradoresPage() {
       
       setLancamentos(data as Lancamento[] || []);
       if (data && data.length > 0) {
+        // Define o primeiro lançamento da lista como o selecionado por padrão
         setSelectedLancamentoId(data[0].id);
       } else {
         setLoading(false);
@@ -69,6 +71,7 @@ export default function AnaliseCompradoresPage() {
   // --- EFEITO PARA BUSCAR DADOS DO DASHBOARD ---
   // Roda quando o lançamento ou o filtro de score mudam
   useEffect(() => {
+    // Apenas executa se um lançamento estiver selecionado
     if (!selectedLancamentoId) return;
 
     async function getDashboardData() {
@@ -79,10 +82,11 @@ export default function AnaliseCompradoresPage() {
       }
       setError(null);
 
-      // --- CORREÇÃO APLICADA AQUI ---
-      // Removemos o <DashboardData> pois o cliente Supabase já sabe o tipo de retorno
+      // --- AQUI ESTÁ A LÓGICA CORRETA ---
+      // A variável `selectedLancamentoId` contém o UUID correto e é passada
+      // como o parâmetro `p_launch_id`.
       const { data, error } = await supabase.rpc('get_analise_compradores_dashboard', {
-        p_launch_id: selectedLancamentoId!,
+        p_launch_id: selectedLancamentoId, // Passa a variável do estado
         p_score_tier: activeScoreFilter,
       });
 
@@ -92,9 +96,11 @@ export default function AnaliseCompradoresPage() {
         setKpis(null);
         setRespostas([]);
       } else if (data) {
+        // Se o filtro for 'todos', atualizamos os KPIs principais
         if (activeScoreFilter === 'todos') {
             setKpis(data.kpis);
         }
+        // Sempre atualizamos a lista de respostas
         setRespostas(data.respostas);
       }
 

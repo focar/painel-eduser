@@ -1,159 +1,175 @@
-// =================================================================
-// ARQUIVO: app/dashboard/analise-compradores/page.tsx
-// Versão Definitiva: Utiliza o cliente Supabase correto para Next.js,
-// que lê as chaves das variáveis de ambiente automaticamente.
-// =================================================================
+// src/app/dashboard-analise-respostas/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-// CORREÇÃO: Utiliza a biblioteca oficial do Supabase para Next.js
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from '@/utils/supabase/client';
+import type { Launch } from "@/lib/types";
+import { Users, UserCheck, Percent, ShoppingCart } from "lucide-react";
 
-// --- TIPAGENS ---
-type Launch = {
-  id: string;
-  nome: string;
+// --- Tipos de Dados ---
+type KpiData = {
+    total_inscricoes: number;
+    total_checkins: number;
+    total_buyers: number;
+    total_buyer_checkins: number;
 };
-
-type DashboardStats = {
-  total_compradores: number;
-  total_checkins_compradores: number;
-  score_tier_i: number;
-  score_tier_ii: number;
-  score_tier_iii: number;
-  score_tier_iv: number;
-  score_tier_v: number;
-  score_tier_vi: number;
-  score_tier_vii: number;
-  score_tier_viii: number;
+type AnswerData = {
+    answer_text: string;
+    lead_count: number;
+    percentage: number;
 };
+type QuestionAnalysisData = {
+    question_id: string;
+    question_text: string;
+    answers: AnswerData[];
+};
+type ViewMode = 'all' | 'buyers';
 
-// --- COMPONENTE DA PÁGINA ---
-export default function AnaliseCompradoresPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [launches, setLaunches] = useState<Launch[]>([]);
-  const [selectedLaunchId, setSelectedLaunchId] = useState<string>('all');
+// --- Componentes ---
+const Spinner = () => (
+    <div className="flex justify-center items-center h-40">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+);
 
-  // Esta é a forma correta de inicializar o cliente Supabase num Client Component.
-  // Ele irá usar automaticamente as suas variáveis de ambiente.
-  const supabase = createClientComponentClient();
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => (
+    <div className="bg-white p-4 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
+        <Icon className="mx-auto text-blue-500 mb-2" size={24} />
+        <p className="text-3xl font-bold text-slate-800">{value}</p>
+        <h3 className="text-sm font-medium text-slate-500 mt-1">{title}</h3>
+    </div>
+);
 
-  useEffect(() => {
-    async function getLaunches() {
-      const { data, error } = await supabase
-        .from('lancamentos')
-        .select('id, nome')
-        .in('status', ['Em Andamento', 'Concluido'])
-        .order('status', { ascending: true })
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error("Erro ao buscar lançamentos:", error);
-      } else {
-        setLaunches(data);
-      }
-    }
-    getLaunches();
-  }, [supabase]);
-
-  useEffect(() => {
-    async function getStats() {
-      setLoading(true);
-      
-      const params = {
-        p_launch_id: selectedLaunchId === 'all' ? null : selectedLaunchId
-      };
-
-      const { data, error } = await supabase.rpc('get_dashboard_compradores_stats', params);
-
-      if (error) {
-        console.error('Erro ao buscar estatísticas:', error);
-        alert("Não foi possível carregar os dados do dashboard.");
-      } else {
-        setStats(data);
-      }
-      setLoading(false);
-    }
-
-    if (supabase) {
-        getStats();
-    }
-  }, [selectedLaunchId, supabase]);
-
-  const taxaCheckin = stats && stats.total_compradores > 0
-    ? ((stats.total_checkins_compradores / stats.total_compradores) * 100).toFixed(1)
-    : '0.0';
-
-  return (
-    <div className="p-4 sm:p-6 md:p-8 bg-slate-900 min-h-screen">
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-100">Análise de Perfil de Compradores</h1>
-          <p className="text-slate-400 mt-1">Filtre por lançamento para analisar os dados de compradores.</p>
+const QuestionAnalysisCard = ({ questionData }: { questionData: QuestionAnalysisData }) => {
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
+            <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
+            <ul className="space-y-3">
+                {questionData.answers.map((answer, index) => (
+                    <li key={index}>
+                        <div className="flex justify-between items-center mb-1 text-sm">
+                            <span className="text-slate-600 break-words pr-2">{answer.answer_text}</span>
+                            <span className="font-medium text-slate-700 flex-shrink-0">
+                                {answer.lead_count.toLocaleString('pt-BR')} ({answer.percentage.toFixed(1)}%)
+                            </span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2.5">
+                            <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${answer.percentage}%` }}></div>
+                        </div>
+                    </li>
+                ))}
+            </ul>
         </div>
-        <select 
-          value={selectedLaunchId}
-          onChange={(e) => setSelectedLaunchId(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full sm:w-auto p-2.5"
-        >
-          <option value="all">Todos os Lançamentos</option>
-          {launches.map(launch => (
-            <option key={launch.id} value={launch.id}>{launch.nome}</option>
-          ))}
-        </select>
-      </div>
+    );
+};
 
-      {loading ? (
-        <div className="text-center text-slate-300">A carregar dados...</div>
-      ) : !stats ? (
-        <div className="text-center text-red-400">Não foi possível carregar os dados.</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <KpiCard title="Total de Compradores" value={stats.total_compradores.toLocaleString('pt-BR')} icon={<IconPlaceholder>👥</IconPlaceholder>} />
-            <KpiCard title="Check-ins de Compradores" value={stats.total_checkins_compradores.toLocaleString('pt-BR')} icon={<IconPlaceholder>✅</IconPlaceholder>} />
-            <KpiCard title="Taxa de Check-in" value={`${taxaCheckin}%`} icon={<div className="text-xl font-bold text-indigo-400">%</div>} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-6">
-            <ScoreCard title="Nível I (90+)" count={stats.score_tier_i} total={stats.total_checkins_compradores} color="bg-red-600" />
-            <ScoreCard title="Nível II (80-89)" count={stats.score_tier_ii} total={stats.total_checkins_compradores} color="bg-red-500" />
-            <ScoreCard title="Nível III (70-79)" count={stats.score_tier_iii} total={stats.total_checkins_compradores} color="bg-orange-500" />
-            <ScoreCard title="Nível IV (60-69)" count={stats.score_tier_iv} total={stats.total_checkins_compradores} color="bg-amber-500" />
-            <ScoreCard title="Nível V (50-59)" count={stats.score_tier_v} total={stats.total_checkins_compradores} color="bg-yellow-400" />
-            <ScoreCard title="Nível VI (40-49)" count={stats.score_tier_vi} total={stats.total_checkins_compradores} color="bg-sky-400" />
-            <ScoreCard title="Nível VII (30-39)" count={stats.score_tier_vii} total={stats.total_checkins_compradores} color="bg-blue-500" />
-            <ScoreCard title="Nível VIII (<30)" count={stats.score_tier_viii} total={stats.total_checkins_compradores} color="bg-blue-600" />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+export default function AnaliseRespostasPage() {
+    const supabase = createClient();
+    const [launches, setLaunches] = useState<Launch[]>([]);
+    const [selectedLaunch, setSelectedLaunch] = useState<string>('');
+    const [analysisData, setAnalysisData] = useState<QuestionAnalysisData[]>([]);
+    const [kpis, setKpis] = useState<KpiData>({ total_inscricoes: 0, total_checkins: 0, total_buyers: 0, total_buyer_checkins: 0 });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<ViewMode>('all');
 
-// --- COMPONENTES AUXILIARES (sem alterações) ---
-function KpiCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-slate-400">{title}</p>
-        <p className="text-3xl font-bold text-slate-100 mt-1">{value}</p>
-      </div>
-      <div className="text-3xl text-slate-500">{icon}</div>
-    </div>
-  );
-}
-function ScoreCard({ title, count, total, color }: { title: string; count: number; total: number; color: string }) {
-  const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
-  return (
-    <div className={`bg-slate-800 p-5 rounded-lg border border-slate-700 relative overflow-hidden`}>
-      <div className={`absolute top-0 left-0 h-1 w-full ${color}`}></div>
-      <p className="font-bold text-slate-300 mt-2">{title}</p>
-      <p className="text-4xl font-bold text-slate-100 mt-2">{count.toLocaleString('pt-BR')}</p>
-      <p className="text-sm text-slate-400 mt-1">{percentage}% do total</p>
-    </div>
-  );
-}
-function IconPlaceholder({ children }: { children: React.ReactNode }) {
-    return <span role="img" aria-label="icon">{children}</span>;
+    useEffect(() => {
+        const fetchLaunches = async () => {
+            const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            if (error) { 
+                console.error("Erro ao buscar lançamentos:", error);
+                setError("Não foi possível carregar os lançamentos."); 
+            } else if (launchesData) {
+                const sorted = [...launchesData].sort((a, b) => {
+                    if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
+                    if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
+                    return b.nome.localeCompare(a.nome);
+                });
+                setLaunches(sorted as Launch[]);
+                const inProgress = sorted.find(l => l.status === 'Em Andamento');
+                setSelectedLaunch(inProgress ? inProgress.id : (sorted[0] ? sorted[0].id : 'all'));
+            }
+        };
+        fetchLaunches();
+    }, [supabase]);
+
+    const fetchDataForLaunch = useCallback(async (launchId: string, mode: ViewMode) => {
+        if (!launchId) return; 
+        setLoading(true); 
+        setError(null);
+        const rpcLaunchId = launchId === 'all' ? null : launchId;
+        try {
+            const [analysisResult, kpiResult] = await Promise.all([
+                supabase.rpc('get_answer_analysis', { p_launch_id: rpcLaunchId, p_filter_by_buyers: mode === 'buyers' }),
+                supabase.rpc('get_geral_and_buyer_kpis', { p_launch_id: rpcLaunchId })
+            ]);
+
+            if (analysisResult.error) throw { source: 'get_answer_analysis', error: analysisResult.error };
+            if (kpiResult.error) throw { source: 'get_geral_and_buyer_kpis', error: kpiResult.error };
+
+            setAnalysisData(analysisResult.data || []);
+            setKpis(kpiResult.data || { total_inscricoes: 0, total_checkins: 0, total_buyers: 0, total_buyer_checkins: 0 });
+        } catch (err: any) { 
+            console.error(`Erro ao carregar dados da função '${err.source}':`, err.error);
+            setError(`Não foi possível carregar os dados. Verifique a função '${err.source}'. (Detalhes: ${err.error.message})`); 
+        } 
+        finally { setLoading(false); }
+    }, [supabase]);
+
+    useEffect(() => { 
+        if (selectedLaunch) { 
+            fetchDataForLaunch(selectedLaunch, viewMode); 
+        } 
+    }, [selectedLaunch, viewMode, fetchDataForLaunch]);
+
+    const taxaCheckinGeral = (kpis?.total_inscricoes ?? 0) > 0 ? (((kpis?.total_checkins ?? 0) / (kpis?.total_inscricoes ?? 1)) * 100) : 0;
+    const taxaConversaoCompradores = (kpis?.total_checkins ?? 0) > 0 ? (((kpis?.total_buyers ?? 0) / (kpis?.total_checkins ?? 1)) * 100) : 0;
+
+    return (
+        <div className="p-4 sm:p-6 lg:p-8 bg-slate-100 min-h-screen">
+            <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Respostas de Perfil</h1>
+                <div className="w-full sm:w-72">
+                    <select 
+                        id="launch-select" 
+                        value={selectedLaunch} 
+                        onChange={(e) => setSelectedLaunch(e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" 
+                        disabled={loading}
+                    >
+                        <option value="all">Visão Geral (Todos)</option>
+                        {launches.map((launch) => (<option key={launch.id} value={launch.id}>{`${launch.nome} - ${launch.status}`}</option>))}
+                    </select>
+                </div>
+            </header>
+            <section className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <button onClick={() => setViewMode('all')} className={`p-4 rounded-xl shadow-lg flex flex-col gap-4 transition-all duration-200 border-2 ${viewMode === 'all' ? 'bg-white border-blue-500' : 'bg-white border-transparent hover:border-blue-300'}`}>
+                    <h2 className="text-lg font-semibold text-slate-700 text-center">Visão Geral do Lançamento</h2>
+                    <div className="grid grid-cols-3 gap-4">
+                        <KpiCard title="Total Inscrições" value={(kpis?.total_inscricoes ?? 0).toLocaleString('pt-BR')} icon={Users} />
+                        <KpiCard title="Total Check-ins" value={(kpis?.total_checkins ?? 0).toLocaleString('pt-BR')} icon={UserCheck} />
+                        <KpiCard title="Taxa de Check-in" value={`${taxaCheckinGeral.toFixed(1)}%`} icon={Percent} />
+                    </div>
+                </button>
+                <button onClick={() => setViewMode('buyers')} className={`p-4 rounded-xl shadow-lg flex flex-col gap-4 transition-all duration-200 border-2 ${viewMode === 'buyers' ? 'bg-white border-blue-500' : 'bg-white border-transparent hover:border-blue-300'}`}>
+                    <h2 className="text-lg font-semibold text-slate-700 text-center">Análise de Compradores</h2>
+                    <div className="grid grid-cols-3 gap-4">
+                        <KpiCard title="Total Compradores" value={(kpis?.total_buyers ?? 0).toLocaleString('pt-BR')} icon={ShoppingCart} />
+                        <KpiCard title="Check-ins (Compradores)" value={(kpis?.total_buyer_checkins ?? 0).toLocaleString('pt-BR')} icon={UserCheck} />
+                        <KpiCard title="Taxa de Respostas" value={`${taxaConversaoCompradores.toFixed(1)}%`} icon={Percent} />
+                    </div>
+                </button>
+            </section>
+            <main>
+                {loading && <Spinner />}
+                {!loading && error && <div className="text-center py-10 px-4 bg-red-100 text-red-700 rounded-lg"><p>{error}</p></div>}
+                {!loading && !error && (!analysisData || analysisData.length === 0) && (<div className="text-center py-10 px-4 bg-white rounded-lg shadow-md"><p className="text-gray-600">Nenhuma pergunta de perfil encontrada.</p></div>)}
+                {!loading && !error && analysisData && analysisData.length > 0 && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                        {analysisData.map((question) => (<QuestionAnalysisCard key={question.question_id} questionData={question} />))}
+                    </div>
+                )}
+            </main>
+        </div>
+    );
 }

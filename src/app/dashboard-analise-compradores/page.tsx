@@ -1,13 +1,13 @@
 // =================================================================
 // ARQUIVO: app/dashboard-analise-compradores/page.tsx
-// VERSÃO FINAL CORRIGIDA: Adiciona a asserção non-null (!) para
-// satisfazer o compilador TypeScript rigoroso da Vercel.
+// VERSÃO ATUALIZADA: Adiciona a funcionalidade de exportação para CSV.
 // =================================================================
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { Database } from '@/types/database'; 
+import { FaFileCsv, FaSpinner } from 'react-icons/fa'; // Importa ícones
 
 // --- TIPAGEM DOS DADOS ---
 type Lancamento = {
@@ -34,6 +34,7 @@ export default function AnaliseCompradoresPage() {
   // --- ESTADOS (STATES) ---
   const [loading, setLoading] = useState(true);
   const [loadingRespostas, setLoadingRespostas] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // Novo estado para exportação
   const [error, setError] = useState<string | null>(null);
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [selectedLancamentoId, setSelectedLancamentoId] = useState<string | null>(null);
@@ -76,9 +77,6 @@ export default function AnaliseCompradoresPage() {
       }
       setError(null);
 
-      // --- CORREÇÃO APLICADA AQUI ---
-      // Adicionamos '!' para garantir ao TypeScript que selectedLancamentoId não é nulo,
-      // pois a linha 'if (!selectedLancamentoId) return;' já fez essa verificação.
       const { data, error } = await supabase.rpc('get_analise_compradores_dashboard', {
         p_launch_id: selectedLancamentoId!, 
         p_score_tier: activeScoreFilter,
@@ -111,6 +109,43 @@ export default function AnaliseCompradoresPage() {
     setSelectedLancamentoId(lancamentoId);
   };
 
+  // --- [NOVA FUNÇÃO] LÓGICA DE EXPORTAÇÃO ---
+  const handleExport = async () => {
+    if (!selectedLancamentoId) {
+        alert("Por favor, selecione um lançamento para exportar.");
+        return;
+    }
+    setIsExporting(true);
+    try {
+        const { data: csvText, error } = await supabase.functions.invoke('export-buyers-csv', {
+            body: { launch_id: selectedLancamentoId }
+        });
+
+        if (error) throw error;
+
+        if (!csvText || typeof csvText !== 'string' || csvText.length < 10) {
+            alert("Não há compradores com check-in para exportar neste lançamento.");
+            return;
+        }
+
+        const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        const launchName = lancamentos.find(l => l.id === selectedLancamentoId)?.nome || 'lancamento';
+        link.setAttribute("download", `export_compradores_${launchName.replace(/\s+/g, '_')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+    } catch (err: any) {
+        console.error("Erro na exportação:", err);
+        alert(`Falha na exportação: ${err.message}`);
+    } finally {
+        setIsExporting(false);
+    }
+  };
+
   // --- RENDERIZAÇÃO ---
   const renderContent = () => {
     if (loading) {
@@ -136,10 +171,19 @@ export default function AnaliseCompradoresPage() {
 
     return (
       <>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <KpiCard title="Total de Compradores" value={kpis.total_compradores.toLocaleString('pt-BR')} icon={<span>👥</span>} />
           <KpiCard title="Check-ins de Compradores" value={kpis.total_checkins.toLocaleString('pt-BR')} icon={<span>✅</span>} />
           <KpiCard title="Taxa de Check-in" value={`${(kpis.total_compradores > 0 ? (kpis.total_checkins / kpis.total_compradores) * 100 : 0).toFixed(1)}%`} icon={<div className="text-xl font-bold text-indigo-400">%</div>} />
+          {/* --- [NOVO BOTÃO] --- */}
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="bg-green-600 text-white font-bold rounded-lg flex items-center justify-center text-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isExporting ? <FaSpinner className="animate-spin" /> : <FaFileCsv />}
+            <span className="ml-3">Exportar CSV</span>
+          </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-6 mb-8">
           {scoreCardsData.map(({ title, count }) => (

@@ -107,7 +107,7 @@ export default function AnaliseRespostasPorScorePage() {
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de Respostas por Score</h1>
                 <div className="w-full sm:w-72">
                     <select id="launch-select" value={selectedLaunch} onChange={(e) => setSelectedLaunch(e.target.value)}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" disabled={loading} >
+                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 text-base" disabled={loading} >
                         <option value="all">Visão Geral (Todos)</option>
                         {launches.map((launch) => (<option key={launch.id} value={launch.id}>{`${launch.nome} - ${launch.status}`}</option>))}
                     </select>

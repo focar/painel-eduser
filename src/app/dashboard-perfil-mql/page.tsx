@@ -25,7 +25,13 @@ type GeneralKpiData = { total_inscricoes: number; total_checkins: number; };
 
 // --- Componentes ---
 const Spinner = () => ( <div className="flex justify-center items-center h-40"> <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /> </div> );
-const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => ( <div className="bg-white p-4 rounded-lg shadow-md text-center flex flex-col justify-center h-full"> <Icon className="mx-auto text-blue-500 mb-2" size={28} /> <p className="text-3xl font-bold text-slate-800">{value}</p> <h3 className="text-sm font-medium text-slate-500 mt-1">{title}</h3> </div> );
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => (
+    <div className="bg-white p-3 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
+        <Icon className="mx-auto text-blue-500 mb-1.5" size={24} />
+        <p className="text-2xl font-bold text-slate-800">{value}</p>
+        <h3 className="text-xs font-medium text-slate-500 mt-0.5">{title}</h3>
+    </div>
+);
 const AnswerBreakdownCard = ({ questionData }: { questionData: MqlQuestion }) => {
     const totalResponses = useMemo(() => { return questionData.answers?.reduce((sum, answer) => sum + answer.lead_count, 0) || 0; }, [questionData.answers]);
     if (!questionData.answers || totalResponses === 0) { return null; }
@@ -84,7 +90,6 @@ export default function AnaliseMqlPage() {
     const fetchInitialData = useCallback(async (launchId: string) => {
         if (!launchId) return;
         setLoadingKpis(true);
-        // Reset a seleção para 'a' temporariamente para evitar piscar de dados antigos
         setSelectedMql('a');
         try {
             const [mqlKpiResult, generalKpiResult] = await Promise.all([
@@ -99,22 +104,16 @@ export default function AnaliseMqlPage() {
                 console.error({ mqlKpiError, generalKpiError });
             } else {
                 const finalMqlData = (Array.isArray(mqlKpis) && mqlKpis.length > 0) ? mqlKpis[0] : null;
-                const finalGeneralData = (Array.isArray(generalKpisData) && generalKpisData.length > 0) ? generalKpisData[0] : { total_inscricoes: 0, total_checkins: 0 };
-                
+                const finalGeneralData = generalKpisData || { total_inscricoes: 0, total_checkins: 0 };
                 setMqlKpiData(finalMqlData);
                 setGeneralKpis(finalGeneralData);
 
-                // --- [A CORREÇÃO ESTÁ AQUI] ---
-                // Após receber os dados, verificamos a primeira categoria com valor
-                // e atualizamos o estado da categoria selecionada.
                 if (finalMqlData) {
                     const firstNonZeroCategory = mqlCategories.find(cat => finalMqlData[cat.key] > 0);
                     if (firstNonZeroCategory) {
                         setSelectedMql(firstNonZeroCategory.key);
                     }
                 }
-                // ------------------------------------
-
             }
         } catch (error) {
             toast.error("Ocorreu uma falha ao buscar os dados de KPI.");
@@ -175,7 +174,7 @@ export default function AnaliseMqlPage() {
             setIsExporting(false);
         }
     };
-    
+
     const taxaDeCheckin = generalKpis.total_inscricoes > 0 ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' : '0.0%';
 
     return (

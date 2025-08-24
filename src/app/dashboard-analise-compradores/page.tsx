@@ -1,13 +1,15 @@
 // =================================================================
 // ARQUIVO: app/dashboard-analise-compradores/page.tsx
-// VERSÃO ATUALIZADA: Adiciona a funcionalidade de exportação para CSV.
+// VERSÃO FINAL: Funcionalidade de filtro interativo nos KPIs.
+// DATA: 23 de Agosto de 2025
+// CÓDIGO CORRIGIDO POR GEMINI PARA RESOLVER ERRO DE BUILD
 // =================================================================
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { Database } from '@/types/database'; 
-import { FaFileCsv, FaSpinner } from 'react-icons/fa'; // Importa ícones
+import { FaFileCsv, FaSpinner } from 'react-icons/fa';
 
 // --- TIPAGEM DOS DADOS ---
 type Lancamento = {
@@ -16,8 +18,37 @@ type Lancamento = {
   status: string | null;
 };
 
-type Kpis = Database['public']['Functions']['get_analise_compradores_dashboard']['Returns']['kpis'];
-type RespostaAgregada = Database['public']['Functions']['get_analise_compradores_dashboard']['Returns']['respostas'][number];
+// ======================= INÍCIO DA CORREÇÃO =======================
+// O código anterior tentava adivinhar a estrutura de 'kpis' e 'respostas'
+// a partir de um tipo genérico 'Json', o que causava o erro.
+// Agora, definimos explicitamente como esses objetos devem ser,
+// garantindo que o TypeScript entenda perfeitamente os dados.
+
+type Kpis = {
+  total_compradores: number;
+  total_checkins: number;
+  score_tier_i: number;
+  score_tier_ii: number;
+  score_tier_iii: number;
+  score_tier_iv: number;
+  score_tier_v: number;
+  score_tier_vi: number;
+  score_tier_vii: number;
+  score_tier_viii: number;
+};
+
+type RespostaAgregada = {
+  pergunta: string;
+  // Define 'respostas' como um objeto com chaves de texto e valores numéricos (ex: { "Sim": 5, "Não": 10 })
+  respostas: Record<string, number>; 
+};
+
+// Este é o tipo que representa o objeto completo retornado pela sua função no banco de dados.
+type DashboardReturnType = {
+  kpis: Kpis;
+  respostas: RespostaAgregada[];
+};
+// ======================== FIM DA CORREÇÃO =========================
 
 type ScoreTier = 
   | 'Nível I (90+)' | 'Nível II (80-89)' | 'Nível III (70-79)' | 'Nível IV (60-69)'
@@ -34,7 +65,7 @@ export default function AnaliseCompradoresPage() {
   // --- ESTADOS (STATES) ---
   const [loading, setLoading] = useState(true);
   const [loadingRespostas, setLoadingRespostas] = useState(false);
-  const [isExporting, setIsExporting] = useState(false); // Novo estado para exportação
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [selectedLancamentoId, setSelectedLancamentoId] = useState<string | null>(null);
@@ -42,6 +73,9 @@ export default function AnaliseCompradoresPage() {
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [respostas, setRespostas] = useState<RespostaAgregada[]>([]);
   const [activeScoreFilter, setActiveScoreFilter] = useState<ScoreTier | 'todos'>('todos');
+  
+  // --- [NOVO ESTADO] Para controlar o filtro principal do dashboard ---
+  const [activeBuyerFilter, setActiveBuyerFilter] = useState<'todos' | 'com_checkin'>('com_checkin');
 
   // --- EFEITO PARA BUSCAR OS LANÇAMENTOS (RODA UMA VEZ) ---
   useEffect(() => {
@@ -65,7 +99,7 @@ export default function AnaliseCompradoresPage() {
     fetchLancamentos();
   }, [supabase]);
 
-  // --- EFEITO PARA BUSCAR DADOS DO DASHBOARD ---
+  // --- EFEITO PARA BUSCAR DADOS DO DASHBOARD (ATUALIZADO) ---
   useEffect(() => {
     if (!selectedLancamentoId) return;
 
@@ -77,9 +111,11 @@ export default function AnaliseCompradoresPage() {
       }
       setError(null);
 
-      const { data, error } = await supabase.rpc('get_analise_compradores_dashboard', {
+      // --- [MUDANÇA] A chamada RPC agora envia o novo filtro ---
+      const { data, error } = await supabase.rpc('get_compradores_dashboard_v2', {
         p_launch_id: selectedLancamentoId!, 
         p_score_tier: activeScoreFilter,
+        p_buyer_filter: activeBuyerFilter, // <-- NOVO PARÂMETRO
       });
 
       if (error) {
@@ -88,17 +124,18 @@ export default function AnaliseCompradoresPage() {
         setKpis(null);
         setRespostas([]);
       } else if (data) {
-        if (activeScoreFilter === 'todos') {
-            setKpis(data.kpis);
-        }
-        setRespostas(data.respostas);
+        // [CORREÇÃO] Informamos ao TypeScript que 'data' segue a estrutura de 'DashboardReturnType'
+        const typedData = data as unknown as DashboardReturnType;
+        
+        setKpis(typedData.kpis);
+        setRespostas(typedData.respostas);
       }
 
       setLoading(false);
       setLoadingRespostas(false);
     }
     getDashboardData();
-  }, [selectedLancamentoId, activeScoreFilter, supabase]);
+  }, [selectedLancamentoId, activeScoreFilter, activeBuyerFilter, supabase]); // <-- activeBuyerFilter adicionado aqui
 
   const handleScoreFilterClick = useCallback((tier: ScoreTier) => {
     setActiveScoreFilter(prev => (prev === tier ? 'todos' : tier));
@@ -106,10 +143,12 @@ export default function AnaliseCompradoresPage() {
   
   const handleLancamentoChange = (lancamentoId: string) => {
     setActiveScoreFilter('todos');
+    // Reseta o filtro principal ao mudar de lançamento
+    setActiveBuyerFilter('com_checkin'); 
     setSelectedLancamentoId(lancamentoId);
   };
 
-  // --- [NOVA FUNÇÃO] LÓGICA DE EXPORTAÇÃO ---
+  // --- LÓGICA DE EXPORTAÇÃO (sem alterações) ---
   const handleExport = async () => {
     if (!selectedLancamentoId) {
         alert("Por favor, selecione um lançamento para exportar.");
@@ -125,6 +164,7 @@ export default function AnaliseCompradoresPage() {
 
         if (!csvText || typeof csvText !== 'string' || csvText.length < 10) {
             alert("Não há compradores com check-in para exportar neste lançamento.");
+            setIsExporting(false);
             return;
         }
 
@@ -146,7 +186,7 @@ export default function AnaliseCompradoresPage() {
     }
   };
 
-  // --- RENDERIZAÇÃO ---
+  // --- RENDERIZAÇÃO (ATUALIZADA) ---
   const renderContent = () => {
     if (loading) {
       return <div className="text-center text-slate-300 my-4">A carregar dados...</div>;
@@ -172,10 +212,32 @@ export default function AnaliseCompradoresPage() {
     return (
       <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <KpiCard title="Total de Compradores" value={kpis.total_compradores.toLocaleString('pt-BR')} icon={<span>👥</span>} />
-          <KpiCard title="Check-ins de Compradores" value={kpis.total_checkins.toLocaleString('pt-BR')} icon={<span>✅</span>} />
+          
+          {/* --- [MUDANÇA] KPIs agora são clicáveis --- */}
+          <div 
+            onClick={() => setActiveBuyerFilter('todos')} 
+            className={`rounded-lg cursor-pointer transition-all duration-200 ${
+                activeBuyerFilter === 'todos' 
+                ? 'ring-2 ring-cyan-400 shadow-lg' // Estilo do card ATIVO
+                : 'opacity-60 hover:opacity-100' // Estilo do card INATIVO
+            }`}
+          >
+            <KpiCard title="Total de Compradores" value={kpis.total_compradores.toLocaleString('pt-BR')} icon={<span>👥</span>} />
+          </div>
+
+          <div 
+            onClick={() => setActiveBuyerFilter('com_checkin')}
+            className={`rounded-lg cursor-pointer transition-all duration-200 ${
+                activeBuyerFilter === 'com_checkin' 
+                ? 'ring-2 ring-cyan-400 shadow-lg' // Estilo do card ATIVO
+                : 'opacity-60 hover:opacity-100' // Estilo do card INATIVO
+            }`}
+          >
+            <KpiCard title="Check-ins de Compradores" value={kpis.total_checkins.toLocaleString('pt-BR')} icon={<span>✅</span>} />
+          </div>
+
           <KpiCard title="Taxa de Check-in" value={`${(kpis.total_compradores > 0 ? (kpis.total_checkins / kpis.total_compradores) * 100 : 0).toFixed(1)}%`} icon={<div className="text-xl font-bold text-indigo-400">%</div>} />
-          {/* --- [NOVO BOTÃO] --- */}
+          
           <button
             onClick={handleExport}
             disabled={isExporting}
@@ -185,6 +247,7 @@ export default function AnaliseCompradoresPage() {
             <span className="ml-3">Exportar CSV</span>
           </button>
         </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-6 mb-8">
           {scoreCardsData.map(({ title, count }) => (
             <ScoreCard
@@ -244,7 +307,7 @@ export default function AnaliseCompradoresPage() {
 
 function KpiCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
   return (
-    <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex items-center justify-between">
+    <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex items-center justify-between h-full">
       <div>
         <p className="text-sm font-medium text-slate-400">{title}</p>
         <p className="text-3xl font-bold text-slate-100 mt-1">{value}</p>
@@ -271,9 +334,9 @@ function ScoreCard({ title, count, total, color, isActive, onClick }: { title: S
   );
 }
 
-function RespostasGrafico({ pergunta, respostas }: { pergunta: string; respostas: any }) {
-    const totalRespostas = Object.values(respostas as {[key: string]: number}).reduce((sum, count) => sum + count, 0);
-    const sortedRespostas = Object.entries(respostas as {[key: string]: number}).sort(([, countA], [, countB]) => countB - countA);
+function RespostasGrafico({ pergunta, respostas }: { pergunta: string; respostas: Record<string, number> }) {
+    const totalRespostas = Object.values(respostas).reduce((sum, count) => sum + count, 0);
+    const sortedRespostas = Object.entries(respostas).sort(([, countA], [, countB]) => countB - countA);
 
     return (
         <div className="bg-slate-800 p-5 rounded-lg border border-slate-700">

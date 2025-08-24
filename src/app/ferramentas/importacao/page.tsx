@@ -58,53 +58,90 @@ export default function ImportacaoPage() {
         fetchData();
     }, []);
 
-    const handleFileUploadAndProcess = async (fileToUpload: File, launchId: string, importType: 'INSCRICAO' | 'CHECKIN_GERAL' | 'BUYERS') => {
-        if (!fileToUpload || !launchId) { showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV."); return; }
-        setIsProcessing(true);
-        addLog(`[UPLOAD] Iniciando upload para o Storage do tipo: ${importType}...`);
-        try {
-            const fileExt = fileToUpload.name.split('.').pop();
-            const fileName = `${importType.toLowerCase()}-${Date.now()}.${fileExt}`;
-            const folder = importType === 'BUYERS' ? 'buyers' : (importType === 'INSCRICAO' ? 'inscriptions' : 'checkins');
-            const filePath = `${folder}/${fileName}`;
-            const { error: uploadError } = await supabase.storage.from('importacoes-csv').upload(filePath, fileToUpload);
-            if (uploadError) throw uploadError;
-            addLog(`[UPLOAD] Sucesso! Ficheiro salvo em: ${filePath}`);
-            addLog(`[PROCESSAMENTO] Enviando pedido para processamento em segundo plano...`);
-            let edgeFunctionName = '';
-            if (importType === 'INSCRICAO') edgeFunctionName = 'processar-inscricao-csv';
-            else if (importType === 'CHECKIN_GERAL') edgeFunctionName = 'processar-checkin-csv';
-            else if (importType === 'BUYERS') edgeFunctionName = 'processar-compradores-csv';
-            addLog(`A invocar a Edge Function: ${edgeFunctionName}`);
-            const { data, error: invokeError } = await supabase.functions.invoke(edgeFunctionName, { body: { launch_id: launchId, file_path: filePath } });
-            if (invokeError) throw invokeError;
-            
-            const summaryTitle = "Processamento Concluído";
-            let summaryMessage = `${data.message || 'Operação finalizada.'}\n\n----------------------------------------\n`;
-            summaryMessage += `Registos recebidos: ${data.total_recebido ?? 'N/A'}\n`;
-            summaryMessage += `Leads atualizados: ${data.atualizados ?? 'N/A'}\n`;
-            
-            if (data.criados !== undefined) {
-                summaryMessage += `Compradores novos (criados): ${data.criados}\n`;
-                if (data.criados > 0 && data.criados_emails) {
-                    summaryMessage += `\nEmails criados:\n- ${data.criados_emails.join('\n- ')}`;
-                }
-            } else {
-                summaryMessage += `Não encontrados: ${data.nao_encontrados ?? 'N/A'}\n`;
-            }
+const handleFileUploadAndProcess = async (fileToUpload: File, launchId: string, importType: 'INSCRICAO' | 'CHECKIN_GERAL' | 'BUYERS') => {
+    if (!fileToUpload || !launchId) {
+      showAlertModal("Atenção", "Por favor, selecione um lançamento e um ficheiro CSV.");
+      return;
+    }
+    setIsProcessing(true);
+    addLog(`[UPLOAD] Iniciando upload para o Storage do tipo: ${importType}...`);
+    try {
+      const fileExt = fileToUpload.name.split('.').pop();
+      const fileName = `${importType.toLowerCase()}-${Date.now()}.${fileExt}`;
+      const folder = importType === 'BUYERS' ? 'buyers' : (importType === 'INSCRICAO' ? 'inscriptions' : 'checkins');
+      const filePath = `${folder}/${fileName}`;
 
-            addLog(`[SUCESSO] ${summaryMessage.replace(/\n/g, ' ')}`);
-            showAlertModal(summaryTitle, summaryMessage);
+      const { error: uploadError } = await supabase.storage.from('importacoes-csv').upload(filePath, fileToUpload);
+      if (uploadError) throw uploadError;
+      addLog(`[UPLOAD] Sucesso! Ficheiro salvo em: ${filePath}`);
+      addLog(`[PROCESSAMENTO] Enviando pedido para processamento em segundo plano...`);
 
-        } catch (error: any) {
-            addLog(`[ERRO FATAL] ${error.message}`);
-            showAlertModal("Erro na Importação", `Ocorreu um erro. Mensagem: ${error.message}`);
-        } finally {
-            setIsProcessing(false);
-            if (importType === 'BUYERS') { if (buyerFileInputRef.current) buyerFileInputRef.current.value = ''; setBuyerFile(null); } 
-            else { if (fileInputRef.current) fileInputRef.current.value = ''; setFile(null); }
-        }
-    };
+      let edgeFunctionName = '';
+      if (importType === 'INSCRICAO') edgeFunctionName = 'processar-inscricao-csv';
+      else if (importType === 'CHECKIN_GERAL') edgeFunctionName = 'processar-checkin-csv';
+      else if (importType === 'BUYERS') edgeFunctionName = 'processar-compradores-csv';
+      
+      addLog(`A invocar a Edge Function: ${edgeFunctionName}`);
+      const { data, error: invokeError } = await supabase.functions.invoke(edgeFunctionName, { body: { launch_id: launchId, file_path: filePath } });
+      if (invokeError) throw invokeError;
+      
+      // --- NOVA LÓGICA DE EXIBIÇÃO DO RELATÓRIO ---
+      const summaryTitle = "Processamento Concluído";
+      let summaryMessage = '';
+
+      if (importType === 'BUYERS') {
+          const { totalLinhasArquivo, resultadoSql, linhasComErro } = data;
+          const { message, atualizados, criados } = resultadoSql || { message: 'Nenhum registo válido processado.', atualizados: 0, criados: 0 };
+
+          summaryMessage += `${message}\n\n`;
+          summaryMessage += `----------------------------------------\n`;
+          summaryMessage += `Total de Linhas no Arquivo: ${totalLinhasArquivo ?? 'N/A'}\n`;
+          summaryMessage += `Registos Válidos Processados: ${(atualizados || 0) + (criados || 0)}\n`;
+          summaryMessage += `   - Leads atualizados: ${atualizados || 0}\n`;
+          summaryMessage += `   - Compradores novos (criados): ${criados || 0}\n`;
+          summaryMessage += `Linhas Ignoradas (com erro): ${linhasComErro?.length || 0}\n`;
+
+          if (linhasComErro && linhasComErro.length > 0) {
+              summaryMessage += `\n----------------------------------------\n`;
+              summaryMessage += `MOTIVO DOS ERROS (exemplos):\n`;
+              linhasComErro.slice(0, 5).forEach((erro: any, index: number) => {
+                  // Tenta encontrar um valor na linha para exibir como exemplo
+                  // Exemplo de linha do erro (versão melhorada)
+const exemploLinha = Object.entries(erro.linha)
+    .filter(([, value]) => value !== null && String(value).trim() !== '')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ') || 'Dados não legíveis';
+                  summaryMessage += `- Linha ${index + 1}: ${erro.motivo} (Ex: ${exemploLinha.substring(0, 50)}...)\n`;
+              });
+              if (linhasComErro.length > 5) {
+                  summaryMessage += `...e mais ${linhasComErro.length - 5} outros erros.\n`;
+              }
+          }
+      } else {
+        // Lógica antiga para os outros tipos de importação
+        summaryMessage += `${data.message || 'Operação finalizada.'}\n\n----------------------------------------\n`;
+        summaryMessage += `Registos recebidos: ${data.total_recebido ?? 'N/A'}\n`;
+        summaryMessage += `Leads atualizados: ${data.atualizados ?? 'N/A'}\n`;
+        summaryMessage += `Não encontrados: ${data.nao_encontrados ?? 'N/A'}\n`;
+      }
+
+      addLog(`[SUCESSO] ${summaryMessage.replace(/\n/g, ' ')}`);
+      showAlertModal(summaryTitle, summaryMessage);
+
+    } catch (error: any) {
+      addLog(`[ERRO FATAL] ${error.message}`);
+      showAlertModal("Erro na Importação", `Ocorreu um erro. Mensagem: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+      if (importType === 'BUYERS') {
+        if (buyerFileInputRef.current) buyerFileInputRef.current.value = '';
+        setBuyerFile(null);
+      } else {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setFile(null);
+      }
+    }
+  };
 
     const handleRecalculateScores = () => {
         if (!selectedLaunchForLeads) { showAlertModal("Atenção", "Por favor, selecione um lançamento na seção de 'Importação Geral' para recalcular os scores."); return; }
@@ -216,7 +253,37 @@ export default function ImportacaoPage() {
         );
     };
 
-    const handleRefreshDates = () => { showAlertModal("Info", "Função não implementada."); };
+  const handleRefreshDates = () => {
+    if (!selectedLaunchForTesting) {
+        showAlertModal("Atenção", "Selecione um lançamento na seção 'Ferramentas de Teste' para executar a ação.");
+        return;
+    }
+
+    showConfirmationModal(
+        "Atualizar Datas",
+        `Tem a certeza que deseja atualizar as datas de criação e check-in de TODOS os leads do lançamento selecionado para os últimos 7 dias? Esta ação é útil para testes de dashboards.`,
+        async () => {
+            setIsProcessing(true);
+            addLog(`[AÇÃO] A atualizar datas de teste para o lançamento ID: ${selectedLaunchForTesting}`);
+            try {
+                const { data, error } = await supabase.rpc('refresh_launch_dates', {
+                    p_launch_id: selectedLaunchForTesting
+                });
+
+                if (error) throw error;
+
+                addLog(`[SUCESSO] ${data}`);
+                showAlertModal("Sucesso", data);
+
+            } catch (error: any) {
+                addLog(`[ERRO] ${error.message}`);
+                showAlertModal("Erro", `Não foi possível atualizar as datas: ${error.message}`);
+            } finally {
+                setIsProcessing(false);
+            }
+        }
+    );
+};
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 p-6 md:p-10">

@@ -1,28 +1,23 @@
 // =================================================================
 // ARQUIVO: app/dashboard-analise-compradores/page.tsx
 // VERSÃO FINAL: Funcionalidade de filtro interativo nos KPIs.
-// DATA: 23 de Agosto de 2025
-// CÓDIGO CORRIGIDO POR GEMINI PARA RESOLVER ERRO DE BUILD
+// DATA: 29 de Agosto de 2025
+// CÓDIGO 100% CORRIGIDO
 // =================================================================
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import toast, { Toaster } from 'react-hot-toast'; // Importação do Toaster adicionada
 import { Database } from '@/types/database'; 
 import { FaFileCsv, FaSpinner } from 'react-icons/fa';
 
 // --- TIPAGEM DOS DADOS ---
-type Lancamento = {
+type Launch = {
   id: string;
   nome: string;
   status: string | null;
 };
-
-// ======================= INÍCIO DA CORREÇÃO =======================
-// O código anterior tentava adivinhar a estrutura de 'kpis' e 'respostas'
-// a partir de um tipo genérico 'Json', o que causava o erro.
-// Agora, definimos explicitamente como esses objetos devem ser,
-// garantindo que o TypeScript entenda perfeitamente os dados.
 
 type Kpis = {
   total_compradores: number;
@@ -39,16 +34,13 @@ type Kpis = {
 
 type RespostaAgregada = {
   pergunta: string;
-  // Define 'respostas' como um objeto com chaves de texto e valores numéricos (ex: { "Sim": 5, "Não": 10 })
   respostas: Record<string, number>; 
 };
 
-// Este é o tipo que representa o objeto completo retornado pela sua função no banco de dados.
 type DashboardReturnType = {
   kpis: Kpis;
   respostas: RespostaAgregada[];
 };
-// ======================== FIM DA CORREÇÃO =========================
 
 type ScoreTier = 
   | 'Nível I (90+)' | 'Nível II (80-89)' | 'Nível III (70-79)' | 'Nível IV (60-69)'
@@ -57,7 +49,7 @@ type ScoreTier =
 
 // --- COMPONENTE DA PÁGINA ---
 export default function AnaliseCompradoresPage() {
-  const [supabase] = useState(() => createBrowserClient<Database>(
+  const [supabase] = useState(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   ));
@@ -67,33 +59,44 @@ export default function AnaliseCompradoresPage() {
   const [loadingRespostas, setLoadingRespostas] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
+  const [launches, setLaunches] = useState<Launch[]>([]);
   const [selectedLancamentoId, setSelectedLancamentoId] = useState<string | null>(null);
   
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [respostas, setRespostas] = useState<RespostaAgregada[]>([]);
   const [activeScoreFilter, setActiveScoreFilter] = useState<ScoreTier | 'todos'>('todos');
   
-  // --- [NOVO ESTADO] Para controlar o filtro principal do dashboard ---
-  const [activeBuyerFilter, setActiveBuyerFilter] = useState<'todos' | 'com_checkin'>('com_checkin');
+  // ======================= INÍCIO DA CORREÇÃO PRINCIPAL =======================
+  // O tipo agora inclui 'buyers' como uma opção válida.
+  const [activeBuyerFilter, setActiveBuyerFilter] = useState<'todos' | 'com_checkin' | 'buyers'>('com_checkin');
+  // ======================== FIM DA CORREÇÃO PRINCIPAL =========================
 
-  // --- EFEITO PARA BUSCAR OS LANÇAMENTOS (RODA UMA VEZ) ---
+// CÓDIGO CORRIGIDO PARA O USEEFFECT
   useEffect(() => {
     async function fetchLancamentos() {
-      const { data, error } = await supabase.rpc('get_lancamentos_ordenados');
+      // 1. Fazemos a chamada normal, sem tipos aqui.
+      const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
       
       if (error) {
+        toast.error('Erro ao buscar lançamentos.');
         console.error('Erro ao buscar lançamentos:', error);
         setError('Não foi possível carregar a lista de lançamentos.');
         setLoading(false);
         return;
       }
       
-      setLancamentos(data as Lancamento[] || []);
-      if (data && data.length > 0) {
-        setSelectedLancamentoId(data[0].id);
-      } else {
-        setLoading(false);
+      if (data) {
+        // 2. Aplicamos o tipo aqui, de forma explícita.
+        const launchesData: Launch[] = data;
+        
+        setLaunches(launchesData);
+
+        if (launchesData.length > 0) {
+            const inProgress = launchesData.find(l => l.status === 'Em Andamento');
+            setSelectedLancamentoId(inProgress ? inProgress.id : launchesData[0].id);
+        } else {
+            setLoading(false);
+        }
       }
     }
     fetchLancamentos();
@@ -111,22 +114,21 @@ export default function AnaliseCompradoresPage() {
       }
       setError(null);
 
-      // --- [MUDANÇA] A chamada RPC agora envia o novo filtro ---
+      // A chamada RPC agora envia o valor booleano correto
       const { data, error } = await supabase.rpc('get_compradores_dashboard_v2', {
-        p_launch_id: selectedLancamentoId!, 
+        p_launch_id: selectedLancamentoId, 
         p_score_tier: activeScoreFilter,
-        p_buyer_filter: activeBuyerFilter, // <-- NOVO PARÂMETRO
+        p_buyer_filter: activeBuyerFilter === 'com_checkin', 
       });
 
       if (error) {
+        toast.error('Erro ao carregar dados do dashboard.');
         console.error('Erro ao chamar a função RPC:', error);
         setError('Não foi possível carregar os dados do dashboard.');
         setKpis(null);
         setRespostas([]);
       } else if (data) {
-        // [CORREÇÃO] Informamos ao TypeScript que 'data' segue a estrutura de 'DashboardReturnType'
         const typedData = data as unknown as DashboardReturnType;
-        
         setKpis(typedData.kpis);
         setRespostas(typedData.respostas);
       }
@@ -135,7 +137,7 @@ export default function AnaliseCompradoresPage() {
       setLoadingRespostas(false);
     }
     getDashboardData();
-  }, [selectedLancamentoId, activeScoreFilter, activeBuyerFilter, supabase]); // <-- activeBuyerFilter adicionado aqui
+  }, [selectedLancamentoId, activeScoreFilter, activeBuyerFilter, supabase]);
 
   const handleScoreFilterClick = useCallback((tier: ScoreTier) => {
     setActiveScoreFilter(prev => (prev === tier ? 'todos' : tier));
@@ -143,18 +145,17 @@ export default function AnaliseCompradoresPage() {
   
   const handleLancamentoChange = (lancamentoId: string) => {
     setActiveScoreFilter('todos');
-    // Reseta o filtro principal ao mudar de lançamento
     setActiveBuyerFilter('com_checkin'); 
     setSelectedLancamentoId(lancamentoId);
   };
 
-  // --- LÓGICA DE EXPORTAÇÃO (sem alterações) ---
   const handleExport = async () => {
     if (!selectedLancamentoId) {
-        alert("Por favor, selecione um lançamento para exportar.");
+        toast.error("Por favor, selecione um lançamento para exportar.");
         return;
     }
     setIsExporting(true);
+    const exportToast = toast.loading('Exportando dados...');
     try {
         const { data: csvText, error } = await supabase.functions.invoke('export-buyers-csv', {
             body: { launch_id: selectedLancamentoId }
@@ -163,7 +164,7 @@ export default function AnaliseCompradoresPage() {
         if (error) throw error;
 
         if (!csvText || typeof csvText !== 'string' || csvText.length < 10) {
-            alert("Não há compradores com check-in para exportar neste lançamento.");
+            toast.success("Não há compradores com check-in para exportar.", { id: exportToast });
             setIsExporting(false);
             return;
         }
@@ -172,30 +173,30 @@ export default function AnaliseCompradoresPage() {
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        const launchName = lancamentos.find(l => l.id === selectedLancamentoId)?.nome || 'lancamento';
+        const launchName = launches.find(l => l.id === selectedLancamentoId)?.nome || 'lancamento';
         link.setAttribute("download", `export_compradores_${launchName.replace(/\s+/g, '_')}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        toast.success("Exportação concluída!", { id: exportToast });
 
     } catch (err: any) {
         console.error("Erro na exportação:", err);
-        alert(`Falha na exportação: ${err.message}`);
+        toast.error(`Falha na exportação: ${err.message}`, { id: exportToast });
     } finally {
         setIsExporting(false);
     }
   };
 
-  // --- RENDERIZAÇÃO (ATUALIZADA) ---
   const renderContent = () => {
     if (loading) {
-      return <div className="text-center text-slate-300 my-4">A carregar dados...</div>;
+      return <div className="text-center my-4"><FaSpinner className="animate-spin text-3xl mx-auto" /></div>;
     }
     if (error) {
-      return <div className="text-center text-red-400 bg-red-900/20 p-4 rounded-lg my-4">{error}</div>;
+      return <div className="text-center text-red-500 bg-red-100 p-4 rounded-lg my-4">{error}</div>;
     }
     if (!kpis || kpis.total_compradores === 0) {
-      return <div className="text-center text-yellow-400 bg-slate-800 p-6 rounded-lg">Nenhum comprador encontrado para este lançamento.</div>;
+      return <div className="text-center text-yellow-500 bg-yellow-100 p-6 rounded-lg">Nenhum comprador encontrado para este lançamento.</div>;
     }
     
     const scoreCardsData = [
@@ -212,32 +213,29 @@ export default function AnaliseCompradoresPage() {
     return (
       <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          
-          {/* --- [MUDANÇA] KPIs agora são clicáveis --- */}
           <div 
             onClick={() => setActiveBuyerFilter('todos')} 
-            className={`rounded-lg cursor-pointer transition-all duration-200 ${
+            className={`p-4 bg-white rounded-lg cursor-pointer transition-all duration-200 shadow-md ${
                 activeBuyerFilter === 'todos' 
-                ? 'ring-2 ring-cyan-400 shadow-lg' // Estilo do card ATIVO
-                : 'opacity-60 hover:opacity-100' // Estilo do card INATIVO
+                ? 'ring-2 ring-blue-500'
+                : 'opacity-70 hover:opacity-100'
             }`}
           >
             <KpiCard title="Total de Compradores" value={kpis.total_compradores.toLocaleString('pt-BR')} icon={<span>👥</span>} />
           </div>
-
           <div 
             onClick={() => setActiveBuyerFilter('com_checkin')}
-            className={`rounded-lg cursor-pointer transition-all duration-200 ${
+            className={`p-4 bg-white rounded-lg cursor-pointer transition-all duration-200 shadow-md ${
                 activeBuyerFilter === 'com_checkin' 
-                ? 'ring-2 ring-cyan-400 shadow-lg' // Estilo do card ATIVO
-                : 'opacity-60 hover:opacity-100' // Estilo do card INATIVO
+                ? 'ring-2 ring-blue-500'
+                : 'opacity-70 hover:opacity-100'
             }`}
           >
             <KpiCard title="Check-ins de Compradores" value={kpis.total_checkins.toLocaleString('pt-BR')} icon={<span>✅</span>} />
           </div>
-
-          <KpiCard title="Taxa de Check-in" value={`${(kpis.total_compradores > 0 ? (kpis.total_checkins / kpis.total_compradores) * 100 : 0).toFixed(1)}%`} icon={<div className="text-xl font-bold text-indigo-400">%</div>} />
-          
+          <div className="p-4 bg-white rounded-lg shadow-md">
+            <KpiCard title="Taxa de Check-in" value={`${(kpis.total_compradores > 0 ? (kpis.total_checkins / kpis.total_compradores) * 100 : 0).toFixed(1)}%`} icon={<div className="text-xl font-bold text-blue-500">%</div>} />
+          </div>
           <button
             onClick={handleExport}
             disabled={isExporting}
@@ -254,22 +252,22 @@ export default function AnaliseCompradoresPage() {
               key={title}
               title={title as ScoreTier}
               count={count}
-              total={kpis.total_compradores}
+              total={activeBuyerFilter === 'com_checkin' ? kpis.total_checkins : kpis.total_compradores}
               color={getScoreColor(title as ScoreTier)}
               isActive={activeScoreFilter === title}
               onClick={() => handleScoreFilterClick(title as ScoreTier)}
             />
           ))}
         </div>
-        <h2 className="text-2xl font-bold text-slate-100 mb-4 mt-10">Respostas dos Compradores</h2>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4 mt-10">Respostas dos Compradores</h2>
         <div className={`relative grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 ${loadingRespostas ? 'opacity-50' : ''}`}>
-          {loadingRespostas && <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 z-10"><p>A filtrar respostas...</p></div>}
+          {loadingRespostas && <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10 rounded-lg"><FaSpinner className="animate-spin text-3xl" /></div>}
           {respostas.length > 0 ? (
             respostas.map(({ pergunta, respostas }) => (
               <RespostasGrafico key={pergunta} pergunta={pergunta} respostas={respostas} />
             ))
           ) : (
-            <div className="col-span-full text-center text-slate-400 bg-slate-800 p-6 rounded-lg">
+            <div className="col-span-full text-center text-slate-500 bg-white p-6 rounded-lg shadow-md">
               Nenhuma resposta encontrada para o filtro selecionado.
             </div>
           )}
@@ -279,19 +277,20 @@ export default function AnaliseCompradoresPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 bg-slate-900 min-h-screen">
+    <div className="p-4 sm:p-6 md:p-8 bg-slate-50 min-h-screen">
+      <Toaster position="top-center" />
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100 mb-2">Análise de Perfil de Compradores</h1>
-          <p className="text-slate-400">Classificação de compradores por faixas de pontuação para análise e calibração.</p>
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">Análise de Perfil de Compradores</h1>
+          <p className="text-slate-500">Classificação de compradores por faixas de pontuação para análise e calibração.</p>
         </div>
         <select
           value={selectedLancamentoId || ''}
           onChange={(e) => handleLancamentoChange(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-slate-100 rounded-lg p-2"
-          disabled={lancamentos.length === 0}
+          className="bg-white border border-gray-300 text-slate-800 rounded-lg p-2 shadow-sm"
+          disabled={launches.length === 0 || loading}
         >
-          {lancamentos.map(l => (
+          {launches.map(l => (
             <option key={l.id} value={l.id}>
               {l.nome} {l.status ? `(${l.status})` : ''}
             </option>
@@ -303,33 +302,29 @@ export default function AnaliseCompradoresPage() {
   );
 }
 
-// --- COMPONENTES AUXILIARES (sem alterações) ---
-
 function KpiCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
   return (
-    <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex items-center justify-between h-full">
-      <div>
-        <p className="text-sm font-medium text-slate-400">{title}</p>
-        <p className="text-3xl font-bold text-slate-100 mt-1">{value}</p>
-      </div>
-      <div className="text-3xl text-slate-500">{icon}</div>
+    <div className="flex flex-col items-center justify-center h-full">
+        <div className="text-3xl text-blue-500 mb-2">{icon}</div>
+        <p className="text-3xl font-bold text-slate-800">{value}</p>
+        <p className="text-sm font-medium text-slate-500 text-center">{title}</p>
     </div>
   );
 }
 
 function ScoreCard({ title, count, total, color, isActive, onClick }: { title: ScoreTier; count: number; total: number; color: string; isActive: boolean; onClick: () => void; }) {
   const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
-  const activeClasses = isActive ? 'ring-2 ring-offset-2 ring-offset-slate-900 ring-cyan-400' : 'border-slate-700';
+  const activeClasses = isActive ? `ring-2 ring-offset-2 ring-offset-slate-50 ${color.replace('bg-', 'ring-')}` : 'border-gray-200';
   
   return (
     <div 
-      className={`bg-slate-800 p-5 rounded-lg border relative overflow-hidden cursor-pointer transition-all duration-200 hover:border-slate-500 ${activeClasses}`}
+      className={`bg-white p-5 rounded-lg border relative overflow-hidden cursor-pointer transition-all duration-200 hover:border-gray-400 shadow-md ${activeClasses}`}
       onClick={onClick}
     >
       <div className={`absolute top-0 left-0 h-1 w-full ${color}`}></div>
-      <p className="font-bold text-slate-300 mt-2 text-sm">{title}</p>
-      <p className="text-4xl font-bold text-slate-100 mt-2">{count.toLocaleString('pt-BR')}</p>
-      <p className="text-sm text-slate-400 mt-1">{percentage}% do total</p>
+      <p className="font-bold text-slate-600 mt-2 text-sm">{title}</p>
+      <p className="text-4xl font-bold text-slate-800 mt-2">{count.toLocaleString('pt-BR')}</p>
+      <p className="text-sm text-slate-500 mt-1">{percentage}% do total</p>
     </div>
   );
 }
@@ -339,8 +334,8 @@ function RespostasGrafico({ pergunta, respostas }: { pergunta: string; respostas
     const sortedRespostas = Object.entries(respostas).sort(([, countA], [, countB]) => countB - countA);
 
     return (
-        <div className="bg-slate-800 p-5 rounded-lg border border-slate-700">
-            <h3 className="text-md font-bold text-slate-200 mb-4">{pergunta}</h3>
+        <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-md">
+            <h3 className="text-md font-bold text-slate-800 mb-4">{pergunta}</h3>
             <div className="space-y-3">
                 {sortedRespostas.map(([texto, count]) => (
                     <BarraResposta key={texto} texto={texto} count={count} total={totalRespostas} />
@@ -355,12 +350,12 @@ function BarraResposta({ texto, count, total }: { texto: string; count: number; 
     return (
         <div>
             <div className="flex justify-between items-center text-sm mb-1">
-                <span className="text-slate-300">{texto}</span>
-                <span className="text-slate-400 font-semibold">{count.toLocaleString('pt-BR')} ({percentage.toFixed(1)}%)</span>
+                <span className="text-slate-600">{texto}</span>
+                <span className="text-slate-500 font-semibold">{count.toLocaleString('pt-BR')} ({percentage.toFixed(1)}%)</span>
             </div>
-            <div className="w-full bg-slate-700 rounded-full h-2.5">
+            <div className="w-full bg-slate-200 rounded-full h-2.5">
                 <div 
-                    className="bg-cyan-500 h-2.5 rounded-full" 
+                    className="bg-blue-500 h-2.5 rounded-full" 
                     style={{ width: `${percentage}%` }}
                 ></div>
             </div>

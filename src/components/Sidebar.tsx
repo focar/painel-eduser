@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation'; // 1. Importar o useRouter
+import { usePathname, useRouter } from 'next/navigation';
 import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
 import { useUser } from '@/components/providers/UserProvider';
 import { createClient } from '@/utils/supabase/client';
@@ -23,9 +23,7 @@ const menuItems = [
             { name: "Acompanhamento Canais", href: "/dashboard-acompanhamento-canais" },
             { name: "Detalhamento Canais", href: "/dashboard-detalhamento-canais" },
             { name: "Análise de Compradores", href: "/dashboard-analise-compradores" },
-
             { name: "Posição Final Compradores", href: "/dashboard-posicao-final" },
-
             { name: "Campanhas e Criativos", href: "/dashboard-campanhas-criativos" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Análise de Respostas", href: "/dashboard-analise-resposta" },
@@ -37,28 +35,30 @@ const menuItems = [
         title: "Operacional",
         icon: FaRocket,
         links: [
-            { name: "Lançamentos", href: "/lancamentos" },
-            { name: "Pesquisas", href: "/pesquisas" },
-            { name: "Perguntas", href: "/perguntas" },
+            { name: "Lançamentos", href: "/lancamentos", adminOnly: true },
+            { name: "Pesquisas", href: "/pesquisas", adminOnly: true },
+            // AQUI ESTÁ A MUDANÇA: 'Perguntas' não é mais adminOnly
+            { name: "Perguntas", href: "/perguntas", adminOnly: false },
         ],
     },
     {
         title: "Ferramentas",
         icon: FaTools,
         links: [
+            { name: "Gerenciar Usuários", href: "/ferramentas/gerenciar-usuarios" },
+            { name: "Perfis de Lançamentos", href: "/ferramentas/perfis-lancamento" },
             { name: "Controle de Inscrições", href: "/ferramentas/controle-inscricoes" },
             { name: "Ajustes de Arquivos", href: "/ferramentas/importacao" },
             { name: "Simulador de Inscrição", href: "/ferramentas/simulador-inscricao" },
             { name: "Conversão UTMs", href: "/ferramentas/conversao-utms" },
             { name: "Mapeamento de Colunas", href: "/ferramentas/mapeamento" },
-            { name: "Gerenciar Usuários", href: "/ferramentas/gerenciar-usuarios" },
         ],
     },
 ];
 
 export default function Sidebar() {
     const pathname = usePathname();
-    const router = useRouter(); // 2. Inicializar o router
+    const router = useRouter();
     const { session, isLoading } = useUser();
     const { user, profile } = session;
 
@@ -67,15 +67,9 @@ export default function Sidebar() {
     const [isOperacionalOpen, setIsOperacionalOpen] = useState(activeGroup?.title === 'Operacional');
     const [isFerramentasOpen, setIsFerramentasOpen] = useState(activeGroup?.title === 'Ferramentas');
 
-    // 3. FUNÇÃO DE LOGOUT CORRIGIDA
     const handleLogout = async () => {
         const supabase = createClient();
         await supabase.auth.signOut();
-        
-        // Esta é a linha mais importante.
-        // Ela força uma atualização da página com o servidor, que então
-        // acionará o middleware. Como o usuário já está deslogado,
-        // o middleware o redirecionará corretamente para a página de login.
         router.refresh();
     };
     
@@ -118,7 +112,7 @@ export default function Sidebar() {
                     </Link>
                     
                     <div className="flex justify-between items-center text-xs text-slate-500 mt-2 px-1">
-                        <span>v 1.00</span>
+                        <span>v 2.00</span>
                         <span>by FOCAR</span>
                     </div>
                 </div>
@@ -129,10 +123,22 @@ export default function Sidebar() {
                                 <FaSpinner className="animate-spin mx-auto text-xl" />
                             </li>
                         ) : menuItems.map((group) => {
-                            if ((group.title === 'Operacional' || group.title === 'Ferramentas') && profile?.role !== 'admin') {
+                            const Icon = group.icon;
+                            // Filtra os links que o usuário pode ver
+                            const visibleLinks = group.links.filter(link => 
+                                !(link as any).adminOnly || profile?.role === 'admin'
+                            );
+
+                            // Se não houver links visíveis no grupo, não renderiza o grupo
+                            if (visibleLinks.length === 0) {
                                 return null;
                             }
-                            const Icon = group.icon;
+                            
+                            // Apenas esconde o grupo "Ferramentas" inteiro para viewers
+                            if (group.title === 'Ferramentas' && profile?.role !== 'admin') {
+                                return null;
+                            }
+
                             if (group.title === 'Dashboards') {
                                 return (
                                     <li key={group.title} className="mb-4">
@@ -160,6 +166,7 @@ export default function Sidebar() {
                                     </li>
                                 );
                             }
+                            
                             const isOpen = group.title === 'Operacional' ? isOperacionalOpen : isFerramentasOpen;
                             const setIsOpen = group.title === 'Operacional' ? setIsOperacionalOpen : setIsFerramentasOpen;
                             return (
@@ -173,7 +180,8 @@ export default function Sidebar() {
                                     </button>
                                     {isOpen && (
                                         <ul className="mt-2 space-y-1">
-                                            {group.links.map((link) => (
+                                            {/* Renderiza apenas os links visíveis */}
+                                            {visibleLinks.map((link) => (
                                                 <li key={link.name}>
                                                     <Link 
                                                         href={link.href} 

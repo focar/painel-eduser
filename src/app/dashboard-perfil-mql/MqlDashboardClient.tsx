@@ -1,65 +1,56 @@
-// src/app/dashboard-perfil-mql/page.tsx
-'use client';
+// src/app/dashboard-perfil-mql/MqlDashboardClient.tsx
+// VERSÃO CORRIGIDA E ROBUSTA
+'use client'; 
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+// MUDANÇA 1: Usar createClient do utils, que é mais simples para o lado do cliente.
 import { createClient } from '@/utils/supabase/client';
 import { Launch } from "@/lib/types";
 import { FaSpinner, FaFileCsv } from "react-icons/fa";
 import toast, { Toaster } from 'react-hot-toast';
 import { Users, UserCheck, Percent } from "lucide-react";
 
-// --- Tipos de Dados ---
+// --- Tipos e Componentes (sem alterações) ---
 type AnswerProfile = { answer_text: string; lead_count: number; };
 type MqlQuestion = { question_id: string; question_text: string; answers: AnswerProfile[]; };
-
 const mqlCategories = [
     { key: 'a', letter: 'A', name: '(>= 20)', color: 'text-emerald-500', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-500' },
     { key: 'b', letter: 'B', name: '(14-19)', color: 'text-sky-500', bgColor: 'bg-sky-50', borderColor: 'border-sky-500' },
     { key: 'c', letter: 'C', name: '(6-13)', color: 'text-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-500' },
     { key: 'd', letter: 'D', name: '(1-5)', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-500' },
 ] as const;
-
 type MqlCategoryKey = typeof mqlCategories[number]['key'];
 type MqlKpiData = { a: number, b: number, c: number, d: number };
 type GeneralKpiData = { total_inscricoes: number; total_checkins: number; };
-
-// --- Componentes ---
 const Spinner = () => ( <div className="flex justify-center items-center h-40"> <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto" /> </div> );
-const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => (
-    <div className="bg-white p-3 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
-        <Icon className="mx-auto text-blue-500 mb-1.5" size={24} />
-        <p className="text-2xl font-bold text-slate-800">{value}</p>
-        <h3 className="text-xs font-medium text-slate-500 mt-0.5">{title}</h3>
-    </div>
-);
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) => ( <div className="bg-white p-3 rounded-lg shadow-md text-center flex flex-col justify-center h-full"><Icon className="mx-auto text-blue-500 mb-1.5" size={24} /><p className="text-2xl font-bold text-slate-800">{value}</p><h3 className="text-xs font-medium text-slate-500 mt-0.5">{title}</h3></div> );
 const AnswerBreakdownCard = ({ questionData }: { questionData: MqlQuestion }) => {
     const totalResponses = useMemo(() => { return questionData.answers?.reduce((sum, answer) => sum + answer.lead_count, 0) || 0; }, [questionData.answers]);
     if (!questionData.answers || totalResponses === 0) { return null; }
-    return (
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
-            <h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3>
-            <ul className="space-y-3 flex-grow">
-                {questionData.answers.sort((a,b) => b.lead_count - a.lead_count).map((answer, index) => {
-                    const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0;
-                    return (
-                        <li key={index}>
-                            <div className="flex justify-between items-center mb-1 text-sm">
-                                <span className="text-slate-600">{answer.answer_text}</span>
-                                <span className="font-medium text-slate-700">{answer.lead_count.toLocaleString('pt-BR')} <span className="text-slate-400 ml-2">({percentage.toFixed(1)}%)</span></span>
-                            </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2.5"><div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div></div>
-                        </li>
-                    );
-                })}
-            </ul>
-        </div>
-    );
+    return ( <div className="bg-white p-6 rounded-lg shadow-md flex flex-col"><h3 className="font-bold text-slate-800 mb-4">{questionData.question_text}</h3><ul className="space-y-3 flex-grow">{questionData.answers.sort((a,b) => b.lead_count - a.lead_count).map((answer, index) => { const percentage = totalResponses > 0 ? (answer.lead_count / totalResponses) * 100 : 0; return ( <li key={index}><div className="flex justify-between items-center mb-1 text-sm"><span className="text-slate-600">{answer.answer_text}</span><span className="font-medium text-slate-700">{answer.lead_count.toLocaleString('pt-BR')} <span className="text-slate-400 ml-2">({percentage.toFixed(1)}%)</span></span></div><div className="w-full bg-slate-200 rounded-full h-2.5"><div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${percentage}%` }}></div></div></li> ); })}</ul></div> );
 };
 
-export default function AnaliseMqlPage() {
+export default function MqlDashboardClient({ initialLaunches }: { initialLaunches: Launch[] }) {
+    // MUDANÇA 2: Simplificação da criação do cliente.
     const supabase = createClient();
-    const [launches, setLaunches] = useState<Launch[]>([]);
+    
+    // O estado dos lançamentos é inicializado com os dados do servidor.
+    const [launches] = useState<Launch[]>(initialLaunches || []);
     const [selectedLaunch, setSelectedLaunch] = useState<string>('');
+    
+    // MUDANÇA 3: Usar um useEffect para definir o lançamento inicial.
+    // Isto é mais robusto do que a lógica no useState e evita problemas se initialLaunches for vazio.
+    useEffect(() => {
+        if (launches && launches.length > 0) {
+            const inProgress = launches.find(l => l.status === 'Em Andamento');
+            setSelectedLaunch(inProgress ? inProgress.id : launches[0].id);
+        } else {
+            // Se não houver lançamentos, garantimos que os loaders parem.
+            setLoadingKpis(false);
+            setLoadingBreakdown(false);
+        }
+    }, [launches]);
+
     const [selectedMql, setSelectedMql] = useState<MqlCategoryKey>('a');
     const [breakdownData, setBreakdownData] = useState<MqlQuestion[]>([]);
     const [mqlKpiData, setMqlKpiData] = useState<MqlKpiData | null>(null);
@@ -68,43 +59,13 @@ export default function AnaliseMqlPage() {
     const [loadingBreakdown, setLoadingBreakdown] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
 
-// CÓDIGO CORRIGIDO
-    useEffect(() => {
-        const fetchLaunches = async () => {
-            // Renomeamos 'data' para 'launchesData' para corrigir o erro
-            const { data: launchesData, error } = await supabase.rpc('get_lancamentos_permitidos');
-            
-            if (error) {
-                toast.error("Erro ao buscar lançamentos.");
-                console.error("Erro em fetchLaunches:", error);
-                // Define a lista como vazia para não travar a UI
-                setLaunches([]);
-                return;
-            }
-
-            // Agora, com a variável correta, este bloco será executado
-            if (launchesData) {
-                const sorted = [...launchesData].sort((a, b) => {
-                    if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
-                    if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
-                    return b.nome.localeCompare(a.nome);
-                });
-
-                setLaunches(sorted as Launch[]); // Adicionado 'as Launch[]' para consistência
-
-                if (sorted.length > 0) {
-                    const inProgress = sorted.find(l => l.status === 'Em Andamento');
-                    setSelectedLaunch(inProgress ? inProgress.id : sorted[0].id);
-                }
-            }
-        };
-        fetchLaunches();
-    }, [supabase]);
-
     const fetchInitialData = useCallback(async (launchId: string) => {
-        if (!launchId) return;
+        // MUDANÇA 4: Verificação explícita para não fazer chamadas com ID vazio.
+        if (!launchId) {
+            setLoadingKpis(false);
+            return;
+        }
         setLoadingKpis(true);
-        setSelectedMql('a');
         try {
             const [mqlKpiResult, generalKpiResult] = await Promise.all([
                 supabase.rpc('get_mql_category_totals', { p_launch_id: launchId }),
@@ -112,7 +73,6 @@ export default function AnaliseMqlPage() {
             ]);
             const { data: mqlKpis, error: mqlKpiError } = mqlKpiResult;
             const { data: generalKpisData, error: generalKpiError } = generalKpiResult;
-
             if (mqlKpiError || generalKpiError) {
                 toast.error("Erro ao carregar os totais.");
                 console.error({ mqlKpiError, generalKpiError });
@@ -121,23 +81,20 @@ export default function AnaliseMqlPage() {
                 const finalGeneralData = generalKpisData || { total_inscricoes: 0, total_checkins: 0 };
                 setMqlKpiData(finalMqlData);
                 setGeneralKpis(finalGeneralData);
-
                 if (finalMqlData) {
                     const firstNonZeroCategory = mqlCategories.find(cat => finalMqlData[cat.key] > 0);
-                    if (firstNonZeroCategory) {
-                        setSelectedMql(firstNonZeroCategory.key);
-                    }
+                    if (firstNonZeroCategory) { setSelectedMql(firstNonZeroCategory.key); }
                 }
             }
-        } catch (error) {
-            toast.error("Ocorreu uma falha ao buscar os dados de KPI.");
-        } finally {
-            setLoadingKpis(false);
-        }
+        } catch (error) { toast.error("Ocorreu uma falha ao buscar os dados de KPI.");
+        } finally { setLoadingKpis(false); }
     }, [supabase]);
 
     const fetchBreakdownData = useCallback(async (launchId: string, mqlCategory: MqlCategoryKey) => {
-        if (!launchId) return;
+        if (!launchId) {
+            setLoadingBreakdown(false);
+            return;
+        }
         setLoadingBreakdown(true);
         try {
             const { data: result, error } = await supabase.rpc('get_mql_answers_by_category', { p_launch_id: launchId, p_mql_category: mqlCategory });
@@ -156,19 +113,20 @@ export default function AnaliseMqlPage() {
         }
     }, [supabase]);
 
-    useEffect(() => { if (selectedLaunch) { fetchInitialData(selectedLaunch); } }, [selectedLaunch, fetchInitialData]);
-    useEffect(() => { if (selectedLaunch && selectedMql) { fetchBreakdownData(selectedLaunch, selectedMql); } }, [selectedLaunch, selectedMql, fetchBreakdownData]);
+    useEffect(() => {
+        if (selectedLaunch) { fetchInitialData(selectedLaunch); }
+    }, [selectedLaunch, fetchInitialData]);
+
+    useEffect(() => {
+        if (selectedLaunch && selectedMql) { fetchBreakdownData(selectedLaunch, selectedMql); }
+    }, [selectedLaunch, selectedMql, fetchBreakdownData]);
 
     const handleExport = async () => {
         if (!selectedLaunch || !selectedMql) { toast.error("Selecione um lançamento e uma categoria para exportar."); return; }
         setIsExporting(true);
         const exportToast = toast.loading("A preparar a exportação...");
         try {
-            const { data: csvText, error } = await supabase.rpc('exportar_perfil_csv', {
-                p_launch_id: selectedLaunch,
-                p_score_category: selectedMql,
-                p_score_type: 'mql'
-            });
+            const { data: csvText, error } = await supabase.rpc('exportar_perfil_csv', { p_launch_id: selectedLaunch, p_score_category: selectedMql, p_score_type: 'mql' });
             if (error) throw error;
             if (!csvText) { toast.success("Não há leads para exportar nesta categoria.", { id: exportToast }); return; }
             const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
@@ -191,6 +149,32 @@ export default function AnaliseMqlPage() {
 
     const taxaDeCheckin = generalKpis.total_inscricoes > 0 ? ((generalKpis.total_checkins / generalKpis.total_inscricoes) * 100).toFixed(1) + '%' : '0.0%';
 
+    // MUDANÇA 5: Uma verificação inicial para mostrar um estado de carregamento ou a mensagem de "nenhum lançamento".
+    // Isso evita que o resto do componente renderize antes de ter um lançamento selecionado.
+    if (!selectedLaunch) {
+        // Se ainda estivermos a carregar os KPIs, significa que estamos a determinar o selectedLaunch
+        if (loadingKpis) {
+            return (
+                <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 min-h-screen">
+                    <Spinner />
+                </div>
+            )
+        }
+        // Se o carregamento terminou e não há lançamento, mostramos a mensagem final.
+        return (
+            <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 min-h-screen">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Análise de MQL por Respostas</h1>
+                </header>
+                <div className="mt-8 text-center bg-white p-8 rounded-lg shadow-md">
+                    <h2 className="text-xl font-semibold text-slate-700">Nenhum lançamento disponível</h2>
+                    <p className="text-slate-500 mt-2">Você não tem permissão para visualizar nenhum lançamento ou nenhum foi encontrado.</p>
+                </div>
+            </div>
+        )
+    }
+
+    // O resto da sua UI permanece o mesmo
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-slate-50 min-h-screen space-y-6">
             <Toaster position="top-center" />

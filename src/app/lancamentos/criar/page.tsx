@@ -1,3 +1,5 @@
+//src\app\lancamentos\criar\page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,8 +8,6 @@ import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaCalendarAlt } from 'react-icons/fa';
 import AgendaModal from '@/app/lancamentos/components/AgendaModal';
-// ================== INÍCIO DAS CORREÇÕES ==================
-// 1. Definimos o tipo LaunchEvent localmente, já que ele não está no arquivo central.
 type LaunchEvent = {
     id: number;
     nome: string;
@@ -15,10 +15,12 @@ type LaunchEvent = {
     data_fim: string;
     is_custom: boolean;
 };
-
-// 2. Importamos apenas o tipo Survey, que deve existir no arquivo de tipos.
 import type { Survey } from '@/lib/types';
-// ================== FIM DAS CORREÇÕES ==================
+
+type PerfilLancamento = {
+    id: number;
+    nome_perfil: string;
+};
 
 function SurveySelectionModal({ isOpen, surveys, currentSurveyId, onSelect, onClose }: {
     isOpen: boolean; surveys: Survey[]; currentSurveyId: string;
@@ -57,7 +59,6 @@ const defaultEventNames = [
     "Live Aprofundamento CPL1", "CPL 2", "CPL 3", "Live Encerramento", "Carrinho Aberto"
 ];
 
-// Gera um estado inicial para os eventos da agenda
 const generateInitialEvents = (): LaunchEvent[] => [
     ...defaultEventNames.map((name, index) => ({
         id: Date.now() + index, nome: name, data_inicio: '',
@@ -79,22 +80,51 @@ export default function CriarLancamentoPage() {
     const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
     const [isAgendaModalOpen, setIsAgendaModalOpen] = useState(false);
 
+    // ================== ALTERAÇÃO ==================
+    // Estado para guardar a lista de todos os perfis disponíveis
+    const [allPerfis, setAllPerfis] = useState<PerfilLancamento[]>([]);
+    // Estado para guardar os IDs dos perfis selecionados (usando um Set para performance)
+    const [selectedPerfilIds, setSelectedPerfilIds] = useState<Set<number>>(new Set());
+    // ================================================
+
     useEffect(() => {
-        const fetchSurveys = async () => {
-            const { data, error } = await supabase.from('pesquisas').select('id, nome');
-            if (error) {
+        const fetchInitialData = async () => {
+            const { data: surveysData, error: surveysError } = await supabase.from('pesquisas').select('id, nome');
+            if (surveysError) {
                 toast.error('Não foi possível carregar as pesquisas.');
-                console.error(error);
             } else {
-                setSurveys(data || []);
+                setSurveys(surveysData || []);
+            }
+
+            // Busca os Perfis-Lançamento
+            const { data: perfisData, error: perfisError } = await supabase.from('perfis_de_acesso').select('id, nome_perfil');
+            if (perfisError) {
+                toast.error('Não foi possível carregar os perfis de acesso.');
+            } else {
+                setAllPerfis(perfisData || []);
             }
         };
-        fetchSurveys();
+        fetchInitialData();
     }, [supabase]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setLaunch(prev => ({ ...prev, [e.target.id]: e.target.value }));
     };
+    
+    // ================== NOVA FUNÇÃO ==================
+    // Função para lidar com a mudança dos checkboxes de perfil
+    const handlePerfilChange = (perfilId: number) => {
+        setSelectedPerfilIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(perfilId)) {
+                newSet.delete(perfilId);
+            } else {
+                newSet.add(perfilId);
+            }
+            return newSet;
+        });
+    };
+    // ================================================
     
     const selectedSurvey = surveys.find(s => s.id === selectedSurveyId);
     const eventsWithDatesCount = events.filter(e => e.nome && e.data_inicio).length;
@@ -141,14 +171,33 @@ export default function CriarLancamentoPage() {
                         }));
 
                         try {
-                            const { error } = await supabase.from('lancamentos').insert([{
+                            // ================== LÓGICA DE SALVAMENTO ALTERADA ==================
+                            // 1. Insere o lançamento e pede o ID de volta
+                            const { data: newLaunchData, error: launchError } = await supabase.from('lancamentos').insert([{
                                 ...launch,
                                 data_inicio: minDate,
                                 data_fim: maxDate,
                                 eventos: formattedEvents,
                                 associated_survey_ids: selectedSurveyId ? [selectedSurveyId] : [],
-                            }]);
-                            if (error) throw error;
+                            }]).select('id').single(); // .select('id').single() é crucial aqui
+
+                            if (launchError) throw launchError;
+                            if (!newLaunchData) throw new Error("Não foi possível obter o ID do novo lançamento.");
+
+                            const newLaunchId = newLaunchData.id;
+
+                            // 2. Se houver perfis selecionados, insere as ligações na nova tabela
+                            if (selectedPerfilIds.size > 0) {
+                                const perfisToInsert = Array.from(selectedPerfilIds).map(perfilId => ({
+                                    lancamento_id: newLaunchId,
+                                    perfil_de_acesso_id: perfilId
+                                }));
+
+                                const { error: perfisError } = await supabase.from('lancamentos_perfis_acesso').insert(perfisToInsert);
+                                if (perfisError) throw perfisError;
+                            }
+                            // ===================================================================
+
                             toast.success('Lançamento criado com sucesso!');
                             router.push('/lancamentos');
                             router.refresh();
@@ -174,6 +223,35 @@ export default function CriarLancamentoPage() {
                                 <option>Concluído</option><option>Cancelado</option>
                             </select>
                         </div>
+                        
+                        {/* ================== NOVO CAMPO COM CHECKBOXES ================== */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">Perfis de Acesso</label>
+                            <div className="mt-2 p-4 border border-slate-300 rounded-md max-h-48 overflow-y-auto">
+                                {allPerfis.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {allPerfis.map(perfil => (
+                                            <label key={perfil.id} className="flex items-center space-x-3 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    checked={selectedPerfilIds.has(perfil.id)}
+                                                    onChange={() => handlePerfilChange(perfil.id)}
+                                                />
+                                                <span className="text-slate-800">{perfil.nome_perfil}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-slate-500 text-sm">Nenhum Perfil-Lançamento foi criado ainda.</p>
+                                )}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Selecione os perfis que podem visualizar este lançamento.
+                            </p>
+                        </div>
+                        {/* =============================================================== */}
+
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Pesquisa Atrelada (Opcional)</label>
                             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-md border">
@@ -187,14 +265,14 @@ export default function CriarLancamentoPage() {
                         <div className="space-y-4 pt-4 border-t">
                             <label className="block text-sm font-medium text-slate-700">Agenda (Opcional)</label>
                              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-md border">
-                                <span className="text-slate-800 font-medium">
-                                    {eventsWithDatesCount > 0 ? `${eventsWithDatesCount} marco(s) definido(s)` : 'Nenhum marco de agenda definido'}
-                                </span>
-                                <button type="button" onClick={() => setIsAgendaModalOpen(true)} className="bg-slate-200 text-slate-800 text-sm font-bold py-2 px-4 rounded-lg hover:bg-slate-300 inline-flex items-center gap-2">
-                                    <FaCalendarAlt />
-                                    {eventsWithDatesCount > 0 ? 'Editar Agenda' : 'Adicionar Agenda'}
-                                </button>
-                            </div>
+                                 <span className="text-slate-800 font-medium">
+                                     {eventsWithDatesCount > 0 ? `${eventsWithDatesCount} marco(s) definido(s)` : 'Nenhum marco de agenda definido'}
+                                 </span>
+                                 <button type="button" onClick={() => setIsAgendaModalOpen(true)} className="bg-slate-200 text-slate-800 text-sm font-bold py-2 px-4 rounded-lg hover:bg-slate-300 inline-flex items-center gap-2">
+                                     <FaCalendarAlt />
+                                     {eventsWithDatesCount > 0 ? 'Editar Agenda' : 'Adicionar Agenda'}
+                                 </button>
+                             </div>
                         </div>
 
                         <div className="flex justify-end pt-4 gap-4 border-t border-slate-200 mt-6">

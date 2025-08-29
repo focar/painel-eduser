@@ -64,7 +64,7 @@ export default function AnaliseCampanhasCriativosPage() {
     useEffect(() => {
         const fetchLaunches = async () => {
             setLoadingLaunches(true);
-            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
             if (data) {
                 const sorted = [...data].sort((a, b) => (a.status === 'Em Andamento' ? -1 : 1) - (b.status === 'Em Andamento' ? -1 : 1) || b.nome.localeCompare(a.nome));
                 setLaunches(sorted as Launch[]);

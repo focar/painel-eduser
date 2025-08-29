@@ -53,7 +53,7 @@ export default function EvolucaoCanalPage() {
     useEffect(() => {
         const fetchLaunches = async () => {
             setLoadingLaunches(true);
-            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
             if (data) {
                 const sorted = [...data].sort((a, b) => {
                     if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;

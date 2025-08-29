@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from '@/utils/supabase/client';
+import toast from 'react-hot-toast';
 import type { Launch } from "@/lib/types";
 import { Users, UserCheck, Percent, ShoppingCart } from "lucide-react";
 
@@ -62,19 +63,34 @@ export default function AnaliseRespostasPorScorePage() {
     const [error, setError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>('all');
 
+
+    // CÓDIGO CORRIGIDO E COMPLETO PARA O USEEFFECT
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data: launchesData, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
-            if (error) { setError("Não foi possível carregar os lançamentos."); } 
-            else if (launchesData) {
+            // Renomeamos 'data' para 'launchesData' na própria declaração para corrigir o erro
+            const { data: launchesData, error } = await supabase.rpc('get_lancamentos_permitidos');
+            
+            if (error) {
+                toast.error("Erro ao buscar lançamentos.");
+                console.error("Erro em fetchLaunches:", error);
+                setLaunches([]); // Garante que a lista fique vazia em caso de erro
+                return;
+            }
+
+            // Agora a variável 'launchesData' existe e o código funciona
+            if (launchesData) {
                 const sorted = [...launchesData].sort((a, b) => {
                     if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
                     if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
                     return b.nome.localeCompare(a.nome);
                 });
+
                 setLaunches(sorted as Launch[]);
-                const inProgress = sorted.find(l => l.status === 'Em Andamento');
-                setSelectedLaunch(inProgress ? inProgress.id : (sorted[0] ? sorted[0].id : 'all'));
+
+                if (sorted.length > 0) {
+                    const inProgress = sorted.find(l => l.status === 'Em Andamento');
+                    setSelectedLaunch(inProgress ? inProgress.id : sorted[0].id);
+                }
             }
         };
         fetchLaunches();

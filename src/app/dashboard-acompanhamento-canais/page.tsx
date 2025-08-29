@@ -51,18 +51,22 @@ export default function AcompanhamentoCanaisPage() {
 
     // --- Funções de Carregamento de Dados ---
 
+// CÓDIGO CORRIGIDO
     useEffect(() => {
         const fetchLaunches = async () => {
             setIsLoading(true);
-            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            // A CORREÇÃO ESTÁ AQUI: Chamando a função correta
+            const { data: launchesData, error } = await supabase.rpc('get_lancamentos_permitidos');
+            
             if (error) {
                 console.error("Erro ao buscar lançamentos:", error);
-            } else {
-                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Concluído': 2 };
-                const sorted = data.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
-                setLaunches(sorted);
-                if (sorted.length > 0) {
-                    setSelectedLaunch(sorted[0].id);
+                setLaunches([]); // Define como vazio em caso de erro
+            } else if (launchesData) {
+                // O código de ordenação pode ser simplificado, pois a função RPC já retorna ordenado
+                setLaunches(launchesData as Launch[]);
+                if (launchesData.length > 0) {
+                    // Seleciona o primeiro da lista (que já é o "Em Andamento" ou o mais recente)
+                    setSelectedLaunch(launchesData[0].id);
                 }
             }
             setIsLoading(false);

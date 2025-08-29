@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import toast from 'react-hot-toast';
 import { FaSpinner, FaEye, FaEyeSlash } from 'react-icons/fa';
-// 1. Importamos o tipo 'Tables' do arquivo gerado pelo Supabase.
 import type { Tables } from '@/types/database';
 
 // 2. Inferimos o tipo diretamente e adicionamos a propriedade 'count' que vem da query.

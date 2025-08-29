@@ -1,3 +1,5 @@
+//src\app\lancamentos\page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,48 +22,24 @@ export default function LancamentosPage() {
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+// CÓDIGO CORRIGIDO
   useEffect(() => {
     const fetchLaunches = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase.from('lancamentos').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-
-        // ================== INÍCIO DA CORREÇÃO DE ORDENAÇÃO ==================
-        if (data) {
-          // 1. Define a ordem de prioridade dos status
-          const statusOrder: { [key: string]: number } = {
-            'Em Andamento': 1,
-            'Planejado': 2,
-            'Concluído': 3,
-            'Concluido': 3, // Garante que ambos os nomes funcionem
-            'Cancelado': 4,
-          };
-
-          // 2. Ordena os dados com a lógica personalizada
-          const sortedData = [...data].sort((a, b) => {
-            const orderA = statusOrder[a.status] || 99; // Status desconhecidos vão para o fim
-            const orderB = statusOrder[b.status] || 99;
-
-            // Se o status for diferente, ordena pelo status
-            if (orderA !== orderB) {
-              return orderA - orderB;
-            }
-
-            // Se o status for o mesmo, ordena pela data de criação (mais recente primeiro)
-            if (a.created_at && b.created_at) {
-              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-            }
-            return 0;
-          });
-
-          setLaunches(sortedData);
-        } else {
-            setLaunches([]);
+        // 1. Chamamos nossa função segura, que já retorna os dados corretos e ordenados
+        const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
+        
+        if (error) {
+            throw error;
         }
-        // ================== FIM DA CORREÇÃO DE ORDENAÇÃO ====================
+
+        // 2. Simplesmente usamos os dados que a função nos deu
+        setLaunches(data || []);
+
       } catch (err) {
         console.error("Erro ao buscar lançamentos:", err);
+        setLaunches([]); // Garante que a lista fique vazia em caso de erro
       } finally {
         setIsLoading(false);
       }

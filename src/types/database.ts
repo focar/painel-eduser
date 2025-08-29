@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
-  }
   public: {
     Tables: {
       campaign_settings: {
@@ -102,44 +97,6 @@ export type Database = {
           payload?: Json | null
         }
         Relationships: []
-      }
-      import_jobs: {
-        Row: {
-          created_at: string | null
-          details: Json | null
-          file_path: string
-          id: string
-          import_type: string
-          launch_id: string | null
-          status: string
-        }
-        Insert: {
-          created_at?: string | null
-          details?: Json | null
-          file_path: string
-          id?: string
-          import_type: string
-          launch_id?: string | null
-          status?: string
-        }
-        Update: {
-          created_at?: string | null
-          details?: Json | null
-          file_path?: string
-          id?: string
-          import_type?: string
-          launch_id?: string | null
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "import_jobs_launch_id_fkey"
-            columns: ["launch_id"]
-            isOneToOne: false
-            referencedRelation: "lancamentos"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       import_logs: {
         Row: {
@@ -617,10 +574,6 @@ export type Database = {
         Args: { p_launch_id: string }
         Returns: number
       }
-      deletar_dados_lancamento: {
-        Args: { p_launch_id: string }
-        Returns: string
-      }
       delete_leads_by_launch: {
         Args: { p_launch_id: string }
         Returns: undefined
@@ -672,10 +625,6 @@ export type Database = {
           utm_source: string
           utm_term: string
         }[]
-      }
-      exportar_dados_compradores: {
-        Args: { p_launch_id: string }
-        Returns: Json
       }
       exportar_leads_com_respostas: {
         Args: { p_launch_id: string; p_score_category: string }
@@ -738,6 +687,29 @@ export type Database = {
           user_role: string
         }[]
       }
+      get_analise_compradores_dashboard: {
+        Args:
+          | { p_launch_id: string }
+          | { p_launch_id: string; p_score_tier?: string }
+        Returns: {
+            kpis: {
+              total_compradores: number
+              total_checkins: number
+              score_tier_i: number
+              score_tier_ii: number
+              score_tier_iii: number
+              score_tier_iv: number
+              score_tier_v: number
+              score_tier_vi: number
+              score_tier_vii: number
+              score_tier_viii: number
+            }
+            respostas: {
+              pergunta: string
+              respostas: { [key: string]: number }
+            }[]
+          }
+      }
       get_answer_analysis: {
         Args: { p_filter_by_buyers: boolean; p_launch_id: string }
         Returns: Json
@@ -796,14 +768,6 @@ export type Database = {
       }
       get_channel_tracking_data: {
         Args: { p_launch_id: string }
-        Returns: Json
-      }
-      get_compradores_dashboard_v2: {
-        Args: {
-          p_buyer_filter?: string
-          p_launch_id: string
-          p_score_tier: string
-        }
         Returns: Json
       }
       get_daily_evolution: {
@@ -916,7 +880,7 @@ export type Database = {
         }[]
       }
       get_geral_and_buyer_kpis: {
-        Args: { p_launch_id: string }
+        Args: { p_launch_id?: string }
         Returns: Json
       }
       get_hierarchical_traffic_details: {
@@ -950,6 +914,26 @@ export type Database = {
         Args: { p_launch_id: string }
         Returns: Json
       }
+      // =======================================================
+      // FUNÇÕES QUE ADICIONAMOS MANUALMENTE
+      // =======================================================
+      get_lancamentos_permitidos: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          nome: string
+          status: string
+        }[]
+      }
+      get_compradores_dashboard_v2: {
+        Args: {
+          p_launch_id: string
+          p_score_tier: string
+          p_buyer_filter: boolean
+        }
+        Returns: Json 
+      }
+      // =======================================================
       get_lancamentos_ordenados: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -997,7 +981,11 @@ export type Database = {
       }
       get_mql_answers_by_category: {
         Args: { p_launch_id: string; p_mql_category: string }
-        Returns: Json
+        Returns: {
+          answers: Json
+          question_id: string
+          question_text: string
+        }[]
       }
       get_mql_category_totals: {
         Args: { p_launch_id: string }
@@ -1201,17 +1189,9 @@ export type Database = {
         Args: { p_launch_id: string; p_payload: Json }
         Returns: Json
       }
-      is_uuid: {
-        Args: { "": string }
-        Returns: boolean
-      }
       mark_leads_as_buyers: {
         Args: { p_buyer_emails: string[]; p_launch_id: string }
         Returns: number
-      }
-      preparar_dados_analise_ia: {
-        Args: Record<PropertyKey, never>
-        Returns: string
       }
       process_buyers_for_launch: {
         Args: { p_buyer_emails: string[]; p_launch_id: string }
@@ -1242,30 +1222,6 @@ export type Database = {
         }
         Returns: string
       }
-      processar_lote_checkins: {
-        Args: { p_checkins_json: Json; p_launch_id: string }
-        Returns: Json
-      }
-      processar_lote_checkins_csv: {
-        Args: { p_checkins_json: Json; p_launch_id: string }
-        Returns: Json
-      }
-      processar_lote_checkins_definitivo: {
-        Args: { p_checkins_json: Json; p_launch_id: string }
-        Returns: Json
-      }
-      processar_lote_compradores: {
-        Args: { p_compradores_json: Json; p_launch_id: string }
-        Returns: Json
-      }
-      processar_lote_inscricoes: {
-        Args: { p_inscricoes_json: Json; p_launch_id: string }
-        Returns: Json
-      }
-      processar_lote_perfil_apenas: {
-        Args: { p_checkins_json: Json; p_launch_id: string }
-        Returns: Json
-      }
       propor_novos_pesos_respostas: {
         Args: { p_escala_maxima_pontos?: number; p_launch_id: string }
         Returns: {
@@ -1276,21 +1232,13 @@ export type Database = {
           texto_pergunta: string
         }[]
       }
-      recalcular_scores_lancamento: {
-        Args: { p_launch_id: string }
-        Returns: string
-      }
-      recalcular_todos_scores: {
-        Args: { p_launch_id: string }
-        Returns: Json
-      }
       refresh_launch_dates: {
         Args: { p_launch_id: string }
         Returns: string
       }
       refresh_lead_dates_for_launch: {
         Args: { p_launch_id: string }
-        Returns: string
+        Returns: number
       }
       register_new_questions_from_headers: {
         Args: { p_question_headers: string[] } | { p_question_headers: Json }
@@ -1303,10 +1251,6 @@ export type Database = {
       reset_checkin_data_for_launch: {
         Args: { p_launch_id: string }
         Returns: number
-      }
-      resetar_dados_compradores_lancamento: {
-        Args: { p_launch_id: string }
-        Returns: string
       }
       safe_cast_to_int: {
         Args: { default_value?: number; text_value: string }
@@ -1323,10 +1267,6 @@ export type Database = {
       update_user_role: {
         Args: { new_role: string; target_user_id: string }
         Returns: undefined
-      }
-      zerar_dados_checkin: {
-        Args: { p_launch_id: string }
-        Returns: string
       }
     }
     Enums: {

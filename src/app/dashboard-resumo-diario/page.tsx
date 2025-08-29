@@ -55,18 +55,34 @@ export default function ResumoDiarioPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+// CÓDIGO FINAL - SIMPLES E CORRETO
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído', 'Planejado']);
-            if (error) { toast.error('Falha ao carregar lançamentos.'); setError('Falha ao carregar lançamentos.'); console.error(error); return; }
-            if (data && data.length > 0) {
-                const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Planejado': 2, 'Concluído': 3 };
-                const sorted = data.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.nome.localeCompare(b.nome));
-                setLaunches(sorted);
-                const inProgress = sorted.find(l => l.status === 'Em Andamento');
-                setSelectedLaunchId(inProgress ? inProgress.id : sorted[0].id);
+            setIsLoading(true);
+
+            // 1. Fazemos a chamada RPC normal, sem especificar tipos aqui.
+            const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
+            
+            if (error) {
+                toast.error("Erro ao buscar lançamentos.");
+                console.error(error);
+                setLaunches([]);
+            } else if (data) {
+                // 2. Aplicamos o tipo 'Launch[]' aqui. Isso informa ao TypeScript
+                //    que 'data' é uma lista de Lançamentos.
+                const launchesData: Launch[] = data;
+
+                // 3. O resto do código agora funciona, pois o TypeScript sabe o que é launchesData.
+                setLaunches(launchesData); 
+                
+                if (launchesData.length > 0) {
+                    const inProgress = launchesData.find(l => l.status === 'Em Andamento');
+                    setSelectedLaunchId(inProgress ? inProgress.id : launchesData[0].id);
+                }
             }
+            setIsLoading(false);
         };
+
         fetchLaunches();
     }, [supabase]);
 

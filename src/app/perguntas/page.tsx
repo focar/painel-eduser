@@ -1,13 +1,12 @@
 // =================================================================
-// ARQUIVO ÚNICO: app/perguntas/page.tsx
-// Versão Corrigida: Removida a dependência '@supabase/auth-helpers-nextjs'
-// para garantir a compatibilidade e corrigida a lógica do modal.
+// ARQUIVO: app/perguntas/page.tsx
+// VERSÃO CORRIGIDA: Lógica de permissão para Admin/Viewer
 // =================================================================
 'use client';
 
 import { useState, useEffect, useMemo, FormEvent } from 'react';
-// CORREÇÃO: Usando o cliente Supabase padrão para evitar erros de dependência.
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@/utils/supabase/client'; // Usando o client do browser
+import type { User } from '@supabase/supabase-js';
 
 // --- TIPAGENS ---
 export interface Question {
@@ -22,47 +21,70 @@ export interface Question {
 
 type FiltroClasse = 'Todos' | 'Score' | 'Perfil';
 
+type Profile = {
+    role: 'admin' | 'view';
+}
+
 // --- COMPONENTE PRINCIPAL DA PÁGINA ---
 export default function PerguntasPage() {
-  const [perguntas, setPerguntas] = useState<Question[]>([]);
+  const supabase = createClient();
+  const [perguntas, setPerguas] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<FiltroClasse>('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [perguntaEditando, setPerguntaEditando] = useState<Question | null>(null);
-
-  // IMPORTANTE: Substitua pelas suas variáveis de ambiente do Supabase
-  // ou cole as chaves diretamente para testar.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'URL_DO_SEU_SUPABASE';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'CHAVE_ANON_DO_SEU_SUPABASE';
-  // CORREÇÃO: Cliente Supabase criado uma única vez aqui.
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-  const fetchPerguntas = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('perguntas')
-      .select('*')
-      .order('texto', { ascending: true });
-
-    if (error) {
-      console.error('Erro ao buscar perguntas:', error.message);
-      alert('Não foi possível carregar as perguntas.');
-    } else {
-      setPerguntas(data as Question[]);
-    }
-    setLoading(false);
-  };
+  
+  // NOVO ESTADO PARA GUARDAR O PERFIL DO USUÁRIO
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    fetchPerguntas();
-  }, []);
+    const fetchUserAndPerguntas = async () => {
+        setLoading(true);
+        
+        // 1. Busca o usuário e seu perfil (role)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .single();
+            
+            if (profile) {
+                setUserProfile(profile as Profile);
+            } else if (profileError) {
+                console.error("Erro ao buscar perfil:", profileError);
+            }
+        }
 
-  const perguntasFiltradas = useMemo(() => {
+        // 2. Busca as perguntas (usando RPC para segurança)
+        const { data, error } = await supabase
+          .from('perguntas')
+          .select('*')
+          .order('texto', { ascending: true });
+
+        if (error) {
+          console.error('Erro ao buscar perguntas:', error.message);
+          alert('Não foi possível carregar as perguntas.');
+        } else {
+          setPerguas(data as Question[]);
+        }
+        setLoading(false);
+    };
+    
+    fetchUserAndPerguntas();
+  }, [supabase]);
+
+const perguntasFiltradas = useMemo(() => {
     if (filtro === 'Todos') {
       return perguntas;
     }
-    return perguntas.filter(p => p.classe.toLowerCase() === filtro.toLowerCase());
-  }, [perguntas, filtro]);
+    // CORREÇÃO: Usamos .trim() para remover espaços e .toLowerCase()
+    // para ignorar diferenças entre maiúsculas e minúsculas, garantindo que o filtro funcione.
+    return perguntas.filter(p => 
+        p.classe && p.classe.trim().toLowerCase() === filtro.toLowerCase()
+    );
+}, [perguntas, filtro]);
 
   const handleNovaPergunta = () => {
     setPerguntaEditando({
@@ -77,7 +99,7 @@ export default function PerguntasPage() {
   };
 
   const handleEditar = (pergunta: Question) => {
-    setPerguntaEditando(JSON.parse(JSON.stringify(pergunta)));
+    setPerguntaEditando(JSON.parse(JSON.stringify(pergunta))); // Deep copy
     setIsModalOpen(true);
   };
 
@@ -87,14 +109,22 @@ export default function PerguntasPage() {
       if (error) {
         alert(`Erro ao excluir: ${error.message}`);
       } else {
-        setPerguntas(perguntas.filter(p => p.id !== id));
+        setPerguas(perguntas.filter(p => p.id !== id));
       }
     }
+  };
+  
+  const fetchPerguntas = async () => {
+    const { data, error } = await supabase
+      .from('perguntas')
+      .select('*')
+      .order('texto', { ascending: true });
+    if (data) setPerguas(data as Question[]);
   };
 
   const handleSave = () => {
       setIsModalOpen(false);
-      fetchPerguntas();
+      fetchPerguntas(); // Re-busca os dados para refletir a alteração
   };
 
   if (loading) {
@@ -105,9 +135,14 @@ export default function PerguntasPage() {
     <div className="p-4 sm:p-6 md:p-8">
       <header className="flex justify-between items-center mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Banco de Perguntas</h1>
-        <button onClick={handleNovaPergunta} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
-          + Criar Nova Pergunta
-        </button>
+        {/* ======================================= */}
+        {/* BOTÃO SÓ APARECE PARA ADMINS             */}
+        {/* ======================================= */}
+        {userProfile?.role === 'admin' && (
+            <button onClick={handleNovaPergunta} className="inline-flex items-center bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                + Criar Nova Pergunta
+            </button>
+        )}
       </header>
 
       <div className="flex space-x-2 mb-4">
@@ -129,7 +164,10 @@ export default function PerguntasPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Texto da Pergunta</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classe (Uso)</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+              {/* ======================================= */}
+              {/* CABEÇALHO SÓ APARECE PARA ADMINS        */}
+              {/* ======================================= */}
+              {userProfile?.role === 'admin' && <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -142,17 +180,22 @@ export default function PerguntasPage() {
                     {pergunta.classe}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button onClick={() => handleEditar(pergunta)} className="text-blue-600 hover:text-blue-900 mr-4">Editar</button>
-                  <button onClick={() => handleDeletar(pergunta.id!)} className="text-red-600 hover:text-red-900">Excluir</button>
-                </td>
+                {/* ======================================= */}
+                {/* BOTÕES SÓ APARECEM PARA ADMINS          */}
+                {/* ======================================= */}
+                {userProfile?.role === 'admin' && (
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onClick={() => handleEditar(pergunta)} className="text-blue-600 hover:text-blue-900 mr-4">Editar</button>
+                        <button onClick={() => handleDeletar(pergunta.id!)} className="text-red-600 hover:text-red-900">Excluir</button>
+                    </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {isModalOpen && (
+      {isModalOpen && userProfile?.role === 'admin' && (
         <QuestionModal
           supabase={supabase}
           pergunta={perguntaEditando!}
@@ -165,8 +208,9 @@ export default function PerguntasPage() {
 }
 
 
-// --- COMPONENTE DO MODAL (DENTRO DO MESMO ARQUIVO) ---
-function QuestionModal({ supabase, pergunta, onClose, onSave }: { supabase: SupabaseClient, pergunta: Question; onClose: () => void; onSave: () => void; }) {
+// --- COMPONENTE DO MODAL (COLE NO FINAL DO MESMO ARQUIVO) ---
+// O código do modal permanece o mesmo
+function QuestionModal({ supabase, pergunta, onClose, onSave }: { supabase: any, pergunta: Question; onClose: () => void; onSave: () => void; }) {
   const [formData, setFormData] = useState<Question>(pergunta);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -174,7 +218,6 @@ function QuestionModal({ supabase, pergunta, onClose, onSave }: { supabase: Supa
 
   const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const novoTipo = e.target.value as Question['tipo'];
-    
     setFormData(currentState => {
       const newState = { ...currentState, tipo: novoTipo };
       if (novoTipo === 'sim_nao') {
@@ -252,7 +295,6 @@ function QuestionModal({ supabase, pergunta, onClose, onSave }: { supabase: Supa
               </select>
             </div>
           </div>
-
           {['multipla_escolha', 'verdadeiro_falso', 'sim_nao'].includes(formData.tipo) && (
             <div className="space-y-2 border-t pt-4">
               <h3 className="font-semibold">Opções de Resposta</h3>

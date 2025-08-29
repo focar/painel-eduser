@@ -57,16 +57,29 @@ export default function PerfilDeScorePage() {
     const [loadingBreakdown, setLoadingBreakdown] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
 
+    // CÓDIGO CORRIGIDO
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data: launchesData } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            // A busca de lançamentos já está correta, usando a função RPC
+            const { data: launchesData, error } = await supabase.rpc('get_lancamentos_permitidos');
+            
+            // Tratamento de erro caso a busca falhe
+            if (error) {
+                toast.error("Erro ao buscar lançamentos.");
+                console.error(error);
+                return; // Interrompe a execução se houver erro
+            }
+
+            // A correção está aqui: usamos 'launchesData' que agora existe
             if (launchesData) {
                 const sorted = [...launchesData].sort((a, b) => {
                     if (a.status === 'Em Andamento' && b.status !== 'Em Andamento') return -1;
                     if (a.status !== 'Em Andamento' && b.status === 'Em Andamento') return 1;
                     return b.nome.localeCompare(a.nome);
                 });
-                setLaunches(sorted);
+
+                setLaunches(sorted as Launch[]); // Adicionado 'as Launch[]' para consistência de tipo
+
                 if (sorted.length > 0) {
                     const inProgress = sorted.find(l => l.status === 'Em Andamento');
                     setSelectedLaunch(inProgress ? inProgress.id : sorted[0].id);

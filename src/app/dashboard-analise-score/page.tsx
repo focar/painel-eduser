@@ -99,7 +99,7 @@ export default function AnaliseScorePage() {
 
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído']);
+            const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
             if (error) { toast.error("Erro ao buscar lançamentos"); }
             else if (data && data.length > 0) {
                 const sorted = [...data].sort((a, b) => a.status === 'Em Andamento' ? -1 : 1);

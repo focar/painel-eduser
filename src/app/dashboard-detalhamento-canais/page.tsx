@@ -57,7 +57,7 @@ export default function DetalhamentoCanaisPage() {
     // --- Busca de Lançamentos ---
     useEffect(() => {
         const fetchLaunches = async () => {
-            const { data, error } = await supabase.from('lancamentos').select('id, nome, status').in('status', ['Em Andamento', 'Concluído', 'Planejado']);
+            const { data, error } = await supabase.rpc('get_lancamentos_permitidos');
             if (error) { toast.error("Erro ao carregar lançamentos."); return; }
             if (data && data.length > 0) {
                 const statusOrder: { [key: string]: number } = { 'Em Andamento': 1, 'Planejado': 2, 'Concluído': 3 };

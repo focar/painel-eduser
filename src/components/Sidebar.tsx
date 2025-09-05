@@ -24,6 +24,7 @@ const menuItems = [
             { name: "Detalhamento Canais", href: "/dashboard-detalhamento-canais" },
             { name: "Análise de Compradores", href: "/dashboard-analise-compradores" },
             { name: "Posição Final Compradores", href: "/dashboard-posicao-final" },
+            { name: "Avaliação de Compradores", href: "/dashboard-avaliacao-compradores" },
             { name: "Campanhas e Criativos", href: "/dashboard-campanhas-criativos" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Análise de Respostas", href: "/dashboard-analise-resposta" },

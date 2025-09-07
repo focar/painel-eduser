@@ -105,7 +105,7 @@ function DetalheOrganicoContent() {
                                  className="flex w-48 justify-center items-center gap-3 bg-[#2a3a5a]/80 border border-slate-600 text-slate-200 font-bold text-lg px-4 py-4 rounded-lg hover:bg-slate-700 hover:text-white transition-all duration-200">
                                 <FaChartBar /> MQL
                             </button>
-                            <button className="flex w-48 justify-center items-center gap-3 bg-[#2a3a5a]/80 border border-slate-600 text-slate-200 font-bold text-lg px-4 py-4 rounded-lg hover:bg-slate-700 hover:text-white transition-all duration-200">
+                             <button onClick={() => router.push(`/dashboard-traqueamento/detalhe-organico/mov-diario?launchId=${launchId}&launchName=${launchName}`)} className="flex w-48 justify-center items-center gap-3 bg-[#2a3a5a]/80 border border-slate-600 text-slate-200 font-bold text-lg px-4 py-4 rounded-lg hover:bg-slate-700 hover:text-white transition-all duration-200">
                                 <FaCalendarDay /> Mov. Diário
                             </button>
                         </nav>

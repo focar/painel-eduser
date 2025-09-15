@@ -1,3 +1,4 @@
+// src/app/dashboard-traqueamento/detalhe-pago/mql/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
@@ -6,7 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import { FaSpinner, FaChevronLeft, FaAward, FaStar, FaRegStar, FaStarHalfAlt } from 'react-icons/fa';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// --- Tipos e Configs para MQL ---
+// --- Tipos e Configs (sem alteração) ---
 type MqlCategory = 'A' | 'B' | 'C' | 'D';
 type BreakdownData = { name: string; value: number; };
 type MqlData = {
@@ -19,28 +20,46 @@ const MQL_CONFIG: Record<MqlCategory, { title: string; range: string; icon: Reac
   C: { title: "Categoria C", range: "(6-13)", icon: FaStarHalfAlt, color: "text-cyan-400" },
   D: { title: "Categoria D", range: "(1-5)", icon: FaRegStar, color: "text-slate-400" },
 };
-const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#da84d8'];
+const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#da84d8', '#82ca9d', '#ffc658', '#a4de6c', '#d0ed57'];
 
-// --- Componente de Gráfico (Reutilizado) ---
+// ✅ --- FUNÇÃO AUXILIAR PARA LIMITAR OS DADOS DO GRÁFICO (AGORA COM LIMITE 15) ---
+function summarizeChartData(data: BreakdownData[] | undefined, limit = 15): BreakdownData[] { // Aumentado o limite para 15
+    if (!data || data.length <= limit + 1) return data || [];
+    const sortedData = [...data].sort((a, b) => b.value - a.value);
+    const topItems = sortedData.slice(0, limit);
+    const otherItems = sortedData.slice(limit);
+    if (otherItems.length > 0) {
+        const othersSum = otherItems.reduce((sum, item) => sum + item.value, 0);
+        topItems.push({ name: 'Outros', value: othersSum });
+    }
+    return topItems;
+}
+
+// ✅ --- REMOVIDA A FUNÇÃO 'formatLegendText' QUE CORTAVA O TEXTO ---
+
+// --- Componente do Gráfico de Rosca (ATUALIZADO) ---
 const MqlBreakdownChart = ({ title, data }: { title: string; data: BreakdownData[] | undefined }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-[#2a3a5a] p-6 rounded-lg shadow-lg flex flex-col items-center justify-center h-80">
+      <div className="bg-[#2a3a5a] p-6 rounded-lg shadow-lg flex flex-col items-center justify-center min-h-[450px]"> {/* ✅ Altura mínima aumentada */}
         <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
         <p className="text-slate-400">Nenhum dado para exibir.</p>
       </div>
     );
   }
+
   return (
     <div className="bg-[#2a3a5a] p-4 rounded-lg shadow-lg">
       <h3 className="text-xl font-bold text-white text-center mb-2">{title}</h3>
-      <ResponsiveContainer width="100%" height={300}>
+      {/* ✅ ALTURA DO GRÁFICO AUMENTADA PARA 400PX */}
+      <ResponsiveContainer width="100%" height={400}> 
         <PieChart>
           <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} fill="#8884d8" paddingAngle={5} dataKey="value" nameKey="name">
             {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}
           </Pie>
           <Tooltip contentStyle={{ backgroundColor: '#1e2b41', border: '1px solid #4a5b71' }} labelStyle={{ color: '#ffffff' }} />
-          <Legend wrapperStyle={{ color: '#ffffff' }}/>
+          {/* ✅ 'formatter' REMOVIDO, CONFIANDO NA QUEBRA DE LINHA NATURAL E MAIOR ESPAÇO */}
+          <Legend wrapperStyle={{ color: '#ffffff', paddingTop: '20px' }} /> {/* Espaçamento superior para a legenda */}
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -61,7 +80,6 @@ function MqlPageContent() {
   const fetchData = useCallback(async (id: string) => {
     setIsLoading(true);
     try {
-      // ✅ Chamando a nova função para MQL de tráfego PAGO
       const { data: result, error } = await supabase.rpc('get_paid_mql_breakdown_by_content', { p_launch_id: id });
       if (error) throw error;
       setData(result);
@@ -87,7 +105,6 @@ function MqlPageContent() {
           <FaChevronLeft size={14} /> Voltar
         </button>
         <div>
-          {/* ✅ Título atualizado */}
           <p className="text-sm text-slate-400 uppercase tracking-wider">Análise de MQL - Tráfego Pago</p>
           <h1 className="text-3xl font-bold text-white">{launchName || 'MQL'}</h1>
         </div>
@@ -97,7 +114,6 @@ function MqlPageContent() {
         <div className="flex justify-center items-center h-96"><FaSpinner className="animate-spin text-[#6ce5e8] text-5xl" /></div>
       ) : (
         <main>
-          {/* Seção de Totais - 4 colunas para MQL */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
             {(Object.keys(MQL_CONFIG) as MqlCategory[]).map(key => {
               const config = MQL_CONFIG[key];
@@ -115,13 +131,13 @@ function MqlPageContent() {
             })}
           </section>
 
-          {/* Seção de Gráficos - 4 colunas para MQL */}
-          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {/* LAYOUT MANTIDO PARA 2 COLUNAS EM TELAS MAIORES */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
              {(Object.keys(MQL_CONFIG) as MqlCategory[]).map(key => (
                 <MqlBreakdownChart
                   key={key}
                   title={`${MQL_CONFIG[key].title} ${MQL_CONFIG[key].range}`}
-                  data={data?.breakdowns?.[key]}
+                  data={summarizeChartData(data?.breakdowns?.[key])}
                 />
             ))}
           </section>

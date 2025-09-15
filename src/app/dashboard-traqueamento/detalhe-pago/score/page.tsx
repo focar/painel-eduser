@@ -24,32 +24,25 @@ const SCORE_CONFIG: Record<ScoreCategory, { title: string; range: string; icon: 
 const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#da84d8', '#82ca9d', '#ffc658', '#a4de6c', '#d0ed57'];
 
 
-// ✅ --- NOVA FUNÇÃO AUXILIAR PARA O GRÁFICO ---
-function summarizeChartData(data: BreakdownData[] | undefined, limit = 9): BreakdownData[] {
-    if (!data || data.length <= limit + 1) {
-        return data || [];
-    }
-
-    // Ordena os dados para garantir que os maiores fiquem
+// ✅ --- FUNÇÃO AUXILIAR PARA LIMITAR OS DADOS DO GRÁFICO (AGORA COM LIMITE 15) ---
+function summarizeChartData(data: BreakdownData[] | undefined, limit = 15): BreakdownData[] {
+    if (!data || data.length <= limit + 1) return data || [];
     const sortedData = [...data].sort((a, b) => b.value - a.value);
-
     const topItems = sortedData.slice(0, limit);
     const otherItems = sortedData.slice(limit);
-
     if (otherItems.length > 0) {
         const othersSum = otherItems.reduce((sum, item) => sum + item.value, 0);
         topItems.push({ name: 'Outros', value: othersSum });
     }
-
     return topItems;
 }
 
 
-// --- Componente do Gráfico (sem alteração) ---
+// --- Componente do Gráfico de Rosca (ATUALIZADO) ---
 const ScoreBreakdownChart = ({ title, data }: { title: string; data: BreakdownData[] | undefined }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-[#2a3a5a] p-6 rounded-lg shadow-lg flex flex-col items-center justify-center h-80">
+      <div className="bg-[#2a3a5a] p-6 rounded-lg shadow-lg flex flex-col items-center justify-center min-h-[450px]">
         <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
         <p className="text-slate-400">Nenhum dado para exibir.</p>
       </div>
@@ -58,13 +51,14 @@ const ScoreBreakdownChart = ({ title, data }: { title: string; data: BreakdownDa
   return (
     <div className="bg-[#2a3a5a] p-4 rounded-lg shadow-lg">
       <h3 className="text-xl font-bold text-white text-center mb-2">{title}</h3>
-      <ResponsiveContainer width="100%" height={300}>
+      {/* ✅ ALTURA DO GRÁFICO AUMENTADA PARA 400PX */}
+      <ResponsiveContainer width="100%" height={400}>
         <PieChart>
           <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} fill="#8884d8" paddingAngle={5} dataKey="value" nameKey="name">
             {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />))}
           </Pie>
           <Tooltip contentStyle={{ backgroundColor: '#1e2b41', border: '1px solid #4a5b71' }} labelStyle={{ color: '#ffffff' }} />
-          <Legend wrapperStyle={{ color: '#ffffff' }}/>
+          <Legend wrapperStyle={{ color: '#ffffff', paddingTop: '20px' }} />
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -136,12 +130,12 @@ function ScorePageContent() {
             })}
           </section>
 
-          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {/* ✅ LAYOUT ATUALIZADO PARA TORNAR OS CARDS RETANGULARES */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
              {(Object.keys(SCORE_CONFIG) as ScoreCategory[]).map(key => (
                 <ScoreBreakdownChart
                   key={key}
                   title={`${SCORE_CONFIG[key].title} ${SCORE_CONFIG[key].range}`}
-                  // ✅ USANDO A NOVA FUNÇÃO PARA PROCESSAR OS DADOS
                   data={summarizeChartData(data?.breakdowns?.[key])}
                 />
             ))}

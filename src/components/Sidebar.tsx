@@ -27,6 +27,7 @@ const menuItems = [
             { name: "Avaliação de Compradores", href: "/dashboard-avaliacao-compradores" },
             { name: "Jornada dos Compradores", href: "/dashboard-jornada-compradores" },
             { name: "Campanhas e Criativos", href: "/dashboard-campanhas-criativos" },
+            { name: "Criativos por Score", href: "/dashboard-criativos-por-score" },
             { name: "Respostas por Score", href: "/dashboard-respostas-por-score" },
             { name: "Análise de Respostas", href: "/dashboard-analise-resposta" },
             { name: "Perfil de MQL", href: "/dashboard-perfil-mql" },

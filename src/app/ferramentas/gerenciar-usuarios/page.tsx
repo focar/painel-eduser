@@ -1,6 +1,6 @@
 // src/app/ferramentas/gerenciar-usuarios/page.tsx
 
-import { cookies } from 'next/headers';
+// Importa a versão de SERVIDOR do createClient
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import UserManagementForm from './UserManagementForm'; // Importa o nosso novo componente de cliente
@@ -20,15 +20,19 @@ export type PerfilLancamento = {
 
 // --- Componente de Servidor ---
 export default async function GerenciarUsuariosPage() {
-  const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+  // A função createClient do servidor já lida com os cookies internamente
+  const supabase = createClient();
 
   // 1. Verifica se o utilizador está logado e é admin
+  //    (Esta é a única chamada necessária para obter o 'user')
   const { data: { user } } = await supabase.auth.getUser();
+  
   if (!user) {
     return redirect('/login');
   }
+
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  
   if (profile?.role !== 'admin') {
     return (
       <div className="p-8 text-center text-red-500">
@@ -40,6 +44,7 @@ export default async function GerenciarUsuariosPage() {
   // 2. Busca todos os dados necessários no servidor
   const { data: usersData, error: usersError } = await supabase.rpc('get_all_users_with_profiles');
   const { data: perfisData, error: perfisError } = await supabase.rpc('get_all_perfis_de_acesso');
+  
   // Trata possíveis erros na busca de dados
   if (usersError || perfisError) {
     return (

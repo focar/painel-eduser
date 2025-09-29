@@ -43,7 +43,7 @@ const eventColorMap: { [key: string]: string } = {
     'planejamento': '#af6813', 'pré-lançamento': '#fea43d',
     'início da captação': '#91258e', 'cpl 1': '#c563dc', 'live aprofundamento cpl1': '#5d77ab',
     'cpl 2': '#182777', 'cpl 3': '#00aef1', 'live encerramento': '#01aa9c',
-    'carrinho aberto': '#01a550', 'evento personalisado 1': '#ec98ca', 'evento personalisado 2': '#ed008d',
+    'carrinho aberto': '#01a550', 'evento personalizado 1': '#ec98ca', 'evento personalizado 2': '#ed008d',
 };
 
 const getEventColor = (eventName: string): string => {

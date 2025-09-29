@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import type { Launch } from "@/lib/types";
 import { Users, BarChart2, TrendingUp, TrendingDown, ChevronsUpDown, ArrowDown, ArrowUp } from "lucide-react";
 
-// --- Tipos de Dados (Simplificados para a versão final) ---
+// --- Tipos de Dados ---
 type AnswerComparison = {
     checkin_text: string | null;
     checkin_points: number;
@@ -30,13 +30,15 @@ type SortConfig = {
     direction: 'ascending' | 'descending';
 };
 
-// --- Componentes (sem alteração) ---
+// --- Componentes ---
 const Spinner = () => <div className="flex justify-center items-center h-60"><div className="animate-spin rounded-full h-20 w-20 border-t-2 border-b-2 border-emerald-500"></div></div>;
 const KpiCard = ({ title, value, icon: Icon, colorClass = 'text-emerald-500' }: { title: string; value: string; icon: React.ElementType, colorClass?: string }) => (
     <div className="bg-white p-4 rounded-lg shadow-md text-center flex flex-col justify-center h-full">
         <Icon className={`mx-auto ${colorClass} mb-2`} size={24} />
-        <p className="text-3xl font-bold text-slate-800">{value}</p>
-        <h3 className="text-sm font-medium text-slate-500 mt-1">{title}</h3>
+        {/* FONTE AUMENTADA */}
+        <p className="text-4xl font-bold text-slate-800">{value}</p> 
+        {/* FONTE AUMENTADA */}
+        <h3 className="text-base font-medium text-slate-500 mt-1">{title}</h3>
     </div>
 );
 const ComparisonDetailCard = ({ lead }: { lead: ComparisonData }) => {
@@ -50,7 +52,7 @@ const ComparisonDetailCard = ({ lead }: { lead: ComparisonData }) => {
     });
     return (
         <div className="p-6 bg-slate-50 border-t-2 border-emerald-200">
-            <h3 className="text-base font-bold text-slate-800 mb-4">Análise Detalhada de Respostas</h3>
+            <h3 className="text-xl font-bold text-slate-800 mb-4">Análise Detalhada de Respostas</h3>
             <div className="space-y-5">
                 {sortedAnswers.map(([question, data]) => {
                     const hasCheckinAnswer = data.checkin_text !== null && data.checkin_text !== '';
@@ -60,12 +62,14 @@ const ComparisonDetailCard = ({ lead }: { lead: ComparisonData }) => {
                     return (
                         <div key={question} className="border-b border-slate-200 pb-4 last:border-b-0">
                             <div className="flex items-center gap-3 mb-3">
-                                <p className="font-semibold text-slate-700">{question}</p>
+                                {/* FONTE AUMENTADA */}
+                                <p className="font-semibold text-slate-700 text-lg">{question}</p>
                                 <span className={`uppercase px-2 py-0.5 text-xs font-bold rounded-full ${data.classe.toLowerCase() === 'score' ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800'}`}>{data.classe}</span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {hasCheckinAnswer ? <div className="p-3 bg-blue-50 rounded-md border border-blue-200"><p className="text-xs font-semibold text-blue-700 mb-1">RESPOSTA NO CHECK-IN</p><p className="text-slate-800">"{data.checkin_text}"</p><p className="mt-2 text-xs text-blue-600">Pontos: <strong>{data.checkin_points}</strong></p></div> : <div className="p-3 bg-gray-100 rounded-md border border-gray-200 flex items-center justify-center"><p className="text-sm text-gray-500 italic">Não respondido no check-in</p></div>}
-                                {hasPurchaseAnswer ? (areAnswersSame ? <div className="p-3 bg-slate-100 rounded-md border border-slate-200"><p className="text-slate-800 font-medium">"{data.checkin_text}"</p><p className="text-xs text-slate-500 mt-1 italic">A resposta não mudou.</p><div className={`mt-2 text-xs text-slate-500 flex items-center gap-4 transition-colors duration-300 ${!arePointsSame ? 'p-2 bg-yellow-100 rounded-md' : ''}`}><span>Pontos Compra: <strong className={arePointsSame ? 'text-slate-800' : 'text-emerald-600 font-bold'}>{data.compra_points}</strong></span>{!arePointsSame && <span className="font-bold text-yellow-700">(Pontuação Mudou!)</span>}</div></div> : <div className="p-3 bg-emerald-50 rounded-md border border-emerald-200"><p className="text-xs font-semibold text-emerald-700 mb-1">RESPOSTA NA COMPRA</p><p className="text-slate-800">"{data.compra_text}"</p><p className="mt-2 text-xs text-emerald-600">Pontos: <strong>{data.compra_points}</strong></p></div>) : <div className="p-3 bg-gray-100 rounded-md border border-gray-200 flex items-center justify-center"><p className="text-sm text-gray-500 italic">Não respondido na pesquisa de comprador</p></div>}
+                                {/* FONTE AUMENTADA */}
+                                {hasCheckinAnswer ? <div className="p-3 bg-blue-50 rounded-md border border-blue-200"><p className="text-xs font-semibold text-blue-700 mb-1">RESPOSTA NO CHECK-IN</p><p className="text-slate-800 text-base">"{data.checkin_text}"</p><p className="mt-2 text-sm text-blue-600">Pontos: <strong>{data.checkin_points}</strong></p></div> : <div className="p-3 bg-gray-100 rounded-md border border-gray-200 flex items-center justify-center"><p className="text-base text-gray-500 italic">Não respondido no check-in</p></div>}
+                                {hasPurchaseAnswer ? (areAnswersSame ? <div className="p-3 bg-slate-100 rounded-md border border-slate-200"><p className="text-slate-800 font-medium text-base">"{data.checkin_text}"</p><p className="text-sm text-slate-500 mt-1 italic">A resposta não mudou.</p><div className={`mt-2 text-sm text-slate-500 flex items-center gap-4 transition-colors duration-300 ${!arePointsSame ? 'p-2 bg-yellow-100 rounded-md' : ''}`}><span>Pontos Compra: <strong className={arePointsSame ? 'text-slate-800' : 'text-emerald-600 font-bold'}>{data.compra_points}</strong></span>{!arePointsSame && <span className="font-bold text-yellow-700">(Pontuação Mudou!)</span>}</div></div> : <div className="p-3 bg-emerald-50 rounded-md border border-emerald-200"><p className="text-xs font-semibold text-emerald-700 mb-1">RESPOSTA NA COMPRA</p><p className="text-slate-800 text-base">"{data.compra_text}"</p><p className="mt-2 text-sm text-emerald-600">Pontos: <strong>{data.compra_points}</strong></p></div>) : <div className="p-3 bg-gray-100 rounded-md border border-gray-200 flex items-center justify-center"><p className="text-base text-gray-500 italic">Não respondido na pesquisa de comprador</p></div>}
                             </div>
                         </div>
                     );
@@ -158,7 +162,8 @@ export default function AvaliacaoCompradoresPage() {
     return (
         <div className="p-4 sm:p-6 lg:p-8 bg-slate-100 min-h-screen">
             <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Avaliação de Compradores</h1>
+                {/* FONTE AUMENTADA */}
+                <h1 className="text-3xl sm:text-4xl font-bold text-slate-800">Avaliação de Compradores</h1>
                 <div className="w-full sm:w-72">
                     <select id="launch-select" value={selectedLaunch} onChange={(e) => setSelectedLaunch(e.target.value)} className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 text-base" disabled={loading}>
                         <option value="all">Visão Geral (Todos)</option>
@@ -175,14 +180,15 @@ export default function AvaliacaoCompradoresPage() {
             </section>
 
             <main className="bg-white p-6 rounded-lg shadow-md">
-                <h2 className="text-xl font-bold text-slate-800 mb-4">Detalhes dos Compradores</h2>
+                <h2 className="text-2xl font-bold text-slate-800 mb-4">Detalhes dos Compradores</h2>
                 {loading && <Spinner />}
                 {!loading && error && <div className="text-center py-10 px-4 bg-red-100 text-red-700 rounded-lg"><p>{error}</p></div>}
                 {!loading && !error && comparisonData.length === 0 && (<div className="text-center py-10"><p className="text-gray-600">Nenhum comprador foi encontrado para análise neste lançamento.</p></div>)}
                 {!loading && !error && comparisonData.length > 0 && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase">
+                        {/* FONTE AUMENTADA */}
+                        <table className="w-full text-left text-base">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-sm">
                                 <tr>
                                     <th className="px-4 py-3"><button onClick={() => requestSort('lead_email')} className="flex items-center">Email {getSortIcon('lead_email')}</button></th>
                                     <th className="px-4 py-3 text-center"><button onClick={() => requestSort('score_checkin')} className="flex items-center mx-auto">Score Check-in {getSortIcon('score_checkin')}</button></th>

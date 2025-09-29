@@ -8,6 +8,18 @@ const nextConfig = {
     // o seu projeto tenha erros de ESLint.
     ignoreDuringBuilds: true,
   },
+
+  // ✅ ADICIONADO PARA AUTORIZAR IMAGENS DO SUPABASE
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'xqsrkvfvrqjzayrkbzsp.supabase.co', // Seu hostname do Supabase
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

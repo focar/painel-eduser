@@ -5,8 +5,9 @@ import { cookies } from 'next/headers';
 import { type Question } from "@/lib/types";
 
 export default async function CriarPesquisaPage() {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    //const cookieStore = cookies();
+    //const supabase = createClient(cookieStore);
+     const supabase = createClient();
 
     // CORREÇÃO: A consulta foi ajustada para usar a coluna 'classe' em vez de 'tipo_pergunta'.
     // Agora estamos buscando apenas as perguntas cuja classe é 'score', como a UI sugere.

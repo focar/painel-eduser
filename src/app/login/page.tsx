@@ -22,8 +22,15 @@ export default function LoginPage() {
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault(); setLoading(true); setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setError('E-mail ou senha inválidos.'); setLoading(false); } 
-    else { router.push('/'); router.refresh(); } // Adicionado router.refresh() para garantir a recarga dos dados
+    if (error) { 
+      setError('E-mail ou senha inválidos.'); 
+      setLoading(false); 
+    } else { 
+      // --- MUDANÇA CRÍTICA AQUI ---
+      // Força um recarregamento completo para a página inicial.
+      // Isto garante que a nova sessão de login seja reconhecida.
+      window.location.assign('/');
+    }
   };
 
   const handlePasswordReset = async () => {
@@ -74,3 +81,4 @@ export default function LoginPage() {
     </>
   );
 }
+

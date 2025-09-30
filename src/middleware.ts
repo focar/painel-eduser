@@ -32,21 +32,26 @@ export async function middleware(request: NextRequest) {
   const host = request.headers.get('host') || '';
   const subdomain = getSubdomain(host);
   const { pathname } = request.nextUrl;
+  
+  // --- NOVA LÓGICA DE AMBIENTE ---
+  // Define o seu domínio de produção.
+  const PRODUCTION_DOMAIN = 'plugscore.com.br';
 
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      // MUDANÇA 1: Pedimos a coluna 'empresa' em vez de 'subdomain'
       .select('empresa, full_name, role') 
       .eq('id', user.id)
       .single();
 
-    // A lógica de 'operacional' continua a mesma
-    if (profile && profile.role !== 'operacional') {
-      // MUDANÇA 2: Verificamos o campo 'empresa' do perfil
-      if (profile.empresa !== subdomain) {
-        console.log(`ACESSO NEGADO: Utilizador da empresa "${profile.empresa}" tentou aceder ao subdomínio "${subdomain}".`);
-        return NextResponse.redirect(new URL('/login', request.url));
+    // A verificação de empresa SÓ ACONTECE no domínio de produção.
+    // Isto permite que os testes em URLs de preview da Vercel funcionem sem bloqueios.
+    if (host.endsWith(PRODUCTION_DOMAIN)) {
+      if (profile && profile.role !== 'operacional') {
+        if (profile.empresa !== subdomain) {
+          console.log(`ACESSO NEGADO (Produção): Utilizador da empresa "${profile.empresa}" tentou aceder a "${subdomain}".`);
+          return NextResponse.redirect(new URL('/login', request.url));
+        }
       }
     }
 
@@ -72,4 +77,5 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
+
 

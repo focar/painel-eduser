@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   
-  // --- INÍCIO DA DEPURAÇÃO ---
+  // --- INÍCIO DA DEPURAÇÃO   teste --
   if (user) {
     console.log('Utilizador encontrado no middleware:', user.id);
   } else {

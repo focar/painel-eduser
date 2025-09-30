@@ -1,11 +1,13 @@
-//src/middleware.ts
-
-
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  // Cria a resposta UMA VEZ no início.
+  // --- INÍCIO DA DEPURAÇÃO ---
+  console.log('--- NOVO PEDIDO NO MIDDLEWARE ---');
+  console.log('Caminho do pedido:', request.nextUrl.pathname);
+  console.log('Cookies recebidos:', request.cookies.getAll());
+  // --- FIM DA DEPURAÇÃO ---
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -20,8 +22,6 @@ export async function middleware(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value;
         },
-        // A correção está aqui: agora apenas modificamos os cookies
-        // do objeto 'response' que já existe, em vez de o recriar.
         set(name: string, value: string, options: CookieOptions) {
           response.cookies.set({ name, value, ...options });
         },
@@ -32,29 +32,37 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // A sua lógica de autenticação e redirecionamento permanece a mesma.
-  // Apenas a chamada a getUser() é suficiente para o Supabase
-  // atualizar a sessão usando os handlers de cookie corrigidos.
   const { data: { user } } = await supabase.auth.getUser();
   
+  // --- INÍCIO DA DEPURAÇÃO ---
+  if (user) {
+    console.log('Utilizador encontrado no middleware:', user.id);
+  } else {
+    console.log('Nenhum utilizador encontrado no middleware.');
+  }
+  // --- FIM DA DEPURAÇÃO ---
+
   const { pathname } = request.nextUrl;
   const publicRoutes = ['/login', '/auth/callback', '/signup', '/complete-profile'];
 
   if (!user && !publicRoutes.includes(pathname)) {
+    console.log('Utilizador não autenticado a aceder a uma rota protegida. A redirecionar para /login.');
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
   if (user) {
     if (pathname === '/login') {
+      console.log('Utilizador autenticado a aceder a /login. A redirecionar para /.');
       return NextResponse.redirect(new URL('/', request.url));
     }
     const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
     if (!profile?.full_name && !publicRoutes.includes(pathname)) {
+      console.log('Utilizador sem perfil completo. A redirecionar para /complete-profile.');
       return NextResponse.redirect(new URL('/complete-profile', request.url));
     }
   }
 
-  // Retorna o objeto 'response' que foi sendo modificado.
+  console.log('Middleware concluído. A permitir que o pedido continue.');
   return response;
 }
 

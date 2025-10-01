@@ -1,4 +1,4 @@
-// src/components/Sidebar.tsx (VERSÃO FINAL E CORRIGIDA)
+// src/components/Sidebar.tsx (VERSÃO COM CORREÇÃO DE VISIBILIDADE)
 'use client';
 
 import { useState } from 'react';
@@ -7,8 +7,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { FaChartPie, FaRocket, FaTools, FaBars, FaTimes, FaChevronDown, FaSignOutAlt, FaSpinner } from 'react-icons/fa';
 import { useUser } from '@/components/providers/UserProvider';
 import { createClient } from '@/utils/supabase/client';
+import Image from 'next/image';
 
 const menuItems = [
+    // ... (o seu array de menuItems permanece o mesmo, sem alterações)
     {
         title: "Dashboards",
         icon: FaChartPie,
@@ -40,7 +42,6 @@ const menuItems = [
         links: [
             { name: "Lançamentos", href: "/lancamentos", adminOnly: true },
             { name: "Pesquisas", href: "/pesquisas", adminOnly: true },
-            // AQUI ESTÁ A MUDANÇA: 'Perguntas' não é mais adminOnly
             { name: "Perguntas", href: "/perguntas", adminOnly: false },
         ],
     },
@@ -73,10 +74,12 @@ export default function Sidebar() {
     const handleLogout = async () => {
         const supabase = createClient();
         await supabase.auth.signOut();
-        router.refresh();
+        router.push('/login');
     };
     
-    if (pathname === '/login' || pathname === '/auth/status') {
+    // --- MUDANÇA APLICADA AQUI ---
+    // A sidebar não será renderizada em nenhuma destas páginas públicas.
+    if (pathname === '/login' || pathname === '/signup' || pathname === '/auth/status') {
         return null;
     }
 
@@ -108,18 +111,28 @@ export default function Sidebar() {
                         <FaTimes size={20} />
                     </button>
                     
-                    <Link href="/" className="cursor-pointer">
-                        <h1 className="text-xl font-extrabold text-white text-center pt-1 hover:text-blue-300 transition-colors">
-                            Análise de<br/>Lançamentos
-                        </h1>
+                    <Link href="/" className="cursor-pointer block">
+                        <div className="flex items-center justify-center space-x-3">
+                            <Image
+                                src="https://xqsrkvfvrqjzayrkbzsp.supabase.co/storage/v1/object/public/logos/logo_mini01.png"
+                                alt="Mini Logo"
+                                width={71}
+                                height={69}
+                            />
+                            <div>
+                                <h1 className="text-lg font-extrabold text-white text-left hover:text-blue-300 transition-colors">
+                                    Análise de<br/>Lançamentos
+                                </h1>
+                                <div className="flex justify-between items-center text-xs text-slate-500 mt-1 w-full">
+                                    <span>v 2.00</span>
+                                    <span>by FOCAR</span>
+                                </div>
+                            </div>
+                        </div>
                     </Link>
-                    
-                    <div className="flex justify-between items-center text-xs text-slate-500 mt-2 px-1">
-                        <span>v 2.00</span>
-                        <span>by FOCAR</span>
-                    </div>
                 </div>
                 <nav className="flex-1 flex flex-col justify-between overflow-y-auto">
+                    {/* O restante do seu código da sidebar permanece o mesmo */}
                     <ul className="space-y-2">
                         {isLoading ? (
                             <li className="text-center p-4">
@@ -127,21 +140,15 @@ export default function Sidebar() {
                             </li>
                         ) : menuItems.map((group) => {
                             const Icon = group.icon;
-                            // Filtra os links que o usuário pode ver
                             const visibleLinks = group.links.filter(link => 
                                 !(link as any).adminOnly || profile?.role === 'admin'
                             );
-
-                            // Se não houver links visíveis no grupo, não renderiza o grupo
                             if (visibleLinks.length === 0) {
                                 return null;
                             }
-                            
-                            // Apenas esconde o grupo "Ferramentas" inteiro para viewers
                             if (group.title === 'Ferramentas' && profile?.role !== 'admin') {
                                 return null;
                             }
-
                             if (group.title === 'Dashboards') {
                                 return (
                                     <li key={group.title} className="mb-4">
@@ -183,7 +190,6 @@ export default function Sidebar() {
                                     </button>
                                     {isOpen && (
                                         <ul className="mt-2 space-y-1">
-                                            {/* Renderiza apenas os links visíveis */}
                                             {visibleLinks.map((link) => (
                                                 <li key={link.name}>
                                                     <Link 
@@ -229,3 +235,4 @@ export default function Sidebar() {
         </>
     );
 }
+
